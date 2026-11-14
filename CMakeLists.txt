@@ -95,6 +95,11 @@ if(NX_TESTS AND NOT ANDROID)
     target_include_directories(freecamera_test PRIVATE runtime/src)
     add_test(NAME freecamera COMMAND freecamera_test)
     add_executable(uniform_reads_test tests/uniform_reads_test.cpp)
+    add_executable(instance_link_test tests/instance_link_test.cpp runtime/src/nvn/nvn_spirv_instance.cpp
+                   runtime/src/nvn/nvn_spirv_instance_link.cpp)
+    target_compile_definitions(instance_link_test PRIVATE NX_INSTANCE_STANDALONE)
+    target_include_directories(instance_link_test PRIVATE runtime/src/nvn)
+    add_test(NAME instance_link COMMAND instance_link_test)
     target_include_directories(uniform_reads_test PRIVATE runtime/src/nvn)
     add_test(NAME uniform_reads COMMAND uniform_reads_test)
     if(EXISTS "${CMAKE_SOURCE_DIR}/private/game/spirv/2330b41795e4250d.spv")
@@ -357,6 +362,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/nvn/nvn_spirv_nan.cpp
     runtime/src/nvn/nvn_spirv_fragcoord.cpp
     runtime/src/nvn/nvn_spirv_instance.cpp
+    runtime/src/nvn/nvn_spirv_instance_link.cpp
     runtime/src/nvn/nvn_spirv_alpha.cpp
     runtime/src/nvn/nvn_spirv_clamp.cpp
     runtime/src/nvn/nvn_spirv_motion.cpp

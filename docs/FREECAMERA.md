@@ -278,3 +278,22 @@ GPU allocation. An isolated `1462bb8` instruction hook is testing 40,000 entries
 at allocation time; modifying only the live capacity would be unsafe. Neither
 the expanded land selection nor this capacity change is released yet. Selection
 cost, wide-orbit coverage and transitions remain required checks.
+
+The 40,000-entry allocation probe completed the wide rotation with a monitored
+peak of 10,269 entries and about 6.4 GB private process memory. Captures in
+`land-capacity-wide-small.png` show ground beneath the trees at headings where
+the earlier wide captures showed holes. The runtime now computes an orbit
+snapshot for temporary cameras, and the official 3.0.3 hook list includes both
+land selection and the pre-allocation capacity adjustment. Rebuild the guest
+library when using these changes; the imported original DLL cannot execute the
+new instruction hooks. The allocation hook changes only the known 10,000-entry
+setting while the free-camera mod is enabled. Land selection preserves the
+native identity view and rejects unexpected job dimensions.
+
+This is a correctness checkpoint, not a performance release. The sampled wide
+pose is roughly 23 FPS; broader land selection costs additional work. The ocean
+mesh edge and cloud horizon strip remain visible. Full interior-transition,
+weather and selection/LOD performance verification remain open. The user's
+installed executable and game DLL are unchanged. Local `acnh-fruit.exe` and the
+isolated rebuilt DLL were used for these captures; the diagnostic DLL also has
+three unused culling/horizon probe hooks not present in the official hook list.

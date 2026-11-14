@@ -319,6 +319,7 @@ struct BufMemo {
 };
 PerThread<TlsArray<BufMemo, 2048>> g_buf_memo;
 PerThread<TlsArray<BufMemo, 256>> g_fog_memo;
+PerThread<uint64_t> g_fog_hits, g_fog_misses, g_fog_bytes;
 PerThread<uint64_t> g_memo_hits, g_memo_misses;
 
 VkDescriptorBufferInfo buffer_of(VkCommandBuffer cb, const void* bytes, uint64_t size, uint64_t min_size = 16,
@@ -445,7 +446,11 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
         std::memcpy(fog,p+10*16,sizeof fog);
         if (freecamera::view_fog_plane(fog+4,fog[3],fog[8],freecamera_zoom_depth_offset(),plane)) {
             BufMemo& m=(*g_fog_memo)[(uintptr_t(p)>>4 ^ uintptr_t(p)>>15 ^ size)&255];
-            if (m.p==p && m.size==size && m.n==n && m.epoch==(*g_upload_epoch)) return m.info;
+            if (m.p==p && m.size==size && m.n==n && m.epoch==(*g_upload_epoch)) {
+                (*g_fog_hits)++;
+                return m.info;
+            }
+            (*g_fog_misses)++; (*g_fog_bytes)+=n;
             Upload u=upload_alloc(n,256);
             std::memset(u.ptr,0,n);
             std::memcpy(u.ptr,p,size);
@@ -1033,6 +1038,10 @@ void sets_begin_submit() {
 }
 
 void sets_log() {
+    if (*g_fog_hits + *g_fog_misses)
+        log("nvn: camera fog uploads: %llu reused, %llu copied, %.2f MB",
+            (unsigned long long)*g_fog_hits, (unsigned long long)*g_fog_misses, double(*g_fog_bytes)/1e6);
+    *g_fog_hits = *g_fog_misses = *g_fog_bytes = 0;
     if (*g_binds_made + *g_binds_kept)
         log("nvn: descriptor binds: %llu recorded, %llu repeats left out", (unsigned long long)*g_binds_made,
             (unsigned long long)*g_binds_kept);

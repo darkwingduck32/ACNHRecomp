@@ -585,3 +585,18 @@ The fixed inclined capture `sky-depth-inclined_03361.png` and full orbit
 `sky-depth-inclined-orbit-small.png` retain the previously hidden terrain.
 The stationary inclined run reaches about 58–59 FPS. The finite ocean edge is
 now clearly visible beyond the shoreline water; this fix does not extend it.
+
+The night orbit (`sky-depth-night-orbit-small.png`), inventory and tent interior
+captures retain native stars, clouds and UI. The stationary comparison subsequently
+found a separate repeatability problem: the installed executable first averaged
+58.28 FPS / 15.05 MB uploaded per frame, but a repeat of that unchanged executable
+averaged 47.71 FPS / 22.29 MB. The sky-depth build averaged 48.02 FPS / 22.30 MB;
+disabling only its depth adjustment averaged 48.06 FPS / 22.49 MB. All use pitch
+-7, yaw 30, zoom 3, original ocean assets and sample windows 45–56, with time
+offset 28800. Evidence: `sky-depth-performance-comparison.json`. This does not
+establish a sky-depth regression, nor a stable 58 FPS result. Performance
+investigation remains open before the next promotion.
+
+`NX_FREECAMERA_SKY_DEPTH=0` disables only the background-depth adjustment for
+diagnosis. Aggregate `camera fog uploads` counters distinguish host-patched fog
+copies from ordinary upload deduplication while investigating the slow state.

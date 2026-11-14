@@ -348,3 +348,21 @@ outdoor orbit passed a live round trip. Captures: `merge-inventory_04981.png`,
 It does not establish weather/other-interior coverage, resolve the ocean edge or
 cloud seam, or replace the remaining distant-detail/grounding investigation.
 The normal installed executable/library still remain unchanged.
+
+The remaining diagonal cloud band came from CloudVR's model basis, not another
+UV seam. A two-draw shader-filtered capture at frame 2300 recorded the main
+model Y/Z basis as (0, .991868, .127272) / (0, -.127272, .991868), about a
+7.3-degree pitch toward the native camera (`cloud-transform-trace.log`). Its
+front equator was lowered while the back equator was raised above the horizon.
+The main-view cloud host upload now levels that basis, preserves heading and
+uniform scale, and lowers its center by the native equator depression (CloudVR
+radius about 525.18). The environment-probe shader is excluded. Unexpected
+nonuniform, reflected or steeply tilted matrices remain unmodified.
+
+The math test checks that the old front equator height is retained through a
+full circle at multiple headings/scales. Live daylight and 5 PM wide-orbit
+captures show the diagonal band removed while cloud shapes and the evening
+palette remain visible: `cloud-level-wide-small.png` and
+`cloud-level-evening-wide-small.png`. Storm/snow/cloudless conditions remain
+untested. The wide ocean near edge is still exposed independently of this fix.
+The normal installed game remains unchanged.

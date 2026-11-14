@@ -14,6 +14,32 @@ inline bool sky_horizon_height(float tilt, float height, float vertical_scale, f
     return true;
 }
 
+// CloudVR's equator is about 525 model units from its axis. Its native
+// model pitches the horizon down only in front. Keep that depression all
+// around the eye by leveling the basis and lowering its center instead.
+inline bool cloud_horizon_model(float* model) {
+    for (int i=0;i<12;++i) if (!std::isfinite(model[i])) return false;
+    const float scale=std::sqrt(model[0]*model[0]+model[4]*model[4]+model[8]*model[8]);
+    if (scale<.1f || scale>4.f) return false;
+    const float square=scale*scale;
+    for (int a=0;a<3;++a) for (int b=a;b<3;++b) {
+        float dot=0;
+        for (int row=0;row<3;++row) dot+=model[row*4+a]*model[row*4+b];
+        if (std::fabs(dot-(a==b?square:0))>.01f*square) return false;
+    }
+    const float determinant=model[0]*(model[5]*model[10]-model[6]*model[9])-
+        model[1]*(model[4]*model[10]-model[6]*model[8])+model[2]*(model[4]*model[9]-model[5]*model[8]);
+    if (determinant<.99f*scale*square || model[5]<.866f*scale) return false;
+    const float horizontal=std::hypot(model[0],model[8]);
+    if (horizontal<.5f*scale) return false;
+    const float x=model[0]/horizontal*scale, z=model[8]/horizontal*scale;
+    const float depression=525.18f*std::hypot(model[4],model[6]);
+    model[0]=x; model[1]=0; model[2]=-z;
+    model[4]=0; model[5]=scale; model[6]=0; model[7]-=depression;
+    model[8]=z; model[9]=0; model[10]=x;
+    return true;
+}
+
 // ParkVR is a full sphere. Its model placement follows the unmodified camera,
 // while its view matrix receives the orbit. Recover the current eye from the
 // rigid world-to-view matrix so the background encloses that eye again.

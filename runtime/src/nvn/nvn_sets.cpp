@@ -409,7 +409,8 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     }
     // Main-view sky/CloudVR (not their environment-probe variants) and DrawStar
     // share the stale model center. Sky/cloud c4 holds the model and c3 the
-    // view; stars pack model+view into c5. Preserve rotation, UVs and weather.
+    // view; stars pack model+view into c5. CloudVR also needs its directional
+    // horizon tilt replaced with a level depression. UVs/weather remain native.
     const bool sky = b.nvn.index == 1 &&
         (s->hash == "fce7966c1f0b7193" || s->hash == "3ebba4ffae3ffdd3" ||
          s->hash == "0f62b0e3657eeab0"); // sky colour/depth and main CloudVR
@@ -426,8 +427,11 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
                 Upload u = upload_alloc(n, 256);
                 std::memset(u.ptr, 0, n);
                 std::memcpy(u.ptr, p, size);
-                for (int row = 0; row < 3; ++row)
-                    std::memcpy(static_cast<uint8_t*>(u.ptr) + row*16 + 12, eye+row, sizeof(float));
+                float model[12];
+                std::memcpy(model,p,sizeof model);
+                for (int row=0;row<3;++row) model[row*4+3]=eye[row];
+                if (s->hash=="0f62b0e3657eeab0") freecamera::cloud_horizon_model(model);
+                std::memcpy(u.ptr,model,sizeof model);
                 return {u.buffer, u.offset, n};
             }
         }

@@ -751,7 +751,9 @@ bool gpu_is_integrated() { return g_integrated; }
 bool gpu_is_nvidia() { return g_nvidia; }
 bool gpu_require_subgroup32() { return g_require_sg32; }
 
-uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want) {
+uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags prefer) {
+    if (prefer) for (uint32_t k = 0; k < g_memory.memoryTypeCount; k++)
+        if ((bits >> k) & 1 && (g_memory.memoryTypes[k].propertyFlags & (want | prefer)) == (want | prefer)) return k;
     for (uint32_t k = 0; k < g_memory.memoryTypeCount; k++)
         if ((bits >> k) & 1 && (g_memory.memoryTypes[k].propertyFlags & want) == want) return k;
     return 0;

@@ -373,11 +373,13 @@ VkDescriptorBufferInfo buffer_of(VkCommandBuffer cb, const void* bytes, uint64_t
 // The merger gathers raw guest blocks. Such a block must not replace a host
 // upload whose sky/fog values were adapted to the free camera.
 bool uniform_host_patch(const ShaderInfo* shader, int bank) {
-    if (!shader || shader->stage!=ShaderStage::Vertex || !freecamera_field_active()) return false;
+    // Most terrain instance blocks cannot contain sky/fog constants. Reject
+    // those before reading the cross-thread camera heartbeat on every tile.
+    if (!shader || shader->stage!=ShaderStage::Vertex || bank<1 || bank>3) return false;
     const auto& hash=shader->hash;
-    if (bank==1) return hash=="fce7966c1f0b7193" || hash=="3ebba4ffae3ffdd3" || hash=="0f62b0e3657eeab0";
-    if (bank==2) return hash=="cabdc233d975169b" || freecamera_fog_shader(hash);
-    return bank==3 && hash=="fce7966c1f0b7193";
+    const bool candidate=bank==1 ? hash=="fce7966c1f0b7193" || hash=="3ebba4ffae3ffdd3" || hash=="0f62b0e3657eeab0" :
+        bank==2 ? hash=="cabdc233d975169b" || freecamera_fog_shader(hash) : hash=="fce7966c1f0b7193";
+    return candidate && freecamera_field_active();
 }
 
 // A uniform block binding's buffer, from the bound range (build_sets; draw merging's run continuation, nvn_draw.cpp).

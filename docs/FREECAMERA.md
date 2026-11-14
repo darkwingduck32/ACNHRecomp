@@ -564,3 +564,8 @@ and `ground-no-dark-fog_02941.png`. The cause of the shaded-pass cutoff remains
 unresolved. The trace switch `NX_TRACE_VS_BLOCKS` now also records deformation
 c8[45..46], dark-fog c5[10..12] and fragment material c6[27..29], so those values
 can be compared without treating matching camera matrices as sufficient proof.
+The subsequent `ground-material-comparison.json` records full grass-material
+opacity (c6[29].x=1) and no forced colour override (c6[28].x=0). Native dark fog
+is green-tinted in this daylight sample, not the flat brown seen in the cutoff.
+The normal installed executable/library remain the promoted hashes above;
+none of the depth, stencil, worker or dark-fog diagnostics were promoted.

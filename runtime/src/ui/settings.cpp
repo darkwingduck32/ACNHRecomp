@@ -40,6 +40,7 @@
 #include "platform.h"
 #include "saves.h"
 #include "ui/amiibo_importer.h"
+#include "ui/background_scan.h"
 #include "ui/i18n.h"
 #include "ui/theme.h"
 #include "ui/ui_internal.h"
@@ -1429,10 +1430,11 @@ void page_saves() {
     }
     ImGui::Dummy(ImVec2(0, 6 * g_scale));
     ImGui::TextUnformatted(tr("saves.detected"));
-    static std::vector<saves::Found> found;
-    static double scanned = -100;
-    if (ImGui::GetTime() - scanned > 5) found = saves::detect_emulator_saves(), scanned = ImGui::GetTime();
-    if (found.empty()) ImGui::TextDisabled("%s", tr("saves.detected.none"));
+    static BackgroundScan<std::vector<saves::Found>> scan;
+    scan.poll(ImGui::GetTime(), saves::detect_emulator_saves);
+    const auto& found=scan.value();
+    if (scan.running()) ImGui::TextDisabled("%s", tr("saves.detected.scanning"));
+    else if (found.empty()) ImGui::TextDisabled("%s", tr("saves.detected.none"));
     for (size_t k = 0; k < found.size(); k++) {
         ImGui::PushID(int(k));
         ImGui::BulletText("%s", found[k].label.c_str());

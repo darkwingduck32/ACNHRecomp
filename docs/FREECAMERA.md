@@ -187,3 +187,13 @@ Remaining limitations: low-angle inland rendering is still CPU-bound and below
 60 FPS on this machine; close trees can obstruct the camera; distant grounding,
 LOD/outline behavior, daytime/cloud coverage and other interior types need further
 validation. These tests do not establish that the whole 360-camera task is complete.
+
+Daylight testing identified the main CloudVR vertex shader `0f62b0e3657eeab0`
+(fragment `7d6cc12c1cda411a`); its c4 model translation now follows the same eye
+recovery as the sky. The `defb2a20eda77287` environment-probe variant remains
+unchanged. The low-angle forward capture no longer shows the broken cloud dome.
+The rotation capture still exposes stretching in the native cloud UV mapping at
+side/back headings, and a dark horizon band beyond the finite ocean. These are
+open visual gates. Captures: `perf-test/shots/cloud-main-low_03781.png` and
+`cloud-360-small.png`; the native CloudVR front/back meridians have substantially
+different UV coverage at equal elevation, so centering alone cannot fix that.

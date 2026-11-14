@@ -374,11 +374,12 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     // In place (nvn_zero_copy.cpp) when every byte bound is the block's own: past it Maxwell reads 0.
     const uint64_t a = vk_robust_buffer_align();  // as buffer_of sizes the binding
     const uint64_t n = (std::max<uint64_t>((size + 15) & ~15ull, min_size) + a - 1) & ~(a - 1);
-    // Park UBER VR's main-view sky (not its environment-probe variant) and
-    // DrawStar share the stale model center. Sky c4 holds the model and c3 the
+    // Main-view sky/CloudVR (not their environment-probe variants) and DrawStar
+    // share the stale model center. Sky/cloud c4 holds the model and c3 the
     // view; stars pack model+view into c5. Preserve rotation, UVs and weather.
     const bool sky = b.nvn.index == 1 &&
-        (s->hash == "fce7966c1f0b7193" || s->hash == "3ebba4ffae3ffdd3"); // colour and depth passes
+        (s->hash == "fce7966c1f0b7193" || s->hash == "3ebba4ffae3ffdd3" ||
+         s->hash == "0f62b0e3657eeab0"); // sky colour/depth and main CloudVR
     const bool stars = b.nvn.index == 2 && s->hash == "cabdc233d975169b";
     if (p && size >= (stars ? 96u : 48u) && s->stage == ShaderStage::Vertex &&
         b.nvn.source == NvnSource::UniformBlock && (sky || stars) &&

@@ -385,6 +385,10 @@ namespace {
 
 // The draw's viewport and scissor: the guest's, scaled to a screen target.
 void draw_viewport(float ui_x, const ShaderInfo* vs, VkViewport& vp, VkRect2D& sc) {
+    static const bool sky_depth = [] {
+        const char* value = std::getenv("NX_FREECAMERA_SKY_DEPTH");
+        return !(value && value[0] == '0');
+    }();
     vp = VkViewport{0, 0, float((*g_pass_extent).width), float((*g_pass_extent).height), 0, 1};
     if ((*g_state).has_viewport)
         vp = {float((*g_state).viewport[0]), float((*g_state).viewport[1]), float((*g_state).viewport[2]),
@@ -393,7 +397,7 @@ void draw_viewport(float ui_x, const ShaderInfo* vs, VkViewport& vp, VkRect2D& s
     // distant terrain. Keep native sky/cloud/star shading and projection, but
     // place their main-view colour and depth draws at background depth. The
     // environment-probe variants and inactive/indoor cameras remain native.
-    if (vs && (vs->hash=="fce7966c1f0b7193" || vs->hash=="3ebba4ffae3ffdd3" ||
+    if (sky_depth && vs && (vs->hash=="fce7966c1f0b7193" || vs->hash=="3ebba4ffae3ffdd3" ||
                vs->hash=="0f62b0e3657eeab0" || vs->hash=="cabdc233d975169b") &&
         freecamera_field_active()) vp.minDepth=vp.maxDepth=1.f;
     // NVN's upper-left window origin (what Wonder sets) maps NDC +Y to the top of the render target, like D3D;

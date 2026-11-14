@@ -229,6 +229,48 @@ void terrain_update(CPU& cpu) {
     }
     lo[0] = result[0]; lo[1] = result[1]; hi[0] = result[2]; hi[1] = result[3];
 }
+// This precedes both the CPU instance array and GPU buffer allocations.
+// Increasing only the live capacity would write beyond those buffers.
+void terrain_instance_capacity(CPU& cpu) {
+    if (!enabled() || cpu.x[8]!=10000) return;
+    cpu.x[8]=40000;
+    log("freecamera: terrain instance capacity 10000 -> 40000 before allocation");
+}
+NX_HOOK(0x1462bb8, terrain_instance_capacity);
+void land_bounds_update(CPU& cpu) {
+    if (!freecamera_field_active()) return;
+    const uint64_t object=cpu.x[19];
+    const VmInfo vm=vm_query(object);
+    if ((vm.perm&3)!=3 || object<vm.addr || vm.size<0xf8 || object-vm.addr>vm.size-0xf8) return;
+    auto* lo=reinterpret_cast<int32_t*>(object+0xe0);
+    auto* hi=reinterpret_cast<int32_t*>(object+0xf0);
+    const int64_t w=int64_t(hi[0])-lo[0]+1, d=int64_t(hi[1])-lo[1]+1;
+    if (w<20 || w>50 || d<20 || d>70) return;
+    std::lock_guard guard(lock);
+    if (orbit.identity()) return;
+    float reach=0;
+    for (const Visibility& v:visibility) if (v.initialized)
+        reach=std::max(reach,*std::max_element(v.base.begin(),v.base.end()));
+    freecamera::Bounds bounds;
+    if (!perspective_bounds(reach,bounds)) return;
+    static const bool trace=std::getenv("NX_FREECAMERA_TRACE")!=nullptr;
+    static uint64_t next_log=0;
+    const uint64_t frame=g_frame.load(std::memory_order_relaxed);
+    if (trace && frame>=next_log) {
+        next_log=frame+120;
+        log("freecamera: land bounds old %d %d %d %d new %.0f %.0f %.0f %.0f at frame %llu",
+            lo[0],lo[1],hi[0],hi[1],std::floor((field_x-bounds.left)/10),std::floor((field_z-bounds.far)/10),
+            std::ceil((field_x+bounds.right)/10),std::ceil((field_z+bounds.near)/10),(unsigned long long)frame);
+    }
+    lo[0]=int32_t(std::floor((field_x-bounds.left)/10));
+    lo[1]=int32_t(std::floor((field_z-bounds.far)/10));
+    hi[0]=int32_t(std::ceil((field_x+bounds.right)/10));
+    hi[1]=int32_t(std::ceil((field_z+bounds.near)/10));
+    static bool logged=false;
+    if (!logged) { logged=true; log("freecamera: land tile footprint updated before submission (%lldx%lld)",
+        (long long)w,(long long)d); }
+}
+NX_HOOK(0x11fe020, land_bounds_update);
 void lookat_scoped(CPU& cpu) {
     const uint64_t camera = cpu.x[0];
     bool readable = camera >= kHeapBase && camera <= kHeapBase + heap_size() - 0x5c;
@@ -366,7 +408,9 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     for (int i = 0; i < 3; i++) if (!std::isfinite(pos[i]) || !std::isfinite(at[i])) return;
     float result[3];
     std::memcpy(result,pos,sizeof result);
-    if (wrapped_lookat && on && !orbit.identity() && !orbit.apply(pos, at, result)) return;
+    // Temporary world cameras also feed terrain selection. Compute the orbit
+    // snapshot for them even when their native camera object is left untouched.
+    if (on && !orbit.identity() && !orbit.apply(pos, at, result)) return;
     if (space==freecamera::CameraSpace::world) {
         std::copy_n(result,3,field_eye.begin());
         std::copy_n(at,3,field_target.begin());

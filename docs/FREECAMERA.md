@@ -899,3 +899,21 @@ an `OutlineDepth` target through `39ed840`; this inspected entry path does not
 select geometry by distance. Disassembly evidence is `outline-refs.txt`.
 Neither this trace nor the asset audit justifies treating outline as an existing
 distance LOD switch. No native pass flags or installed assets were changed.
+
+### Rejected additional raster-state suppression
+
+A separate experiment skipped byte-identical polygon-offset values, unchanged
+depth-clamp state and stencil assignments whose selected faces already held the
+same truncated byte. Unlike the retained fixed-state optimization, these extra
+checks show no measurable benefit. The heavy-pose same-process A/B run covers
+frames 2400-9599 with six intervals per mode, excluding the first 240 frames of
+each 600-frame interval: control 51.08 FPS / 17.2325 ms replay, experiment
+51.04 FPS / 17.2322 ms. Upload volume is 15.43 versus 15.45 MB/frame.
+
+Evidence is `raster-dedup-ab-comparison.json`, `raster-dedup-ab-hashes.json` and
+`raster-dedup-ab.log` in the private test root. Five focused tests passed, but
+that is not evidence of a performance gain. The experiment was archived as
+`private/freecamera/raster-dedup-experiment.patch`, removed from source and the
+preview runtime rebuilt. The installed 5625d511 runtime was never replaced.
+Further work should target the measured terrain/submission workload or actual
+distance-detail selection rather than adding these checks to every command.

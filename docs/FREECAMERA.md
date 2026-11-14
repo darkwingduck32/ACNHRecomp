@@ -1009,3 +1009,42 @@ Evidence: `ao-coverage-result.json`, `ao-tile-coverage-probe-stderr.log`,
 The generated-source probes were archived and both modified translation units
 restored/rebuilt. The test root again uses the exact official library; the
 installed runtime and actual save remain unchanged. No AO culling is enabled yet.
+
+### Isolated AO culling prototype: measured benefit, pending production integration
+
+A private generated-library prototype caches each terrain instance's transformed
+resource sphere at enqueue, then tests it against the active AO map's four X/Y
+clip planes. It preserves every enqueue and every other rendering pass. Sphere
+radius uses the affine matrix's Frobenius norm plus a 20-unit deformation margin;
+invalid bounds/projections fail open. This is deliberately conservative, but the
+deformation margin and cache lifetime still need broader validation before release.
+
+In the demanding stationary dusk view, it rejects 6,830 of 7,259 AO terrain
+instances per frame. Eight alternating/balanced 600-frame intervals (180 settling,
+420 measured) produce 28 samples per mode: 49.30 FPS / 17.07 ms replay / 15.58 MB
+upload without rejection, and 51.65 FPS / 15.81 ms / 14.25 MB with rejection.
+Both modes include prototype bounds, counters and file-toggle overhead. These
+results establish a useful candidate, not final production performance.
+
+Actual 386-by-386 AO targets were captured off/on/off. Their visible silhouettes
+remain intact; mean channel differences are roughly 0.11-0.21 on a 0-255 scale,
+including off/off animation differences. The camera orbit also passes visual
+inspection. This is not frozen-frame equivalence or coverage of other locations,
+weather and interiors. Existing distant silhouettes and horizon blending remain.
+
+Evidence in the private test root: `ao-toggle-ab-result.json`,
+`ao-cull-prototype-result.json`, `ao-map-comparison-refreshed/`, and
+`shots/ao-cull-orbit-review.png`. The prototype DLL hash is
+`ce2cc408bfda70118bd6283de5b78aadd5e947390117901c597c34dfe4cfd9e4`.
+The two generated source variants are archived as
+`probe-library/code_{427,447}.ao-cull-prototype.cpp`. After testing, original
+sources were rebuilt and all PE sections compared with the official library;
+the exact official DLL was restored to the test root and the harness stopped.
+No experimental culling is installed in the normal game.
+
+Production integration should use version-checked runtime hooks rather than
+shipping these manually edited generated files. The enqueue hook can read the
+original model/matrix at `146ac2c` (x1 and the saved matrix at x29-8), while the
+AO update completes at `1571a6c`. Existing conditional branches at `146b1d4`
+and `146b1dc` offer a register-only skip path without changing shared instance
+flags; its hook overhead needs benchmarking against this direct-branch prototype.

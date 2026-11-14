@@ -382,3 +382,27 @@ recorded exactly 24 matching draws (`water-quad-trace.log`), including 10-unit
 water-preparation tiles. A main-target capture is needed to distinguish those
 from the actual sea surface. Tracing still disables fast replay; these diagnostic
 runs are not performance measurements.
+
+The larger main-target capture (`water-main-coverage.log`, 1,200 four-vertex
+draws) identifies the c2255355903b4a5e / 587e1cd12261624a pair as 10-unit
+water tiles at inland coordinates, alongside particle quads. Disabling that
+fragment shader does not remove the visible ocean (`water-main-comparison.jpg`).
+Do not extend those tiles or the unused SeaOnly models as a presumed ocean fix.
+
+The verified terrain capacity/coverage, guarded draw merging and panoramic
+cloud fixes have now been promoted to the normal local installation. The
+runtime and SpeedFix-capable official-hook library match the isolated test
+copies byte-for-byte; CloudVR is installed directly in the existing freecamera
+overlay, so no separate cloudtest mod is required. Backups and SHA-256 hashes
+are recorded in `private/freecamera/install-backups/20261115-062356/manifest.json`.
+The user's save and video configuration were not modified. The failed oceantest
+overlay remains disabled. The ocean edge, distant LOD/grounding and broader
+weather coverage remain open; this installation is not completion of those
+acceptance gates.
+
+The installed executable also passed a fresh copied-save smoke run with tracing
+disabled and only freecamera/camera303 selected. The final eight sampled timing
+windows measured about 55-56 FPS. Evidence: installed-camera-smoke.log,
+installed-smoke-result.json and shots/installed-camera-smoke_03181.png.
+Both CTests (freecamera/thread_time) and both live-harness tests passed.
+The test process was stopped after capture.

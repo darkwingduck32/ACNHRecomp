@@ -1048,3 +1048,24 @@ original model/matrix at `146ac2c` (x1 and the saved matrix at x29-8), while the
 AO update completes at `1571a6c`. Existing conditional branches at `146b1d4`
 and `146b1dc` offer a register-only skip path without changing shared instance
 flags; its hook overhead needs benchmarking against this direct-branch prototype.
+
+The guarded runtime-hook implementation now exists in `freecamera_ao.cpp`,
+disabled by default (`NX_FREECAMERA_AO_CULL=1` opts in). It verifies the four
+hook instructions, only rejects pass 12 while the field camera is active, and
+fails open for stale bounds or map captures. Registration handles simultaneous
+workers claiming the same manager. `NX_FREECAMERA_AO_AB=1` alternates rejection
+every 600 frames for measurement; both modes still incur hook/cache overhead.
+
+The windowed run's first clean pair measured 50.80 versus 52.60 FPS, but host
+presentation subsequently stalled at about 500 ms/frame while culling was off.
+This run cannot support a complete paired performance conclusion. A separate
+headless run completed two pairs over frames 2400-4799: 51.23 versus 52.98 FPS,
+16.59 versus 15.33 ms replay, and 15.48 versus 14.12 MB upload. These numbers
+exclude the normal display path and are not interchangeable with windowed FPS.
+Evidence is `ao-hooks-windowed-partial-result.json`,
+`ao-hooks-headless-ab-comparison.json`, and their executable/library hashes.
+The runtime and the three regenerated guest functions compile; the existing
+freecamera test passes. Broader visual/transition validation is still pending.
+The normal installed executable/library remain unchanged, the harness is stopped,
+and its exact official guest DLL has been restored. These hooks are experimental,
+not a completed performance fix or release candidate.

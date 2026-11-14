@@ -5,6 +5,7 @@
 #include <atomic>
 #include <ctime>
 #include "nvn_per_thread.h"
+#include "thread_time.h"
 
 #include <unordered_set>
 #include <memory>
@@ -439,15 +440,7 @@ void draw_begin_worker(bool fresh);  // nvn_draw.cpp: a worker's own draw state 
 // nvn_replay.cpp: one command as replay_list replays it (not CallList); cb may change (the submit's parts).
 void replay_cmd(VkCommandBuffer& cb, Targets& st, const Cmd& c, const CmdList& list);
 bool parallel_replay_on();  // nvn_parallel.cpp
-inline uint64_t thread_cpu_ns() {  // the calling thread's CPU time; 0 where there is none to read (Windows)
-#if defined(CLOCK_THREAD_CPUTIME_ID)
-    timespec ts{};
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
-    return uint64_t(ts.tv_sec) * 1000000000ull + uint64_t(ts.tv_nsec);
-#else
-    return 0;
-#endif
-}
+inline uint64_t thread_cpu_ns() { return nx::thread_cpu_time_ns(); }
 void parallel_replay(VkCommandBuffer& cb, Targets& st, const std::vector<std::shared_ptr<CmdList>>& lists,
                      size_t split_after);
 inline std::atomic<const char*> g_bail_reason{nullptr};  // the latest worker_bail's, for the log

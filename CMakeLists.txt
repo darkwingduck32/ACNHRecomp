@@ -85,6 +85,12 @@ endif()
 # Unit tests of runtime pieces that build without the game (docs/nvn/WINDOWS-PLAN.md, "Test plan"): ctest.
 option(NX_TESTS "Build the standalone unit tests" OFF)
 if(NX_TESTS AND NOT ANDROID)
+    if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(thread_time_test tests/thread_time_test.cpp runtime/src/thread_time.cpp)
+        target_include_directories(thread_time_test PRIVATE runtime/src)
+        target_compile_features(thread_time_test PRIVATE cxx_std_20)
+        add_test(NAME thread_time COMMAND thread_time_test)
+    endif()
     add_executable(freecamera_test tests/freecamera_test.cpp)
     target_include_directories(freecamera_test PRIVATE runtime/src)
     add_test(NAME freecamera COMMAND freecamera_test)
@@ -299,6 +305,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/perf_hint.cpp
     runtime/src/thermal.cpp
     runtime/src/frame_stats.cpp
+    runtime/src/thread_time.cpp
     runtime/src/write_watch.cpp
     runtime/src/nvn/nvn_caps.cpp
     runtime/src/nvn/nvn_renderpass.cpp

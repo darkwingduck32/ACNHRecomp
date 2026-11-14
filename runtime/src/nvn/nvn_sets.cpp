@@ -228,10 +228,21 @@ struct ConstantsBlock {
     Range storage[16];  // all driver_constants reads outside compute
     std::array<uint8_t, 0x1000> bytes;
 };
-constexpr size_t kBlocks = 32;  // more distinct ones in a submit: copied per draw, as before
+constexpr size_t kBlocks = 32;  // driver-constant blocks; support blocks have a separate capacity below
 PerThread<std::vector<std::unique_ptr<SupportBlock>>> g_support;
 PerThread<std::vector<std::unique_ptr<ConstantsBlock>>> g_constants;
 PerThread<size_t> g_support_used, g_constants_used;
+PerThread<uint64_t> g_support_fallbacks, g_constants_fallbacks, g_support_peak;
+size_t support_capacity() {
+    // Expanded island views use over 70 viewport/render-scale combinations.
+    // Falling back after 32 copies the support block for every remaining draw,
+    // which also prevents otherwise compatible draws from being merged. Blocks
+    // are allocated lazily and kept at stable addresses for per-submit dedup.
+    static const char* value=std::getenv("NX_SUPPORT_BLOCKS");
+    static const size_t capacity=value?size_t(std::clamp(std::atoi(value),32,1024)):256;
+    static const bool ab=std::getenv("NX_SUPPORT_BLOCKS_AB")!=nullptr;
+    return ab ? ((g_frame.load(std::memory_order_relaxed)/600)%2?256:32) : capacity;
+}
 
 const SupportBuffer* support_block(float width, float height, const RenderScales& scales) {
     // The last block found first: runs of draws (and the two stages of a draw) ask for the same one.
@@ -244,9 +255,10 @@ const SupportBuffer* support_block(float width, float height, const RenderScales
     if (last < (*g_support_used) && same(last)) return &(*g_support)[last]->sb;
     for (size_t k = 0; k < (*g_support_used); k++)
         if (same(k)) return &(*g_support)[last = k]->sb;
-    if ((*g_support_used) == kBlocks) return nullptr;
+    if ((*g_support_used) >= support_capacity()) { (*g_support_fallbacks)++; return nullptr; }
     if ((*g_support_used) == (*g_support).size()) (*g_support).push_back(std::make_unique<SupportBlock>());
     SupportBlock& b = *(*g_support)[(*g_support_used)++];
+    *g_support_peak=std::max<uint64_t>(*g_support_peak,*g_support_used);
     b.width = width, b.height = height, b.scales = scales;
     last = (*g_support_used) - 1;
     b.sb = support_buffer_defaults();
@@ -268,7 +280,7 @@ const uint8_t* constants_block(ShaderStage stage, int st) {
     if (l < (*g_constants_used) && same(l)) return (*g_constants)[l]->bytes.data();
     for (size_t k = 0; k < (*g_constants_used); k++)
         if (same(k)) return (*g_constants)[l = k]->bytes.data();
-    if ((*g_constants_used) == kBlocks) return nullptr;
+    if ((*g_constants_used) == kBlocks) { (*g_constants_fallbacks)++; return nullptr; }
     if ((*g_constants_used) == (*g_constants).size()) (*g_constants).push_back(std::make_unique<ConstantsBlock>());
     ConstantsBlock& b = *(*g_constants)[(*g_constants_used)++];
     b.hw = hw;
@@ -1038,6 +1050,10 @@ void sets_begin_submit() {
 }
 
 void sets_log() {
+    log("nvn: host constant cache: support peak %llu capacity %llu fallback %llu; driver fallback %llu",
+        (unsigned long long)*g_support_peak,(unsigned long long)support_capacity(),
+        (unsigned long long)*g_support_fallbacks,(unsigned long long)*g_constants_fallbacks);
+    *g_support_peak=*g_support_fallbacks=*g_constants_fallbacks=0;
     if (*g_fog_hits + *g_fog_misses)
         log("nvn: camera fog uploads: %llu reused, %llu copied, %.2f MB",
             (unsigned long long)*g_fog_hits, (unsigned long long)*g_fog_misses, double(*g_fog_bytes)/1e6);

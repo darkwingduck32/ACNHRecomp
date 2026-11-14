@@ -681,3 +681,39 @@ to the vertex stage. Extending that path requires an unused flat varying
 between stages, fragment-block gathering, pipeline-key/module support and
 paired shader validation. Temporal motion already reserves locations 30/31;
 any additional varying must avoid those and the original shader interfaces.
+
+### Support-cache overflow and FPS recovery
+
+The fragment-instancing prototype now has a validated shader-link utility and
+standalone tests. Khronos `spirv-val --target-env vulkan1.1` accepts its fixture
+pair, the game's vertex shader (including export-only mode), and three material
+fragment shaders. However, the renderer experiment averaged only 50.98 versus
+51.08 FPS across six intervals per mode (`material-instances-ab-comparison.json`).
+Its renderer integration is archived privately and removed from active source.
+
+Aggregating refusals by binding identified the dominant problem that the earlier
+small samples missed: `material-refusals-profile.log` records 702,900 failures
+per 300 frames for ground shaders c0aa42f5f330ef6d / 20bd0cfd20c2db06 at binding
+0, the host support buffer. Expanded views use 72–74 distinct viewport/render-
+scale combinations, exceeding the support cache's 32-entry limit. Every miss
+after the limit makes another host upload and prevents draw merging. Driver
+constant-cache fallbacks remain zero.
+
+The support cache now allows 256 entries, allocated lazily at stable addresses.
+The driver cache keeps its original limit. `NX_SUPPORT_BLOCKS=32` restores the
+control capacity; `NX_SUPPORT_BLOCKS_AB=1` alternates 32/256 every 600 frames.
+Aggregate logging records peak support entries and both fallback counts.
+
+The same-process fixed-pose A/B run uses pitch -7, yaw 30, zoom 3, copied save,
+2160/SSAA2/DLAA and time offset 28800. Six intervals per mode over frames
+2400–9599 exclude the first 240 frames of each interval. Results:
+
+| Capacity | Mean FPS | Replay ms/frame | Upload MB/frame |
+| --- | ---: | ---: | ---: |
+| 32 | 50.59 | 18.16 | 20.16 |
+| 256 | 59.74 | 13.22 | 11.01 |
+
+Evidence: `support-cache-ab-comparison.json` and `support-cache-ab.log`.
+The enlarged-cache intervals have zero support-cache fallbacks; the control
+reaches over two million fallbacks per 300 frames. This change preserves the
+support-buffer contents and existing per-submit lifetime/deduplication rules.

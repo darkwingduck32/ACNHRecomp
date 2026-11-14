@@ -1185,3 +1185,34 @@ Static lookup also locates the `mRiverBackLimitDepth` parameter registration at
 `14be3c8`, with its node at owner+338 and storage at owner+360. Its relationship
 to the surface selection is not yet established; changing it blindly is not a
 validated fix. `river-surface-refs.txt` records the registration disassembly.
+
+The confirmed selection path is `14b7158`, which queues surface worker
+`14b0460`. Live `WaveSimulationParam` values are `mNormAreaSide=200`,
+`mNormAreaUp=400`, and `mNormAreaDown=80`. They generate an independent inclusive
+10-unit tile rectangle at job+288/28c and +298/29c. The new `14b76e8` hook updates
+that rectangle before submission using the same perspective footprint as land.
+It preserves the native tile/frustum tests, water materials and buffer limits;
+inactive/identity cameras retain native selection. The hook requires the updated
+3.0.3 guest library. `NX_FREECAMERA_WATER_BOUNDS=0` disables it for diagnostics;
+`NX_FREECAMERA_WATER_AB=1` alternates disabled/enabled 600-frame intervals.
+
+The candidate fills the reported cutoff at the matching pose. A full orbit,
+top-down view and return to native camera completed. A 90-second live monitor
+sampled 8,740 times and observed a peak of 624 entries against the existing
+3,000-entry surface buffer; no allocation expansion was necessary for these
+tests. Evidence: `water-bounds-repro_02581.png`,
+`water-bounds-orbit-review.png`, `water-bounds-top_06481.png`,
+`water-bounds-native_09601.png`, and `water-bounds-capacity-result.json`.
+
+The matched off/on/off/on comparison restores the cutoff in both disabled
+captures and fills it in both enabled captures. Over the two measured pairs,
+mean replay time changes from 14.778 to 15.031 ms, FPS from 54.475 to 54.108,
+and uploads from 12.598 to 12.633 MB. These are one-scene animated measurements,
+not a guarantee for every island. `water-bounds-ab-comparison.json` and
+`water-bounds-ab-images/manifest.json` record the intervals and captures. The
+camera math/control test passes. Temporary shader/parameter tracing has been
+removed from source and the candidate runtime.
+
+The user additionally reports trees disappearing until a collision occurs.
+That issue is queued after the water fix; it has not yet been reproduced or
+attributed to a particular culling change.

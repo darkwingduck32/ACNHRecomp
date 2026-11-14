@@ -79,9 +79,11 @@ The native sky placement therefore does not follow the modified view.
 The host uniform adapter now centers this main-view sphere at the eye recovered
 from its rigid view matrix. It preserves model rotation/scale, materials and guest
 constants, and excludes the environment-probe shader. Rigid-matrix checks reject
-invalid inputs. Unit tests verify center recovery and zero view-space position at
-four headings; visual coverage and the separately transformed stars/clouds still
-need validation. The generic AGL full-screen sky passes were absent from this
+invalid inputs. The DrawStar pass uses exactly the same stale center in its model matrix;
+its host c5 upload now receives the eye recovered from its packed view matrix too.
+Unit tests verify center recovery and zero view-space position at four headings;
+visual sky/star coverage and the separately transformed cloud models still need
+validation. The generic AGL full-screen sky passes were absent from this
 capture and are not patched.
 
 Validation so far: camera/gesture unit tests and compilation of the affected

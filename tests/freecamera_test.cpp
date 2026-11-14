@@ -1,6 +1,7 @@
 #include "freecamera_math.h"
 #include "freecamera_fruit_layout.h"
 #include "freecamera_visibility.h"
+#include "freecamera_fog.h"
 #include <sstream>
 #include <cstdio>
 #include <cstdlib>
@@ -11,6 +12,16 @@ static void check(bool ok, const char* message) {
 }
 int main() {
     using namespace nx::freecamera;
+    float normal[3];
+    for (float angle:{0.f,pi/2,pi,3*pi/2}) {
+        const float plane[]{std::sin(angle),.5f,-std::cos(angle),-.25f};
+        check(view_fog_normal(plane,.8f,.01f,normal),"Directional fog plane must be adapted");
+        check(normal[0]==0 && normal[1]==0 && std::fabs(normal[2]+std::sqrt(1.25f))<1e-5f,
+              "Equal view depth must produce the same fog attenuation at every heading");
+    }
+    const float fog_plane[]{1,0,0,-.25f};
+    check(!view_fog_normal(fog_plane,0,.01f,normal) && !view_fog_normal(fog_plane,1,0,normal),
+          "Disabled fog and degenerate falloff must remain native");
     check(camera_space(0x7a88a4)==CameraSpace::world && camera_space(0x7a8830)==CameraSpace::drum,
           "Both field/drum matrix branches must receive the orbit in their own coordinate spaces");
     check(camera_space(0x376d224)==CameraSpace::other,"Minimap camera must remain outside orbit scope");

@@ -2,6 +2,7 @@
 #include "freecamera_math.h"
 #include "freecamera_visibility.h"
 #include "freecamera_fruit.h"
+#include "freecamera_fog.h"
 #include "config.h"
 #include "kernel.h"
 #include "platform.h"
@@ -26,6 +27,7 @@ Fn original_float_storage = nullptr, original_terrain = nullptr;
 Fn original_projection = nullptr;
 thread_local bool wrapped_lookat = false;
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
+std::atomic<bool> field_enabled{false};
 std::atomic<uint64_t> ui_frame{~uint64_t(0)};
 float field_x = 0, field_z = 0;
 std::array<float,3> field_eye{}, field_target{};
@@ -247,6 +249,7 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
     const uint32_t words[] = {0x2d470801, 0x2d480c00, 0x1e232020, 0x2d491404};
     if (std::memcmp(reinterpret_cast<void*>(module->base + entry), words, sizeof words)) return;
     freecamera_fruit_install(module, enabled());
+    freecamera_fog_install(enabled());
     for (size_t i = 0; i < module->func_count; i++) {
         if (functions[i].offset != entry) continue;
         original_lookat = functions[i].fn;
@@ -283,6 +286,10 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
 }
 void freecamera_ui_input() {
     ui_frame.store(g_frame.load(std::memory_order_relaxed), std::memory_order_relaxed);
+}
+bool freecamera_field_active() {
+    const uint64_t seen=field_frame.load(std::memory_order_relaxed), now=g_frame.load(std::memory_order_relaxed);
+    return field_enabled.load(std::memory_order_relaxed) && seen!=~uint64_t(0) && now>=seen && now-seen<=2;
 }
 void freecamera_input(plat::PadState& p) {
     using namespace plat;
@@ -330,6 +337,7 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     } else if (cam < kHeapBase || cam + 0x5c > kHeapBase + heap_size()) return;
     std::lock_guard guard(lock);
     const bool on = enabled();
+    field_enabled.store(on,std::memory_order_relaxed);
     if (space==freecamera::CameraSpace::world) {
         field_x = ld<float>(cam+0x44);
         field_z = ld<float>(cam+0x4c);

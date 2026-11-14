@@ -56,7 +56,9 @@ compiles and its scope classification is tested; its visual effect is unverified
 
 The view-relative fog adapter targets Park UBER's vertex dark-fog plane. Its host
 uniform upload replaces the plane normal with negative view Z of the same length,
-retaining colour, intensity, bias and inverse range. Guest constants are untouched;
+retaining colour, intensity and inverse range. Its bias compensates for the
+change in eye-to-player distance when zooming, keeping the ramp anchored to the
+player. Guest constants are untouched;
 compute-written blocks, other shaders and inactive outdoor cameras are excluded.
 `tools/build_camera_shader_profile.py` generates the private shader hash profile;
 install its `view_fog_shaders.txt` into `mods/freecamera/` with the matching runtime.
@@ -466,4 +468,37 @@ distant-inclined-unmerged3_04441.png (distant-overhead-unmerged.log). This
 excludes repeated-draw merging as the cause of that pattern. Maximum-zoom
 overhead captures also show excessive fog over nearby ground; the current fog
 normal follows the camera but retains the native bias as eye-target distance
-changes. Zoom-aware fog bias remains to be investigated separately.
+changes. Zoom-aware fog bias was investigated next.
+
+The zoom-fog correction is now implemented in the isolated build: it subtracts
+the added camera-to-player distance times plane length and inverse range from
+the fog bias. Tests verify unchanged attenuation at the player and at a fixed
+distance beyond the player for zoom factors .25, 1 and 3. Matched fixed-pose
+captures `terrain-cull-normal_02881.png` and `fog-zoom-high_02581.png` show the
+excessive nearby haze removed. A full orbit (`fog-zoom-orbit-small.png`) and reset
+to native zoom (`fog-native-zoom_05281.png`) retain consistent nearby colour.
+Native weather colour, intensity and ramp slope are unchanged; broader weather
+acceptance remains open.
+
+Diagnostics can now start at a fixed relative pitch and zoom with
+`NX_FREECAMERA_PITCH` (degrees, -90 through 90) and `NX_FREECAMERA_ZOOM` (.25
+through 3), alongside the existing initial yaw. `NX_FREECAMERA_DIRECT_LOOKAT=0`
+isolates the recent direct-call change in matched runs. Invalid pitch/zoom
+values are ignored. These are harness controls, not persisted player settings.
+
+A temporary native culling bypass at 146a660 did not change the remaining gap
+at an identical fixed pose (`terrain-cull-bypass_03841.png` versus
+`terrain-cull-normal_02881.png`). That diagnostic hook has been removed from
+both runtime and generated guest code. The land map reports coverage of cells
+(16,16)..(127,111), so its resident map is not limited to the original small
+camera rectangle. This does not exclude other ground-rendering paths.
+
+**Ocean extension performance regression:** a controlled low-angle comparison
+with the same executable, copied save and fixed camera restores about 57 FPS
+with original water assets, versus about 42 FPS with the 800-unit extension.
+The direct-camera switch does not explain that regression. The 116 generated
+ocean archives were therefore removed from the normal freecamera installation
+after checking their installed hashes; original assets were untouched. The
+800-unit build is not an accepted release fix. A smaller extension is under
+isolated coverage/performance testing. The normal executable/library still
+remain the previously installed build while the zoom-fog update is tested.

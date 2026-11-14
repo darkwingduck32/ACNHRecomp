@@ -32,6 +32,7 @@ thread_local uint64_t direct_lookat_camera = 0;
 thread_local std::array<float,9> direct_lookat_source{};
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
 std::atomic<bool> field_enabled{false};
+std::atomic<float> zoom_depth_offset{0};
 // The look-at call sites are shared with interiors. Only the island's
 // populated terrain window supplies this heartbeat; it stops inside rooms.
 // Resource loads cannot substitute for this: island models remain cached
@@ -265,6 +266,12 @@ void land_bounds_update(CPU& cpu) {
         log("freecamera: land bounds old %d %d %d %d new %.0f %.0f %.0f %.0f at frame %llu",
             lo[0],lo[1],hi[0],hi[1],std::floor((field_x-bounds.left)/10),std::floor((field_z-bounds.far)/10),
             std::ceil((field_x+bounds.right)/10),std::ceil((field_z+bounds.near)/10),(unsigned long long)frame);
+        const uint64_t map=ld<uint64_t>(object+0x100);
+        const VmInfo mv=vm_query(map);
+        if ((mv.perm&1) && map>=mv.addr && mv.size>=0x30 && map-mv.addr<=mv.size-0x30)
+            log("freecamera: land map %llx job %llx covers %d %d %d %d",
+                (unsigned long long)map,(unsigned long long)object,ld<int32_t>(map+0x18),
+                ld<int32_t>(map+0x1c),ld<int32_t>(map+0x28),ld<int32_t>(map+0x2c));
     }
     lo[0]=int32_t(std::floor((field_x-bounds.left)/10));
     lo[1]=int32_t(std::floor((field_z-bounds.far)/10));
@@ -338,6 +345,22 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
                 log("freecamera: diagnostic initial yaw %.1f degrees", double(degrees));
             }
         }
+        if (const char* initial=std::getenv("NX_FREECAMERA_PITCH")) {
+            char* end=nullptr;
+            const float degrees=std::strtof(initial,&end);
+            if (end!=initial && *end=='\0' && std::isfinite(degrees) && std::abs(degrees)<=90) {
+                orbit.pitch=degrees*freecamera::pi/180;
+                log("freecamera: diagnostic initial pitch %.1f degrees",double(degrees));
+            }
+        }
+        if (const char* initial=std::getenv("NX_FREECAMERA_ZOOM")) {
+            char* end=nullptr;
+            const float zoom=std::strtof(initial,&end);
+            if (end!=initial && *end=='\0' && std::isfinite(zoom) && zoom>=.25f && zoom<=3) {
+                orbit.zoom=zoom;
+                log("freecamera: diagnostic initial zoom %.2f",double(zoom));
+            }
+        }
         break;
     }
     for (size_t i = 0; i < module->func_count; i++) {
@@ -365,6 +388,9 @@ void freecamera_ui_input() {
 bool freecamera_field_active() {
     const uint64_t seen=field_frame.load(std::memory_order_relaxed), now=g_frame.load(std::memory_order_relaxed);
     return terrain_active() && field_enabled.load(std::memory_order_relaxed) && seen!=~uint64_t(0) && now>=seen && now-seen<=2;
+}
+float freecamera_zoom_depth_offset() {
+    return zoom_depth_offset.load(std::memory_order_relaxed);
 }
 void freecamera_input(plat::PadState& p) {
     using namespace plat;
@@ -430,10 +456,21 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
         std::copy_n(result,3,field_eye.begin());
         std::copy_n(at,3,field_target.begin());
         field_view_valid=true;
+        float before=0, after=0;
+        for (int i=0;i<3;++i) {
+            before+=(pos[i]-at[i])*(pos[i]-at[i]);
+            after+=(result[i]-at[i])*(result[i]-at[i]);
+        }
+        zoom_depth_offset.store(on ? std::sqrt(after)-std::sqrt(before) : 0,std::memory_order_relaxed);
     }
     update_visibility(on);
     if (!on || orbit.identity()) return;
     if (!wrapped_lookat) {
+        static const bool direct_on=[] {
+            const char* value=std::getenv("NX_FREECAMERA_DIRECT_LOOKAT");
+            return !value || std::strcmp(value,"0");
+        }();
+        if (!direct_on) return;
         // There are no calls between the entry and sole return of this leaf
         // routine, so one per-thread saved input suffices for direct calls.
         if (direct_lookat_camera) return;

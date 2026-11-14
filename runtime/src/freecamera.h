@@ -9,6 +9,7 @@ void freecamera_input(plat::PadState& pad);
 // Active game menus/dialogue keep their normal, unrotated input.
 void freecamera_ui_input();
 bool freecamera_field_active();
+float freecamera_zoom_depth_offset();
 void freecamera_lookat(uint64_t camera, uint64_t caller);
 void freecamera_install(const ModuleInfo* module, FuncEntry* functions);
 }

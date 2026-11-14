@@ -1256,3 +1256,16 @@ inventory, tent entry and native indoor rotation were also checked. This proves
 the stale-selection defect and its correction; it does not establish that every
 possible disappearing-tree case has the same cause. No tree geometry, material,
 detail level, or draw-distance budget was changed.
+
+Promoted the tested pair after also verifying exit and restored outdoor orbit
+(`tree-refresh-return_15361.png`). Runtime SHA256:
+`7144e9ccd691d4e073eaf46bbe763a19e30c757bfc4e3862c04e6b8443597fff`;
+guest SHA256: `f335b05c731f46eb92af3182e1fe4a6d86cc1edd113b27a59dc41ffcd2e71106`.
+The water-fixed previous pair is backed up in
+`private/freecamera/install-backups/20261115-120628-foreground`.
+`install-foreground.json` records the promotion. The installed executable passed
+the stationary-player refresh test again: all four rectangles changed on camera
+rotation, player cell remained (88,195), and 315 settled frames produced no new
+refreshes (`tree-refresh-installed-result.json`). The zoomed-out candidate run
+reported approximately 60 FPS in the sampled settled view; this is not a matched
+performance benchmark or a guarantee for other scenes.

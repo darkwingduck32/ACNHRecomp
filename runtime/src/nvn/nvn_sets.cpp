@@ -11,6 +11,8 @@
 
 #include "nvn_draw_state.h"
 #include "nvn_ultrawide.h"
+#include "freecamera.h"
+#include "freecamera_fog.h"
 
 namespace nx::nvn {
 uint64_t bound_generation();  // nvn_draw.cpp
@@ -315,6 +317,7 @@ struct BufMemo {
     VkDescriptorBufferInfo info{};
 };
 PerThread<TlsArray<BufMemo, 2048>> g_buf_memo;
+PerThread<TlsArray<BufMemo, 256>> g_fog_memo;
 PerThread<uint64_t> g_memo_hits, g_memo_misses;
 
 VkDescriptorBufferInfo buffer_of(VkCommandBuffer cb, const void* bytes, uint64_t size, uint64_t min_size = 16,
@@ -370,6 +373,24 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     // In place (nvn_zero_copy.cpp) when every byte bound is the block's own: past it Maxwell reads 0.
     const uint64_t a = vk_robust_buffer_align();  // as buffer_of sizes the binding
     const uint64_t n = (std::max<uint64_t>((size + 15) & ~15ull, min_size) + a - 1) & ~(a - 1);
+    // Park UBER's c5[10..12] is the dark-fog colour/intensity, plane and
+    // inverse range. Patch only a host upload, never shared guest constants.
+    if (p && size>=13*16 && s->stage==ShaderStage::Vertex &&
+        b.nvn.source==NvnSource::UniformBlock && b.nvn.index==2 &&
+        freecamera_field_active() && freecamera_fog_shader(s->hash) && !written_overlaps(p,size)) {
+        float fog[12], normal[3];
+        std::memcpy(fog,p+10*16,sizeof fog);
+        if (freecamera::view_fog_normal(fog+4,fog[3],fog[8],normal)) {
+            BufMemo& m=(*g_fog_memo)[(uintptr_t(p)>>4 ^ uintptr_t(p)>>15 ^ size)&255];
+            if (m.p==p && m.size==size && m.n==n && m.epoch==(*g_upload_epoch)) return m.info;
+            Upload u=upload_alloc(n,256);
+            std::memset(u.ptr,0,n);
+            std::memcpy(u.ptr,p,size);
+            std::memcpy(static_cast<uint8_t*>(u.ptr)+11*16,normal,sizeof normal);
+            m={p,size,n,(*g_upload_epoch),{u.buffer,u.offset,n}};
+            return m.info;
+        }
+    }
     if (Upload u; p && n <= r.size && zero_copy_range(r.address, n, zero_copy_uniform_align(), u)) return {u.buffer, u.offset, n};
     return buffer_of(cb, p, size, min_size);
 }

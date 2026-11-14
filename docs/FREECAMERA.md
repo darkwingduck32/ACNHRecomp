@@ -54,10 +54,23 @@ original orientation. The temporary object's writable memory span is checked and
 its inputs are restored after matrix generation, as for heap cameras. This fix
 compiles and its scope classification is tested; its visual effect is unverified.
 
-Fog is an explicit outstanding requirement: attenuation must follow the current
-view direction/distance while preserving weather and palette colours. The native
-SkyScatter and DrawVolumetric shader stages have been identified for inspection.
-Consistent fog in forward, reverse, and side views is a live acceptance gate.
+The view-relative fog adapter targets Park UBER's vertex dark-fog plane. Its host
+uniform upload replaces the plane normal with negative view Z of the same length,
+retaining colour, intensity, bias and inverse range. Guest constants are untouched;
+compute-written blocks, other shaders and inactive outdoor cameras are excluded.
+`tools/build_camera_shader_profile.py` generates the private shader hash profile;
+install its `view_fog_shaders.txt` into `mods/freecamera/` with the matching runtime.
+Without the profile the adapter leaves native fog intact. The shared layout was
+identified in a decompiled Park UBER shader; every variant and native onset have
+not yet been visually verified. Directional math tests are not visual acceptance.
+Consistent fog in forward, reverse, and side views remains a live acceptance gate.
+
+The native SkyScatter shader generates a spherical latitude/longitude atmosphere
+texture. DrawCloud composites a screen-space cloud image; DrawStar transforms
+points through separate model, view and projection matrices. These are distinct
+passes, so changing the atmosphere generator alone cannot establish a 360-degree
+sky. The final background draw and cloud/star camera inputs still need tracing;
+no sky fix has been validated.
 
 Validation so far: camera/gesture unit tests and compilation of the affected
 runtime, SDL input, and game UI hooks. Live playability, frustum coverage,

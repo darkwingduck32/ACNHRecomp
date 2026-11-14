@@ -297,3 +297,54 @@ weather and selection/LOD performance verification remain open. The user's
 installed executable and game DLL are unchanged. Local `acnh-fruit.exe` and the
 isolated rebuilt DLL were used for these captures; the diagnostic DLL also has
 three unused culling/horizon probe hooks not present in the official hook list.
+
+Instancing investigation: the existing `NX_DRAW_MERGE=1` path reduced the matched
+low-angle terrain pose from median 53.12 ms CPU replay (4 windows) to 15.62 ms
+(38 windows). Rendered FPS rose from 17.9 to the isolated test's 30 FPS ceiling.
+Both runs used the same orbit eye (445, 19.5, 1129.6), target (445, 12, 979.8),
+2160/SSAA2/DLAA configuration, and expanded land window. The capacity allocation
+was 10,000 in the earlier baseline and 40,000 in the merged run; the selected
+low-angle instances fit both. The runs were not simultaneous and daylight/wind
+advanced. Evidence: `merge-comparison-30hz.json`, `merge-actual-low_03181.png`,
+and `merge-wide-small.png`. The latter preserves the observed land coverage;
+the pre-existing ocean-edge and cloud-horizon defects are still visible.
+
+The isolated test folder had lost its SpeedFix mod junction when its mods were
+split from the normal root, and the diagnostic DLL was generated without the
+SpeedFix variant. Consequently `frame_rate=60` stayed at native 30 Hz. These
+terrain-probe FPS figures are not directly comparable to the earlier installed
+60 Hz baseline. Restoring the existing parameter overlay and generating the
+matching pinned SpeedFix variant is required before 60 Hz acceptance. The
+runtime's normal protection against running uncorrected game logic at double
+speed must remain enabled.
+
+The matched 60 Hz rerun restored the SpeedFix mod junction and rebuilt the guest
+DLL with the pinned 3.0.3 variant (commit e5e03e64739334c9fbd36f19658b98e805f8ba8d,
+6,417 words; 1,545 changed functions and 866 added routines). Logs confirm
+`variant on`, present interval 1 and the SpeedFix RomFS overlay in both runs.
+Both used the same executable, rebuilt DLL, copied save and scripted low pose;
+only `NX_DRAW_MERGE=0` versus the new default differed. Sixteen stable timing
+windows per run, excluding startup, camera movement and screenshots, measured:
+
+| Metric | Merging off | Windows/NVIDIA ACNH default |
+| --- | ---: | ---: |
+| Median rendered FPS | 18.9 | 56.4 |
+| Median CPU replay | 50.78 ms | 15.23 ms |
+| Median replay wall time | 51.09 ms | 15.785 ms |
+
+Evidence: `merge-comparison-60hz.json`, `orbit-merge-off60.log`,
+`orbit-merge-on60.log` and matching `shots/orbit-merge-{off,on}60_03301.png`.
+The sampled captures retain geometry, materials and lighting. The merger keeps
+draw order and excludes individual object-motion draws. It now also rejects
+variable blocks requiring host-side free-camera fog/sky adaptation, since raw
+guest copies would otherwise bypass that adaptation. This guard was enabled in
+the measured default run. Other Windows vendors/games and parallel replay keep
+their existing defaults; `NX_DRAW_MERGE=0` remains the comparison fallback.
+
+With the guarded default, the inventory, tent interior (60 FPS), exit and
+outdoor orbit passed a live round trip. Captures: `merge-inventory_04981.png`,
+`merge-tent-inside_06721.png`, `merge-tent-exit_09361.png` and
+`merge-return-orbit-small.png`. This is one interior type and daylight condition.
+It does not establish weather/other-interior coverage, resolve the ocean edge or
+cloud seam, or replace the remaining distant-detail/grounding investigation.
+The normal installed executable/library still remain unchanged.

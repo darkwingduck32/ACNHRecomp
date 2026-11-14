@@ -119,3 +119,12 @@ offset 745.1. The view back-axis agrees with normalized eye-minus-target within
 an unchanged forward-facing terrain frustum for this pose only; it does not prove
 all transitions or other object families. The native tree archives inspected
 contain growth/animation/stump models rather than separately named distant LODs.
+
+Windows replay CPU timing previously returned zero unconditionally. A shared
+thread CPU clock now uses GetThreadTimes on Windows and the existing POSIX clock
+where supported. The standalone test measured 109.38 ms for CPU work and 0 ms
+charged during a 150 ms sleep. This repairs diagnosis, not frame rate itself.
+Existing zero-CPU log entries must not be used to infer a GPU bottleneck. The
+capture also includes 5760x3240 targets; the saved configuration requests 2160p
+with 2x supersampling. A controlled CPU/wall comparison is still required before
+choosing between submission, detail-level, shadow and pixel-cost optimizations.

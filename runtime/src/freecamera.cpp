@@ -28,6 +28,15 @@ Fn original_projection = nullptr;
 thread_local bool wrapped_lookat = false;
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
 std::atomic<bool> field_enabled{false};
+// The look-at call sites are shared with interiors. Only the island's
+// populated terrain window supplies this heartbeat; it stops inside rooms.
+// Resource loads cannot substitute for this: island models remain cached
+// across room transitions, so a file-open gate fails to re-enable on exit.
+std::atomic<uint64_t> terrain_frame{~uint64_t(0)};
+bool terrain_active() {
+    const auto seen=terrain_frame.load(std::memory_order_relaxed), now=g_frame.load(std::memory_order_relaxed);
+    return seen!=~uint64_t(0) && now>=seen && now-seen<=2;
+}
 std::atomic<uint64_t> ui_frame{~uint64_t(0)};
 float field_x = 0, field_z = 0;
 std::array<float,3> field_eye{}, field_target{};
@@ -161,7 +170,7 @@ void terrain_update(CPU& cpu) {
     const VmInfo vm = vm_query(object);
     if (!(vm.perm & 2) || object < vm.addr || vm.size < 0x1a40 || object-vm.addr > vm.size-0x1a40) return;
     std::lock_guard guard(lock);
-    if (!enabled() || field_frame.load() == ~uint64_t(0)) return;
+    if (!enabled()) return;
     auto* lo = reinterpret_cast<int32_t*>(object+0x1a28);
     auto* hi = reinterpret_cast<int32_t*>(object+0x1a38);
     std::array<int32_t, 4> current{lo[0], lo[1], hi[0], hi[1]};
@@ -169,6 +178,15 @@ void terrain_update(CPU& cpu) {
     if (found != terrain.end() && current == found->second.last) current = found->second.base;
     const int64_t w = int64_t(current[2])-current[0]+1, d = int64_t(current[3])-current[1]+1;
     if (w < 18 || w > 76 || d < 6 || d > 28) return;
+    const uint64_t frame=g_frame.load(std::memory_order_relaxed);
+    terrain_frame.store(frame,std::memory_order_relaxed);
+    static const bool trace=std::getenv("NX_FREECAMERA_TRACE")!=nullptr;
+    static uint64_t next_trace=0;
+    if (trace && frame>=next_trace) {
+        next_trace=frame+120;
+        log("freecamera: active terrain %lldx%lld at frame %llu",(long long)w,(long long)d,(unsigned long long)frame);
+    }
+    if (field_frame.load() == ~uint64_t(0)) return;
     // Cover the same height-band footprint as foreground/furniture. This uses
     // camera pitch, zoom, aspect and yaw, not a scaled stock terrain rectangle.
     float reach=0;
@@ -289,7 +307,7 @@ void freecamera_ui_input() {
 }
 bool freecamera_field_active() {
     const uint64_t seen=field_frame.load(std::memory_order_relaxed), now=g_frame.load(std::memory_order_relaxed);
-    return field_enabled.load(std::memory_order_relaxed) && seen!=~uint64_t(0) && now>=seen && now-seen<=2;
+    return terrain_active() && field_enabled.load(std::memory_order_relaxed) && seen!=~uint64_t(0) && now>=seen && now-seen<=2;
 }
 void freecamera_input(plat::PadState& p) {
     using namespace plat;
@@ -309,7 +327,7 @@ void freecamera_input(plat::PadState& p) {
     const uint64_t now_frame = g_frame.load(std::memory_order_relaxed);
     const uint64_t ui_seen = ui_frame.load(std::memory_order_relaxed);
     const bool ui_active = ui_seen != ~uint64_t(0) && now_frame >= ui_seen && now_frame-ui_seen <= 2;
-    const bool active = seen != ~uint64_t(0) && now_frame >= seen && now_frame-seen <= 2 &&
+    const bool active = terrain_active() && seen != ~uint64_t(0) && now_frame >= seen && now_frame-seen <= 2 &&
                         !ui_active && !plat::keyboard_typing();
     controls.update(orbit, active, reset, zoom_key, stick_button, axis(p.rx), axis(p.ry), dt);
     if (active) {
@@ -336,7 +354,7 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
         if ((vm.perm&3)!=3 || cam<vm.addr || vm.size<0x5c || cam-vm.addr>vm.size-0x5c) return;
     } else if (cam < kHeapBase || cam + 0x5c > kHeapBase + heap_size()) return;
     std::lock_guard guard(lock);
-    const bool on = enabled();
+    const bool on = enabled() && terrain_active();
     field_enabled.store(on,std::memory_order_relaxed);
     if (space==freecamera::CameraSpace::world) {
         field_x = ld<float>(cam+0x44);

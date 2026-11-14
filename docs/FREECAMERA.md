@@ -261,3 +261,20 @@ its runtime changes were removed. Do not raise the memory guard to accommodate
 it. Further work must investigate allocation/culling for the added land tiles
 and bound their work before any release. The experimental source and generated
 library remain private; the normal installed executable/library are unchanged.
+
+A subsequent gameplay-only land probe identified two additional issues. Direct
+unwrapped temporary world cameras overwrote the orbit visibility snapshot with
+the stock eye. Computing the orbit snapshot for these calls (without changing
+their native camera objects) produces the expected larger land window. The
+low-angle test remained stable at 7,768 queued terrain instances. A wide orbit
+then reached 10,210 instances against the native 10,000 capacity; an external
+monitor stopped that isolated process (`land-snapshot-counts.json`, frame 2985).
+
+Native enqueue `146ab80` increments manager+558, compares it with capacity+510,
+and falls back to array entry zero on overflow. This is a concrete capacity
+violation and a plausible cause of the earlier memory spike, not yet proof of
+that spike's entire cause. Capacity comes from manager+6e8 before both CPU and
+GPU allocation. An isolated `1462bb8` instruction hook is testing 40,000 entries
+at allocation time; modifying only the live capacity would be unsafe. Neither
+the expanded land selection nor this capacity change is released yet. Selection
+cost, wide-orbit coverage and transitions remain required checks.

@@ -27,17 +27,9 @@ inline void movement(float yaw, float x, float y, float& result_x, float& result
     result_x = std::cos(yaw)*x - std::sin(yaw)*y;
     result_y = std::sin(yaw)*x + std::cos(yaw)*y;
 }
-struct Mode {
-    bool editing = false, toggle_down = false;
-    void update(bool pressed, bool enabled) {
-        if (!enabled) editing = false;
-        else if (pressed && !toggle_down) editing = !editing;
-        toggle_down = pressed;
-    }
-};
 struct Orbit {
     float yaw = 0, pitch = 0, zoom = 1;
-    void advance(float horizontal, float vertical, int distance, float dt) {
+    void advance(float horizontal, float vertical, float distance, float dt) {
         dt = std::clamp(dt, 0.0f, 0.05f);
         yaw = std::remainder(yaw + horizontal * dt * 1.8f, 2 * pi);
         pitch = std::clamp(pitch + vertical * dt, -pi / 2, pi / 2);
@@ -56,6 +48,23 @@ struct Orbit {
         result[1] = at[1] + radius * zoom * std::sin(elevation);
         result[2] = at[2] + horizontal * std::cos(azimuth);
         return true;
+    }
+};
+// Right stick orbits during outdoor play. Hold its button (or F6) to zoom
+// instead of tilting; a click without a zoom gesture recenters on release.
+struct Controls {
+    bool pressed = false, dragged = false;
+    void cancel() { pressed = dragged = false; }
+    void update(Orbit& orbit, bool active, bool reset, bool zoom_key,
+                bool stick_button, float x, float y, float dt) {
+        if (!active) { cancel(); return; }
+        if (stick_button && !pressed) dragged = false;
+        if (stick_button && (x != 0 || y != 0)) dragged = true;
+        const bool click = pressed && !stick_button && !dragged;
+        pressed = stick_button;
+        if (reset || click) { orbit = {}; return; }
+        const bool zoom = zoom_key || stick_button;
+        orbit.advance(x, zoom ? 0 : y, zoom ? -y : 0, dt);
     }
 };
 }

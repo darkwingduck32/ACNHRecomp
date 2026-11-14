@@ -289,7 +289,7 @@ static void sample_input() {
         if (k[SDL_SCANCODE_BACKSPACE]) p.buttons |= kB;
     } else if (focused && !nx::ui::ui_text_field()) {
         const bool* k = SDL_GetKeyboardState(nullptr);
-        if (k[SDL_SCANCODE_F6]) p.buttons |= kFreeCameraToggle;
+        if (k[SDL_SCANCODE_F6]) p.buttons |= kFreeCameraZoom;
         if (k[SDL_SCANCODE_F7]) p.buttons |= kFreeCameraReset;
         const uint64_t now = SDL_GetTicks();
         auto held = [&](int sc) {

@@ -283,6 +283,46 @@ void land_bounds_update(CPU& cpu) {
         (long long)w,(long long)d); }
 }
 NX_HOOK(0x11fe020, land_bounds_update);
+void water_bounds_update(CPU& cpu) {
+    static const bool requested=[] {
+        const char* value=std::getenv("NX_FREECAMERA_WATER_BOUNDS");
+        return !value || std::strcmp(value,"0")!=0;
+    }();
+    if (!requested || !freecamera_field_active()) return;
+    // Diagnostic paired comparison; normal play always uses the view footprint.
+    static const bool ab=std::getenv("NX_FREECAMERA_WATER_AB")!=nullptr;
+    if (ab && (g_frame.load(std::memory_order_relaxed)/600)%2==0) return;
+    // The surface worker has its own inclusive 10-unit tile rectangle. Changing
+    // the terrain manager's rectangle does not update this separately queued job.
+    // Retain the native worker's per-tile frustum tests and allocation limits.
+    const uint64_t job=cpu.x[24];
+    const VmInfo vm=vm_query(job);
+    if ((vm.perm&3)!=3 || job<vm.addr || vm.size<0x2a0 || job-vm.addr>vm.size-0x2a0) return;
+    auto* lo=reinterpret_cast<int32_t*>(job+0x288);
+    auto* hi=reinterpret_cast<int32_t*>(job+0x298);
+    const int64_t width=int64_t(hi[0])-lo[0]+1, depth=int64_t(hi[1])-lo[1]+1;
+    if (width<10 || width>100 || depth<10 || depth>100) return;
+    std::lock_guard guard(lock);
+    if (orbit.identity()) return;
+    float reach=0;
+    for (const Visibility& v:visibility) if(v.initialized)
+        reach=std::max(reach,*std::max_element(v.base.begin(),v.base.end()));
+    freecamera::Bounds bounds;
+    if (!perspective_bounds(reach,bounds)) return;
+    const std::array<int32_t,4> old{lo[0],lo[1],hi[0],hi[1]};
+    lo[0]=int32_t(std::floor((field_x-bounds.left)/10));
+    lo[1]=int32_t(std::floor((field_z-bounds.far)/10));
+    hi[0]=int32_t(std::ceil((field_x+bounds.right)/10));
+    hi[1]=int32_t(std::ceil((field_z+bounds.near)/10));
+    static uint64_t next_log=0;
+    const uint64_t frame=g_frame.load(std::memory_order_relaxed);
+    if (std::getenv("NX_FREECAMERA_TRACE") && frame>=next_log) {
+        next_log=frame+120;
+        log("freecamera: water bounds %d %d %d %d -> %d %d %d %d at frame %llu",
+            old[0],old[1],old[2],old[3],lo[0],lo[1],hi[0],hi[1],(unsigned long long)frame);
+    }
+}
+NX_HOOK(0x14b76e8, water_bounds_update);
 void lookat_return(CPU& cpu) {
     if (direct_lookat_camera && cpu.x[0]==direct_lookat_camera) {
         std::memcpy(reinterpret_cast<void*>(direct_lookat_camera+0x38),

@@ -197,3 +197,13 @@ side/back headings, and a dark horizon band beyond the finite ocean. These are
 open visual gates. Captures: `perf-test/shots/cloud-main-low_03781.png` and
 `cloud-360-small.png`; the native CloudVR front/back meridians have substantially
 different UV coverage at equal elevation, so centering alone cannot fix that.
+
+`tools/build_camera_clouds.py` builds a separate private CloudVR overlay with
+panoramic UV0 coverage. It interpolates the native front meridian's vertical
+profile around every heading and respects the existing split back seam. Both
+410-vertex/696-triangle shapes remain unchanged geometrically. Byte-level
+validation found all 2070 changed bytes inside UV0 fields; positions, indices,
+materials, texture references and archive length are preserved. The daylight
+`cloud-uv-orbit-small.png` capture shows consistent cloud shapes through the
+sampled headings. Other weather palettes remain a validation gate. This overlay
+is currently tested through an isolated `cloudtest` mod, ahead of freecamera.

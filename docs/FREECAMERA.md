@@ -835,3 +835,21 @@ volume remains about 15.45 MB/frame. About 4,300 fixed-state commands/frame are
 redundant, and fast-path use rises to about 97.3%. Evidence is
 `state-dedup-ab-comparison.json` and `state-dedup-ab.log`. This is a modest CPU
 improvement, not a resolution of the remaining distance-detail requirements.
+
+The final default build measures 51.44 FPS / 17.08 ms in the heavy pose.
+Its full outdoor orbit and inventory checks passed. The installed executable
+(`5625d5112a2a514d5fd5bed8606d3be410c9cb2370edb1d47e4efeba88ab64d8`)
+then measures 59.66 FPS / 13.73 ms / 11.79 MB in the wide pose over frames
+2400-3419, with peak support-cache use 82 and no support or driver fallbacks.
+The settled tent interior, native indoor camera rotation, phone UI and return
+outdoors were visually inspected successfully. An earlier interior capture
+caught the iris transition and was not counted as a pass.
+
+Evidence: `state-dedup-default-result.json`, `state-dedup-installed-result.json`,
+and `shots/state-dedup-installed-{wide,interior,exit,phone,return}_*.png` in the
+private test root (`exit` shows native indoor rotation; `return` shows outdoors).
+The previous runtime is backed up in
+`private/freecamera/install-backups/20261115-092908`. The official guest DLL,
+normal configuration and actual save are unchanged. The isolated harness was
+stopped after validation. Heavy-view performance, distance detail/grounding,
+night horizon and broader weather coverage remain open.

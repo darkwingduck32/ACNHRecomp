@@ -141,6 +141,49 @@ sweep with settling periods and a final reset. It must start with outdoor contro
 and no dialogue/menu, in an isolated save copy. Generate it with `tools/play/gen.py`
 for inspection before executing it through the live harness. Camera rotation uses
 wall time, so actual captured headings must be checked rather than assuming a
-frame count always corresponds to 90 degrees. This scenario is prepared and
-compiled, but has not been executed. Separate movement/menu, zoom, transitions,
-weather and geometry-grounding tests remain necessary.
+frame count always corresponds to 90 degrees. The harness has now run low-angle
+orbit sweeps, inventory input, walking and repeated tent transitions. The complete
+prepared high/low scenario, zoom, weather and geometry-grounding tests remain open.
+
+## Windows harness and performance validation (2026-11-15)
+
+Live tests used `private/freecamera/perf-test`, an isolated copy of the user's
+save with the same freecamera/camera303 assets and 2160p, SSAA2, DLAA, 60 FPS
+configuration. No detailed draw tracing was enabled. The Windows harness now
+queries process liveness with GetExitCodeProcess (Python os.kill(pid, 0) can
+terminate a Windows process), replaces its frame-counter file correctly, accepts
+native paths and converts captures with Pillow. Two harness regression tests and
+the freecamera/thread_time CTests pass.
+
+Frame readback now prefers CPU-cached coherent memory, with a coherent fallback.
+For 5760x3240 captures, the 60-frame timing window's present time fell from about
+91 ms/frame to 1.2–1.6 ms/frame: roughly 5.5 seconds of capture overhead became
+0.06–0.08 seconds. Ordinary gameplay performance is measured separately.
+
+At the same stationary inland pose (eye 445,19.5,1129.6; target 445,12,979.8),
+16 baseline and 17 dynamic-UBO timing windows, excluding captures, measured:
+
+| Metric | Baseline | Dynamic UBO |
+| --- | ---: | ---: |
+| Median FPS | 30.4 | 34.9 |
+| Median CPU replay | 30.86 ms | 26.56 ms |
+| Median replay wall time | 31.44 ms | 27.18 ms |
+| Descriptor sets per submit | about 11,400 | about 270 |
+
+The existing dynamic-UBO path is now the default for ACNH on Windows/NVIDIA;
+`NX_DYNAMIC_UBO=0` retains the diagnostic fallback. Other Windows games and GPU
+vendors retain their prior defaults. Logs and samples are in the isolated root's
+`cached-readback.log`, `dynamic-ubo.log` and `dynamic-comparison.json`.
+
+Nighttime orbit captures show sky and stars across the sampled headings. The
+inventory kept the camera stationary under right-stick input. Indoor testing
+found that the supposed field look-at sites also run in rooms. Camera input,
+matrix modification, sky and fog adaptation now additionally require the recent
+populated island terrain update. This preserves native room controls and resumed
+outdoor orbit on two tent round trips, including return with cached resources.
+Evidence is in `terrain-gating.log` and `shots/terrain-*.png`.
+
+Remaining limitations: low-angle inland rendering is still CPU-bound and below
+60 FPS on this machine; close trees can obstruct the camera; distant grounding,
+LOD/outline behavior, daytime/cloud coverage and other interior types need further
+validation. These tests do not establish that the whole 360-camera task is complete.

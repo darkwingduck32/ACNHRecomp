@@ -25,6 +25,7 @@
 #include "nvn_pipeline.h"
 #include "nvn_ultrawide.h"
 #include "platform.h"
+#include <nx/game.h>
 
 namespace nx::nvn {
 
@@ -470,13 +471,18 @@ const ProgramLayout& program_layout(const std::vector<const ShaderInfo*>& stages
     // made per submit fell from ~27,000 to ~1,100 in a heavy island scene (replay -1 ms a frame).
     static const uint32_t max_dynamic = [] {
         const char* e = std::getenv("NX_DYNAMIC_UBO");
+        VkPhysicalDeviceProperties p{};
+        p_vkGetPhysicalDeviceProperties(vk_physical(), &p);
 #if defined(__ANDROID__) || defined(__APPLE__)
         if (e && e[0] == '0') return 0u;
+#elif defined(_WIN32)
+        // ACNH's low-angle island view on NVIDIA: ~11,400 sets -> ~270,
+        // replay ~31.7 -> ~27 ms. Keep other Windows game/GPU defaults and
+        // retain NX_DYNAMIC_UBO=0 as the diagnostic fallback.
+        if (e ? e[0] != '1' : (p.vendorID != 0x10de || std::strcmp(game::kInfo.id, "acnh"))) return 0u;
 #else
         if (!e || e[0] != '1') return 0u;
 #endif
-        VkPhysicalDeviceProperties p{};
-        p_vkGetPhysicalDeviceProperties(vk_physical(), &p);
         log("nvn/vk: uniform buffers bound with dynamic offsets (up to %u per layout)",
             p.limits.maxDescriptorSetUniformBuffersDynamic);
         return p.limits.maxDescriptorSetUniformBuffersDynamic;

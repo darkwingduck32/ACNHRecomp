@@ -1,0 +1,14 @@
+# Start during normal outdoor gameplay. Run with live.py sweep and 12 captures.
+# Reproduce terrain disappearing beneath visible trees at the widest low orbit.
+press StickR
+wait 30
+hold RDown 60
+wait 30
+mark zoom_start
+hold StickR 48
+# Overlay stick motion at the same relative frame as the modifier.
+at 140
+hold RDown 48
+wait 60
+hold RRight 180
+wait 60

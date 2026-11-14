@@ -232,3 +232,14 @@ cloud-horizon strip/seam. These remain open gates; the sky fixes do not establis
 that wide-distance terrain visibility or the full camera mod is complete.
 The installed `acnh.exe` remains the measured performance/interior-gating build;
 these sky changes are currently in `acnh-fruit.exe` and the isolated cloud overlay.
+
+Wide-zoom investigation: `tools/play/scenarios/freecamera_wide.txt` reproduces
+missing terrain under visible grass and trees. Two dispatch-table experiments
+attempted to update the native curved-horizon camera and bypass tile culling.
+Neither produced a demonstrated fix. Crucially, the instrumented culling probe
+registered but never executed (`terrain-no-cull-verified.log`): these native
+calls are direct compiled C++ calls (`recomp/emit.py::i_bl`), so changing the
+indirect dispatch table does not intercept them. The screenshots cannot rule
+out the horizon/frustum tests. Both experimental runtime wrappers were removed.
+Further probing must use compiled instruction hooks or intercept a verified
+indirect caller; do not repeat dispatch replacements at these direct callees.

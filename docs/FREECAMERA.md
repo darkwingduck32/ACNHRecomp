@@ -441,3 +441,29 @@ The high-angle capture (ocean-shore-high_07741.png) also retains nearby ocean
 coverage, but exposes distant tree/terrain silhouettes and missing ground beyond
 the resident island region. This is evidence for the remaining distant-grounding
 and LOD work, not a pass for overall high-angle scenery.
+
+The temporary world LookAt call also bypasses the dispatch wrapper because it
+is compiled as a direct call. It previously supplied an orbited loading snapshot
+but left the native matrix unorbited. The entry adapter now saves/applies inputs
+for that direct path, and the sole leaf return at main+37e4724 restores them after
+matrix generation. Indirect calls retain their existing scoped wrapper. This
+requires rebuilding the guest library with the updated official hook list.
+
+The isolated 60 Hz library was rebuilt with that one regenerated function; the
+other generated bodies, including the SpeedFix variant, were preserved. The
+runtime trace confirms direct inputs are restored, and stationary camera
+snapshots remain stable. `distant-direct-lookat_03121.png` still has missing
+terrain, so matrix consistency is not proof that terrain coverage is complete.
+The steep-view instance count is below the 40,000 capacity, and the optional
+renderer clip box is null. A temporary horizon-plane bypass did not visibly
+fill the gap; its timing is insufficient to exclude native horizon culling.
+`tools/play/scenarios/freecamera_high.txt` retains a harness case for this work.
+Camera/timing CTests and live-harness unit tests pass. These changes are still
+under isolated test, not yet promoted to the normal executable/library.
+
+The same missing-ground pattern also occurs with NX_DRAW_MERGE=0 in
+distant-inclined-unmerged3_04441.png (distant-overhead-unmerged.log). This
+excludes repeated-draw merging as the cause of that pattern. Maximum-zoom
+overhead captures also show excessive fog over nearby ground; the current fog
+normal follows the camera but retains the native bias as eye-target distance
+changes. Zoom-aware fog bias remains to be investigated separately.

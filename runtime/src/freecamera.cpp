@@ -1,5 +1,6 @@
 #include "freecamera.h"
 #include "freecamera_math.h"
+#include "freecamera_fruit.h"
 #include "config.h"
 #include "kernel.h"
 #include "platform.h"
@@ -175,6 +176,7 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
     if (entry + 16 > module->text_size) return;
     const uint32_t words[] = {0x2d470801, 0x2d480c00, 0x1e232020, 0x2d491404};
     if (std::memcmp(reinterpret_cast<void*>(module->base + entry), words, sizeof words)) return;
+    freecamera_fruit_install(module, enabled());
     for (size_t i = 0; i < module->func_count; i++) {
         if (functions[i].offset != entry) continue;
         original_lookat = functions[i].fn;

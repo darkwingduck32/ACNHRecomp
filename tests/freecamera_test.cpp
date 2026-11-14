@@ -1,4 +1,6 @@
 #include "freecamera_math.h"
+#include "freecamera_fruit_layout.h"
+#include <sstream>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -8,6 +10,18 @@ static void check(bool ok, const char* message) {
 }
 int main() {
     using namespace nx::freecamera;
+    const std::string fruit_config="ACNH_TREE_FRUIT_V1 oak -6 16.8 9.4 6.2 16 9.6 0 24.5 5.6 sakura -6 16.8 9.4 6.2 16 9.6 0 24.5 5.6 snow -9 16.8 9 10 16.5 8 -2 24.5 6 palm -2.5 15.5 3.2 2.6 16.3 2.3";
+    FruitLayouts fruit;
+    std::istringstream valid_fruit(fruit_config);
+    check(read_fruit_layouts(valid_fruit,fruit),"Valid fruit layout must load");
+    for (const auto& bad : {std::string(""),fruit_config+" extra",fruit_config.substr(0,40),std::string("ACNH_TREE_FRUIT_V1 oak 1000")}) {
+        std::istringstream input(bad);FruitLayouts unchanged=fruit;
+        check(!read_fruit_layouts(input,fruit),"Malformed fruit profiles must fail closed");
+        check(fruit.oak==unchanged.oak,"Failed profile parse must not partially update origins");
+    }
+    check(fruit_variant("rom:/Model/PltTreeOakSnow.Nin_NX_NVN.zs")==2,"Snow model selects snow attachments");
+    check(fruit_variant("rom:/Model/PltTreeOakAnim.Nin_NX_NVN.zs")==-1,"Animation loads must not reset seasonal attachments");
+    check(fruit_variant("rom:/Model/IdrObjTreeOak00.Nin_NX_NVN.zs")==-1,"Museum models must not reset island attachments");
     Mode mode;
     const Bounds original_bounds{140, 140, 60, 265};
     const Bounds quarter = rotate_bounds(original_bounds, pi/2);

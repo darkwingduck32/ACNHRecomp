@@ -5,6 +5,7 @@
 #include <cctype>
 #include <atomic>
 #include <deque>
+#include <filesystem>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -104,7 +105,9 @@ void poll_live(std::vector<Scripted>& script) {
         if (FILE* f = fopen_utf8(tmp, "wb")) {
             std::fprintf(f, "%llu\n", (unsigned long long)g_frame.load());
             std::fclose(f);
-            std::rename(tmp.c_str(), out.c_str());
+            std::error_code error;
+            // filesystem::rename replaces an existing destination on Windows too.
+            std::filesystem::rename(std::filesystem::u8path(tmp), std::filesystem::u8path(out), error);
         }
     }
     if (!live_files()) return;

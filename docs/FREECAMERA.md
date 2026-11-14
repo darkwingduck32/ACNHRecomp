@@ -774,3 +774,39 @@ The final installed-runtime/installed-overlay smoke reproduces 59.53 FPS,
 is 85, with no fallback copies. Evidence: `support-cache-ocean-installed-result.json`
 and `support-cache-ocean-installed_04321.png`. The harness process was stopped
 after inspection; normal game configuration and the actual save are unchanged.
+
+### Heavy-view terrain visibility diagnosis
+
+The fixed low-angle pose (minimum pitch, yaw -78.03, zoom 3) is also slow in
+daylight: 50.72 FPS / 17.41 ms replay / 15.32 MB uploaded over frames 2400–3419.
+`heavy-view-day-control-result.json` rules out night lighting as the sole cause.
+The normal renderer reports roughly 33,560 draws/frame before batching, with
+95.6% using the fast path and about 31,824 combined into 412 instanced draws.
+Support-cache fallbacks remain zero. The remaining problem is not the old
+cache overflow recurring.
+
+A read-only isolated guest probe at 146a660 and 146ab80 records native terrain
+culling inputs and the two visibility bytes passed to enqueue. At frame 2700,
+`terrain-queue-probe.log` records 950,100 enqueues with both bytes clear,
+46,800 with only the second set, and 2,083,811 with both set over approximately
+300 frames. All sampled culling calls have a non-null native frustum. Therefore
+the null-frustum bypass present in the native code is not the explanation in
+this pose; adding another frustum test without checking the existing results
+would not be an established optimization. The first probe incorrectly labels
+x4 as flags: it is the worker index. The follow-up groups calls by return PC
+and reads the actual visibility-byte pointer at enqueue. Those bytes become
+instance flag bits 6 and 7 in the native routine.
+
+Foreground parameter inspection identifies the previously undecoded 55/75
+values as `mAreaTilt` / `mTreeAreaTilt`, not detail-distance thresholds.
+`FldDistantView*` assets are separate background island meshes; they are not
+evidence of playable-island tree/terrain LODs. The native `Outline` and
+`DepthSilhouette` render-pass names likewise do not establish a distance LOD
+policy without tracing their selection.
+
+No culling or LOD behavior was changed by this investigation. Probe code is
+archived in `private/freecamera/terrain-visibility-probe.patch`; it was removed
+from active source and both test binaries restored/rebuilt. Every rebuilt
+guest DLL code/data section matches the official library
+(`tile-probe-restored-dll-sections.json`); the test root uses the exact official
+68e6eae DLL. The installed runtime and ocean overlay remain the verified ones.

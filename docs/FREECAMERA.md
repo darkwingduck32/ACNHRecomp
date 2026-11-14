@@ -874,3 +874,28 @@ The JSON pins executable/library hashes and records the input sequences and
 full-resolution contact sheets. This test covers one island position in daytime;
 it makes no new performance or weather-coverage claim. No runtime or asset change
 was made for the test, and only the isolated save was used.
+
+### Stored detail alternatives and outline-pass entry
+
+`tools/audit_camera_detail.py` reads all `PltTree*` and `Fld*` archives and records
+the BFRES shape mesh-slot counts with source hashes. The native audit covers
+450 archives and 2,691 shapes; the installed freecamera overlay covers 127
+archives and 1,422 shapes. Every inspected shape has exactly one mesh slot,
+with no parse errors. This rules out selecting an already-stored alternate
+mesh slot in these assets, but not separate model selection or shader-based
+simplification. Reports are `native-mesh-detail-audit.json` and
+`modified-mesh-detail-audit.json` under `private/freecamera`.
+
+Across the 11 modified tree archives, stored first-mesh index counts total
+416,724 in the native assets and 609,000 in the replacements (about 46% more).
+These archive totals include multiple growth/animation models and are not
+per-frame GPU counts. They motivate evaluating authored distant geometry;
+they do not establish that tree geometry causes the remaining replay bottleneck.
+
+Static native references place `Model(Outline/ZOnly)` and
+`Model(Outline/Opa+AlphaMask)` in the render routine at `3938f9c`, called from
+`3905e74`. Its entry gates inspect render-state flags and counts before creating
+an `OutlineDepth` target through `39ed840`; this inspected entry path does not
+select geometry by distance. Disassembly evidence is `outline-refs.txt`.
+Neither this trace nor the asset audit justifies treating outline as an existing
+distance LOD switch. No native pass flags or installed assets were changed.

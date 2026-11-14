@@ -17,6 +17,7 @@
 #include <nx/runtime.h>
 
 #include "config.h"
+#include "freecamera.h"
 #include "platform.h"
 
 namespace nx {
@@ -153,6 +154,7 @@ PadState read() {
             if (s.lx) p.lx = s.lx;
             if (s.ly) p.ly = s.ly;
         }
+    freecamera_input(p);
     stick_buttons(p);
     return p;
 }

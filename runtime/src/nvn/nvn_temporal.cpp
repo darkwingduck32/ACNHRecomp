@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "config.h"
+#include "freecamera.h"
 #include "kernel.h"
 #include "nvn_shaders.h"
 #include "nvn_temporal.h"
@@ -170,6 +171,7 @@ std::shared_ptr<const TemporalFrame> snapshot() {
 
 // main+37e4624 (3.0.2) / +37e4634 (3.0.3): sead::LookAtCamera::doUpdateMatrix(this = x0, Matrix34f* dst = x1).
 void lookat_update(CPU& c) {
+    freecamera_lookat(c.x[0], c.x[30] - kModuleBase);
     if (!temporal_on()) return;
     const uint64_t cam = c.x[0];
     if (cam < kHeapBase || cam >= kHeapBase + heap_size()) return;

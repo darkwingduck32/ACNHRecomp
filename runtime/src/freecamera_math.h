@@ -1,0 +1,61 @@
+#pragma once
+#include <algorithm>
+#include <cmath>
+
+namespace nx::freecamera {
+constexpr float pi = 3.14159265358979323846f;
+struct Bounds {
+    float left, right, near, far;
+};
+inline float snap_axis(float value) {
+    if (std::fabs(value) < 1e-6f) return 0;
+    if (std::fabs(value-1) < 1e-6f) return 1;
+    if (std::fabs(value+1) < 1e-6f) return -1;
+    return value;
+}
+inline Bounds rotate_bounds(Bounds b, float yaw) {
+    float xmin = 0, xmax = 0, zmin = 0, zmax = 0;
+    const float c = snap_axis(std::cos(yaw)), s = snap_axis(std::sin(yaw));
+    for (float x : {-b.left, b.right}) for (float z : {-b.far, b.near}) {
+        float rx = c*x+s*z, rz = -s*x+c*z;
+        xmin = std::min(xmin, rx); xmax = std::max(xmax, rx);
+        zmin = std::min(zmin, rz); zmax = std::max(zmax, rz);
+    }
+    return {-xmin, xmax, zmax, -zmin};
+}
+inline void movement(float yaw, float x, float y, float& result_x, float& result_y) {
+    result_x = std::cos(yaw)*x - std::sin(yaw)*y;
+    result_y = std::sin(yaw)*x + std::cos(yaw)*y;
+}
+struct Mode {
+    bool editing = false, toggle_down = false;
+    void update(bool pressed, bool enabled) {
+        if (!enabled) editing = false;
+        else if (pressed && !toggle_down) editing = !editing;
+        toggle_down = pressed;
+    }
+};
+struct Orbit {
+    float yaw = 0, pitch = 0, zoom = 1;
+    void advance(float horizontal, float vertical, int distance, float dt) {
+        dt = std::clamp(dt, 0.0f, 0.05f);
+        yaw = std::remainder(yaw + horizontal * dt * 1.8f, 2 * pi);
+        pitch = std::clamp(pitch + vertical * dt, -pi / 2, pi / 2);
+        zoom = std::clamp(zoom * std::exp(distance * dt), 0.25f, 3.0f);
+    }
+    bool identity() const { return yaw == 0 && pitch == 0 && zoom == 1; }
+    bool apply(const float pos[3], const float at[3], float result[3]) const {
+        for (int i = 0; i < 3; i++) if (!std::isfinite(pos[i]) || !std::isfinite(at[i])) return false;
+        float x = pos[0] - at[0], y = pos[1] - at[1], z = pos[2] - at[2];
+        float radius = std::sqrt(x*x + y*y + z*z);
+        if (!(radius > 1 && radius < 10000)) return false;
+        float azimuth = std::atan2(x, z) + yaw;
+        float elevation = std::clamp(std::asin(std::clamp(y / radius, -1.0f, 1.0f)) + pitch, 0.05f, 1.48f);
+        float horizontal = radius * zoom * std::cos(elevation);
+        result[0] = at[0] + horizontal * std::sin(azimuth);
+        result[1] = at[1] + radius * zoom * std::sin(elevation);
+        result[2] = at[2] + horizontal * std::cos(azimuth);
+        return true;
+    }
+};
+}

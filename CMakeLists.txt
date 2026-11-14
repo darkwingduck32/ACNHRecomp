@@ -85,6 +85,9 @@ endif()
 # Unit tests of runtime pieces that build without the game (docs/nvn/WINDOWS-PLAN.md, "Test plan"): ctest.
 option(NX_TESTS "Build the standalone unit tests" OFF)
 if(NX_TESTS AND NOT ANDROID)
+    add_executable(freecamera_test tests/freecamera_test.cpp)
+    target_include_directories(freecamera_test PRIVATE runtime/src)
+    add_test(NAME freecamera COMMAND freecamera_test)
     enable_testing()
     add_executable(gpu_pick_test tests/gpu_pick_test.cpp runtime/src/nvn/nvn_gpu_pick.cpp)
     target_compile_definitions(gpu_pick_test PRIVATE NX_GPU_PICK_STANDALONE)
@@ -259,6 +262,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/hle_ro.cpp
     runtime/src/hle_vi.cpp
     runtime/src/hle_hid.cpp
+    runtime/src/freecamera.cpp
     runtime/src/hle_hid_system_nfc.cpp
     runtime/src/hle_net.cpp
     runtime/src/hle_web.cpp

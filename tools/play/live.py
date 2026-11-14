@@ -40,7 +40,8 @@ def root_of(name):
 def alive(root):
     pidf = os.path.join(root, "game.pid")
     try:
-        pid = int(open(pidf).read())
+        with open(pidf) as f:
+            pid = int(f.read())
         if os.name == "nt":
             # os.kill(pid, 0) terminates processes on Windows; query a handle instead.
             import ctypes
@@ -66,7 +67,8 @@ def alive(root):
 
 def frame(root):
     try:
-        return int(open(os.path.join(root, "live_frame")).read())
+        with open(os.path.join(root, "live_frame")) as f:
+            return int(f.read())
     except (OSError, ValueError):
         return -1
 

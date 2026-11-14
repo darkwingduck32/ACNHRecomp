@@ -26,6 +26,10 @@ Fn original_lookat = nullptr;
 Fn original_float_storage = nullptr, original_terrain = nullptr;
 Fn original_projection = nullptr;
 thread_local bool wrapped_lookat = false;
+// Direct compiled calls bypass lookat_scoped's dispatch wrapper. The leaf
+// LookAt routine's return hook restores their inputs after writing its matrix.
+thread_local uint64_t direct_lookat_camera = 0;
+thread_local std::array<float,9> direct_lookat_source{};
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
 std::atomic<bool> field_enabled{false};
 // The look-at call sites are shared with interiors. Only the island's
@@ -271,6 +275,17 @@ void land_bounds_update(CPU& cpu) {
         (long long)w,(long long)d); }
 }
 NX_HOOK(0x11fe020, land_bounds_update);
+void lookat_return(CPU& cpu) {
+    if (direct_lookat_camera && cpu.x[0]==direct_lookat_camera) {
+        std::memcpy(reinterpret_cast<void*>(direct_lookat_camera+0x38),
+                    direct_lookat_source.data(),sizeof direct_lookat_source);
+        direct_lookat_camera=0;
+        static std::atomic<bool> logged{false};
+        if (std::getenv("NX_FREECAMERA_TRACE") && !logged.exchange(true))
+            log("freecamera: direct LookAt inputs restored after matrix update");
+    }
+}
+NX_HOOK(0x37e4724, lookat_return);
 void lookat_scoped(CPU& cpu) {
     const uint64_t camera = cpu.x[0];
     bool readable = camera >= kHeapBase && camera <= kHeapBase + heap_size() - 0x5c;
@@ -408,8 +423,8 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     for (int i = 0; i < 3; i++) if (!std::isfinite(pos[i]) || !std::isfinite(at[i])) return;
     float result[3];
     std::memcpy(result,pos,sizeof result);
-    // Temporary world cameras also feed terrain selection. Compute the orbit
-    // snapshot for them even when their native camera object is left untouched.
+    // Both direct and dispatched world cameras feed terrain selection. Record
+    // the same orbit that their native matrix routine will consume below.
     if (on && !orbit.identity() && !orbit.apply(pos, at, result)) return;
     if (space==freecamera::CameraSpace::world) {
         std::copy_n(result,3,field_eye.begin());
@@ -417,7 +432,14 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
         field_view_valid=true;
     }
     update_visibility(on);
-    if (!wrapped_lookat || !on || orbit.identity()) return;
+    if (!on || orbit.identity()) return;
+    if (!wrapped_lookat) {
+        // There are no calls between the entry and sole return of this leaf
+        // routine, so one per-thread saved input suffices for direct calls.
+        if (direct_lookat_camera) return;
+        direct_lookat_camera=cam;
+        std::memcpy(direct_lookat_source.data(),reinterpret_cast<void*>(cam+0x38),sizeof direct_lookat_source);
+    }
     std::memcpy(reinterpret_cast<void*>(cam + 0x38), result, sizeof result);
     // Orbit about the world's vertical axis. The stock camera's tilted up vector
     // produces roll as the yaw passes the sides of the island.

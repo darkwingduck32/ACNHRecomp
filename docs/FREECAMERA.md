@@ -1092,3 +1092,15 @@ Evidence: `detail-distance-ab-comparison.json`, `detail-distance-ab-hashes.json`
 test root. The rejected implementation is archived as
 `private/freecamera/detail-distance-experiment.patch`. The harness is stopped;
 installed game files and the actual save are unchanged.
+
+The AO candidate now uses shared, tested bounds math (`freecamera_ao_math.h`).
+Tests cover rotated top-down projections, translated/scaled/sheared model bounds,
+edge contact, invalid inputs and clearing stale clipping state. A small edge
+tolerance retains touching spheres. Five focused tests pass. The candidate
+enables AO culling with freecamera by default, with `NX_FREECAMERA_AO_CULL=0`
+as a diagnostic override; its normal installation is still pending the final
+orbit and indoor/outdoor transition test. Candidate executable/library hashes
+are stored under `private/freecamera/release-candidates/ao-*` with
+`visual_passed: false` until that validation is performed. A normal game session
+was observed running separately from the harness, so further game launches and
+promotion were deferred rather than competing with that session for the GPU.

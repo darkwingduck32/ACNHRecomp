@@ -3,6 +3,7 @@
 #include "freecamera_visibility.h"
 #include "freecamera_fog.h"
 #include "freecamera_sky.h"
+#include "freecamera_ao_math.h"
 #include <sstream>
 #include <cstdio>
 #include <cstdlib>
@@ -13,6 +14,39 @@ static void check(bool ok, const char* message) {
 }
 int main() {
     using namespace nx::freecamera;
+    {
+        const float projection[]{.01f,0,0,0, 0,.01f,0,0, 0,0,-.01f,0, 0,0,0,1};
+        for(float yaw:{0.f,pi/4,pi/2,pi,3*pi/2}) {
+            const float c=std::cos(yaw),s=std::sin(yaw);
+            const float view[]{c,0,s,-10*c-20*s, -s,0,c,10*s-20*c, 0,1,0,-100};
+            AoClip clip;
+            check(clip.set(view,projection),"AO must accept rotated top-down orthographic maps");
+            check(!clip.outside({{10,100000,20},5},0),"AO must not reject on untested depth planes");
+            check(!clip.outside({{10+110*c,0,20+110*s},10},0),"AO must retain spheres touching a map edge");
+            check(clip.outside({{10+112*c,0,20+112*s},10},0),"AO must reject spheres wholly outside a map edge");
+            check(!clip.outside({{10,0,20},-1},0),"AO invalid bounds must fail open");
+            check(clip.outside({{10,0,20},5},500),"AO must apply the native drum translation");
+            float invalid_projection[16];
+            std::copy_n(projection,16,invalid_projection);
+            invalid_projection[14]=-1;
+            check(!clip.set(view,invalid_projection) && !clip.outside({{1000,0,1000},1},0),
+                  "Invalid AO projection must clear previously valid clipping state");
+        }
+        const float local[]{2,3,4,1}, transform[]{2,1,0,10, 0,3,.5f,2, 0,0,4,20};
+        const AoSphere bound=ao_transform_sphere(local,transform,20);
+        check(bound.p[0]==17 && bound.p[1]==13 && bound.p[2]==36,"AO must transform model-local sphere centers");
+        for(int x=-1;x<=1;++x) for(int y=-1;y<=1;++y) for(int z=-1;z<=1;++z) {
+            const float n=std::sqrt(float(x*x+y*y+z*z));
+            if(!n) continue;
+            const float dx=(2*x+y)/n,dy=(3*y+.5f*z)/n,dz=4*z/n;
+            check(std::sqrt(dx*dx+dy*dy+dz*dz)+20<=bound.radius+.0001f,
+                  "AO bounds must contain scaled/sheared geometry plus deformation margin");
+        }
+        float bad[]{2,3,4,-1};
+        check(ao_transform_sphere(bad,transform,20).radius<0,"Negative native sphere radius must fail open");
+        bad[3]=std::numeric_limits<float>::infinity();
+        check(ao_transform_sphere(bad,transform,20).radius<0,"Nonfinite AO bounds must fail open");
+    }
     for (float yaw : {0.f, pi/2, pi, 3*pi/2}) {
         const float c = std::cos(yaw), s = std::sin(yaw);
         const float expected[]{381.887f, 59.4954f, 5.80881f};

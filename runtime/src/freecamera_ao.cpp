@@ -1,5 +1,6 @@
 #include "freecamera.h"
 #include "freecamera_ao.h"
+#include "freecamera_ao_math.h"
 #include "platform.h"
 #include <nx/runtime.h>
 #include <array>
@@ -14,14 +15,14 @@ bool installed=false;
 uint64_t main_base=0;
 thread_local bool skip_instance=false;
 bool requested() {
-    static const bool value=[] { const char* e=std::getenv("NX_FREECAMERA_AO_CULL"); return e && std::strcmp(e,"1")==0; }();
+    static const bool value=[] { const char* e=std::getenv("NX_FREECAMERA_AO_CULL"); return !e || std::strcmp(e,"0")!=0; }();
     return value;
 }
 
-struct Bound { float p[3]{},radius=-1; uint64_t frame=~uint64_t(0); };
+struct Bound : freecamera::AoSphere { uint64_t frame=~uint64_t(0); };
 struct Pool { std::atomic<uint64_t> manager{0}; std::array<Bound,40000> bounds; };
 inline std::array<Pool,4> pools;
-struct Map { bool valid=false,on=false; float plane[4][4]{},norm[4]{},shift=0; uint64_t frame=~uint64_t(0); };
+struct Map { bool valid=false,on=false; freecamera::AoClip clip; float shift=0; uint64_t frame=~uint64_t(0); };
 inline thread_local Map map;
 inline bool heap(uint64_t p) { return p>=0x5000000000ull && p<0x5200000000ull; }
 inline Pool* pool(uint64_t manager,bool create) {
@@ -51,18 +52,10 @@ inline void record(uint64_t manager,uint64_t instance,uint64_t model,uint64_t ma
         const auto resource=nx::ld<uint64_t>(model+0x18);
         const auto sphere=heap(resource)?nx::ld<uint64_t>(resource+0x38):0;
         if(heap(sphere)) {
-            float norm2=0;
-            for(unsigned row=0;row<3;++row) {
-                b.p[row]=nx::ld<float>(matrix+row*16+12);
-                for(unsigned col=0;col<3;++col) {
-                    const float m=nx::ld<float>(matrix+row*16+col*4);
-                    b.p[row]+=m*nx::ld<float>(sphere+col*4); norm2+=m*m;
-                }
-            }
-            // Frobenius norm conservatively bounds any affine scale/shear.
-            b.radius=nx::ld<float>(sphere+12)*std::sqrt(norm2)+20;
-            for(float x:b.p) if(!std::isfinite(x)) b.radius=-1;
-            if(!std::isfinite(b.radius) || b.radius<20 || b.radius>2000) b.radius=-1;
+            float local[4], transform[12];
+            for(unsigned i=0;i<4;++i) local[i]=ld<float>(sphere+4*i);
+            for(unsigned i=0;i<12;++i) transform[i]=ld<float>(matrix+4*i);
+            static_cast<freecamera::AoSphere&>(b)=freecamera::ao_transform_sphere(local,transform,20);
         }
     }
     cache->bounds[index]=b;
@@ -73,28 +66,10 @@ inline void begin(uint64_t context) {
     if(!freecamera_field_active()) return;
     static const bool ab=std::getenv("NX_FREECAMERA_AO_AB")!=nullptr;
     map.on=!ab || (map.frame/600)%2!=0;
-    float view[3][4],proj[4][4],combined[4][4]{};
-    for(unsigned r=0;r<3;++r) for(unsigned c=0;c<4;++c) view[r][c]=nx::ld<float>(context+0x6db0+16*r+4*c);
-    for(unsigned r=0;r<4;++r) for(unsigned c=0;c<4;++c) {
-        const float f=nx::ld<float>(context+0x6e70+16*r+4*c);
-        if(!std::isfinite(f)) return;
-        proj[r][c]=f;
-    }
-    if(proj[3][0]!=0 || proj[3][1]!=0 || proj[3][2]!=0 || proj[3][3]!=1) return;
-    for(unsigned r=0;r<4;++r) for(unsigned c=0;c<4;++c) {
-        combined[r][c]=c==3?proj[r][3]:0;
-        for(unsigned k=0;k<3;++k) combined[r][c]+=proj[r][k]*view[k][c];
-        if(!std::isfinite(combined[r][c])) return;
-    }
-    for(unsigned p=0;p<4;++p) {
-        float norm2=0;
-        for(unsigned c=0;c<4;++c) {
-            map.plane[p][c]=combined[3][c]+(p%2?-1:1)*combined[p/2][c];
-            if(c<3) norm2+=map.plane[p][c]*map.plane[p][c];
-        }
-        map.norm[p]=std::sqrt(norm2);
-        if(!(map.norm[p]>1e-7f)) return;
-    }
+    float view[12], projection[16];
+    for(unsigned i=0;i<12;++i) view[i]=ld<float>(context+0x6db0+4*i);
+    for(unsigned i=0;i<16;++i) projection[i]=ld<float>(context+0x6e70+4*i);
+    if(!map.clip.set(view,projection)) return;
     const auto scene=nx::ld<uint64_t>(nx::ld<uint64_t>(main_base+0x4ab2200));
     const auto drum=scene?nx::ld<uint64_t>(scene+0x78):0;
     map.shift=drum?nx::ld<float>(drum+0x38)*nx::ld<float>(drum+0x3c):0;
@@ -106,12 +81,7 @@ inline bool outside(uint64_t manager,uint64_t instance) {
     if(!cache || index<0) return false;
     const auto& b=cache->bounds[index];
     if(b.radius<0 || b.frame>map.frame || map.frame-b.frame>1) return false;
-    for(unsigned i=0;i<4;++i) {
-        const float* p=map.plane[i];
-        const float distance=p[0]*b.p[0]+p[1]*b.p[1]+p[2]*(b.p[2]+map.shift)+p[3];
-        if(distance+b.radius*map.norm[i]<0) return true;
-    }
-    return false;
+    return map.clip.outside(b,map.shift);
 }
 
 // Both hooks only change temporary x8: the native branch advances to the next
@@ -141,6 +111,6 @@ void freecamera_ao_install(const ModuleInfo* module,bool enabled) {
         if(ld<uint32_t>(module->base+offset)!=word) return;
     main_base=module->base;
     installed=true;
-    log("freecamera: experimental world AO map culling enabled");
+    log("freecamera: world AO map culling enabled");
 }
 }

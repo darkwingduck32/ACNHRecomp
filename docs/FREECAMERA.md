@@ -207,3 +207,28 @@ materials, texture references and archive length are preserved. The daylight
 `cloud-uv-orbit-small.png` capture shows consistent cloud shapes through the
 sampled headings. Other weather palettes remain a validation gate. This overlay
 is currently tested through an isolated `cloudtest` mod, ahead of freecamera.
+
+Further daylight isolation separated two horizon defects. Hiding only cloud FS
+`7d6cc12c1cda411a` removes the diagonal bright wedge at an unchanged pose
+(`horizon-no-cloud-side_11641.png` versus `horizon-cloud-restored_12001.png`).
+CloudVR also uses UV1 for its horizon layer. The builder now maps each channel
+using its own native front-meridian vertical profile. All 4482 changed BFRES
+bytes are inside UV0/UV1; all other bytes remain identical. The isolated overlay
+hash is `f63e135dfa970fae2a9fa332bb0870d8939b0ec86a42f746f149f1f9c41207da`.
+
+With both UVs corrected, `dual-uv-orbit-small.png` exposes a separate dark sky
+band. Native main-sky c6[7].x is a roughly -5.6-degree lookup tilt, which depresses
+the horizon forward but raises it behind. A field-only host UBO copy replaces
+that tilt with an equal vertical lookup offset, using ParkVR's model scale and
+retaining its existing height offset. The source guest block is unchanged.
+`combined-orbit-small.png` shows the cloud wedge and dark sky band removed at
+the sampled low-angle headings. The horizon math test checks equal depression
+around the sphere and rejection of unexpected scales/tilts. Native weather and
+sun parameters remain unchanged, but other weather conditions need live checks.
+
+`combined-wide-small.png` tests a larger orbit distance. It exposes missing
+terrain under still-visible trees/grass and beyond the water mesh, plus a visible
+cloud-horizon strip/seam. These remain open gates; the sky fixes do not establish
+that wide-distance terrain visibility or the full camera mod is complete.
+The installed `acnh.exe` remains the measured performance/interior-gating build;
+these sky changes are currently in `acnh-fruit.exe` and the isolated cloud overlay.

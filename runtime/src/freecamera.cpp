@@ -3,6 +3,7 @@
 #include "freecamera_visibility.h"
 #include "freecamera_fruit.h"
 #include "freecamera_fog.h"
+#include "freecamera_ao.h"
 #include "config.h"
 #include "kernel.h"
 #include "platform.h"
@@ -332,6 +333,7 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
     if (std::memcmp(reinterpret_cast<void*>(module->base + entry), words, sizeof words)) return;
     freecamera_fruit_install(module, enabled());
     freecamera_fog_install(enabled());
+    freecamera_ao_install(module, enabled());
     for (size_t i = 0; i < module->func_count; i++) {
         if (functions[i].offset != entry) continue;
         original_lookat = functions[i].fn;

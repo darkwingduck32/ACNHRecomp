@@ -280,6 +280,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/hle_vi.cpp
     runtime/src/hle_hid.cpp
     runtime/src/freecamera.cpp
+    runtime/src/freecamera_ao.cpp
     runtime/src/freecamera_fruit.cpp
     runtime/src/freecamera_fog.cpp
     runtime/src/hle_hid_system_nfc.cpp

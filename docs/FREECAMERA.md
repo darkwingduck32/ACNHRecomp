@@ -983,3 +983,29 @@ rebuilt; all PE sections match the official guest DLL
 (`terrain-pass-restored-sections.json`). The test root again uses the exact
 official DLL, the harness is stopped, and the installed runtime/assets and actual
 save were not changed by this investigation.
+
+### World-AO coverage and shader coordinate space
+
+A second isolated read-only probe captures the AO camera update at `1571a6c`.
+The settled heavy pose uses eye `(444.55957, 99.99877, -5.24520)`, a top-down view,
+and orthographic X/Y scales approximately 0.01: a 200-by-200 world-unit footprint.
+The terrain drum offset is -979.8 with blend 1 in this sample. Testing queued
+tile spheres against that flat X/Z footprint estimates about 95% outside it.
+This is a candidate count, not an accepted-AO-draw or performance measurement;
+the diagnostic uses the observed fixed half-width and omits a deformation margin.
+
+Tracing the native 386-by-386 AO target identifies vertex shaders
+`395365e711e54f6f` and `458db431ec44ee1c`. Their decompiled code transforms local
+positions with c4, adds `c8[46].z * c8[46].y` to world Z, and applies the c3 view
+and projection. The former additionally perturbs X/Z by bounded cosine products
+scaled by half of `c8[45].y/w`; the latter has no such perturbation. This supports
+testing flat AO-map coverage rather than the curved main-camera frustum, but a
+production culler must account for the active projection, full model transforms,
+bounding spheres and shader deformation before rejecting a draw.
+
+Evidence: `ao-coverage-result.json`, `ao-tile-coverage-probe-stderr.log`,
+`ao-target-trace.log`, captured executable/library hashes, and
+`ao-{terrain,model}-candidate.vert` under the private freecamera/test directories.
+The generated-source probes were archived and both modified translation units
+restored/rebuilt. The test root again uses the exact official library; the
+installed runtime and actual save remain unchanged. No AO culling is enabled yet.

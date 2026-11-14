@@ -11,8 +11,50 @@ namespace nx::nvn {
 
 using namespace replay;
 
+namespace {
+// These commands only replace copied fixed state. A byte-identical replacement
+// cannot change a prepared draw or require a pending instance run to end.
+// Resource/pool/program bindings and memory writes are deliberately excluded.
+bool redundant_fixed_state(const State& s, const Cmd& c, const CmdList& list) {
+    auto same_blob=[&](const void* value,size_t size) {
+        return c.blob<list.blobs.size() && list.blobs[c.blob].size()>=size &&
+            (!size || std::memcmp(value,list.blobs[c.blob].data(),size)==0);
+    };
+    auto same_float=[](const float& a,const float& b) { return std::memcmp(&a,&b,sizeof a)==0; };
+    switch(c.op) {
+        case Cmd::SetRasterizerDiscard: return s.rasterizer_discard==(c.n!=0);
+        case Cmd::SetRenderEnable: return s.render_enable==(c.n!=0);
+        case Cmd::SetDepthRange: return same_float(s.depth_near,c.f[0]) && same_float(s.depth_far,c.f[1]);
+        case Cmd::BindVertexAttribs: return s.attribs.size()==c.n && same_blob(s.attribs.data(),size_t(c.n)*sizeof(VertexAttrib));
+        case Cmd::BindVertexStreams: return s.streams.size()==c.n && same_blob(s.streams.data(),size_t(c.n)*sizeof(VertexStream));
+        case Cmd::BindBlendState: {
+            if(c.blob>=list.blobs.size() || list.blobs[c.blob].size()<sizeof(BlendTarget)) return false;
+            BlendTarget b; std::memcpy(&b,list.blobs[c.blob].data(),sizeof b);
+            return b.target<8 && std::memcmp(&s.blend[b.target],&b,sizeof b)==0;
+        }
+        case Cmd::BindColorState: return same_blob(&s.color,sizeof s.color);
+        case Cmd::BindChannelMaskState: return same_blob(&s.mask,sizeof s.mask);
+        case Cmd::BindDepthStencilState: return same_blob(&s.depth,sizeof s.depth);
+        case Cmd::BindPolygonState: return same_blob(&s.polygon,sizeof s.polygon);
+        case Cmd::BindMultisampleState: return s.alpha_to_coverage==(c.n!=0);
+        case Cmd::SetAlphaRef: return same_float(s.alpha_ref,c.f[0]);
+        case Cmd::SetBlendColor: return std::memcmp(s.blend_color,c.f,sizeof s.blend_color)==0;
+        default: return false;
+    }
+}
+}
+
 void draw_command(VkCommandBuffer cb, const Cmd& c, const CmdList& list, const Targets& targets) {
     State& s = (*g_state);
+    static const bool ab=std::getenv("NX_STATE_DEDUP_AB")!=nullptr;
+    static const bool enabled=[] {
+        const char* value=std::getenv("NX_STATE_DEDUP");
+        return !(value && value[0]=='0');
+    }();
+    if(ab || enabled) {
+        const bool active=!ab || (g_frame.load(std::memory_order_relaxed)/600)%2;
+        if(active && redundant_fixed_state(s,c,list)) return;
+    }
     switch (c.op) {  // data only: the draws' resolution stays (g_state_gen)
         case Cmd::SetViewport:
         case Cmd::SetScissor:

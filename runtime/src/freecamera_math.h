@@ -1,9 +1,19 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace nx::freecamera {
 constexpr float pi = 3.14159265358979323846f;
+enum class CameraSpace { other, world, drum };
+inline CameraSpace camera_space(uint64_t caller) {
+    // The alternate drum branch builds a temporary WORLD camera on the stack.
+    // Both branches must receive the same orbit as the main world camera.
+    if (caller==0x292cb0c || caller==0x374b944 || caller==0x374b954 || caller==0x7a88a4)
+        return CameraSpace::world;
+    if (caller==0x7a8830) return CameraSpace::drum;
+    return CameraSpace::other;
+}
 struct Bounds {
     float left, right, near, far;
 };

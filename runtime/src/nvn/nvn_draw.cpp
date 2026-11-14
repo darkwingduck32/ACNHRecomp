@@ -16,6 +16,7 @@
 #include "nvn_draw_state.h"
 #include "nvn_ultrawide.h"
 #include "platform.h"
+#include "freecamera.h"
 #include <nx/game.h>
 
 namespace nx::nvn {
@@ -383,11 +384,18 @@ void draw_part(int k) {
 namespace {
 
 // The draw's viewport and scissor: the guest's, scaled to a screen target.
-void draw_viewport(float ui_x, VkViewport& vp, VkRect2D& sc) {
+void draw_viewport(float ui_x, const ShaderInfo* vs, VkViewport& vp, VkRect2D& sc) {
     vp = VkViewport{0, 0, float((*g_pass_extent).width), float((*g_pass_extent).height), 0, 1};
     if ((*g_state).has_viewport)
         vp = {float((*g_state).viewport[0]), float((*g_state).viewport[1]), float((*g_state).viewport[2]),
               float((*g_state).viewport[3]), (*g_state).depth_near, (*g_state).depth_far};
+    // Centering ParkVR on the orbit eye puts its 600-unit sphere in front of
+    // distant terrain. Keep native sky/cloud/star shading and projection, but
+    // place their main-view colour and depth draws at background depth. The
+    // environment-probe variants and inactive/indoor cameras remain native.
+    if (vs && (vs->hash=="fce7966c1f0b7193" || vs->hash=="3ebba4ffae3ffdd3" ||
+               vs->hash=="0f62b0e3657eeab0" || vs->hash=="cabdc233d975169b") &&
+        freecamera_field_active()) vp.minDepth=vp.maxDepth=1.f;
     // NVN's upper-left window origin (what Wonder sets) maps NDC +Y to the top of the render target, like D3D;
     // Vulkan maps it to the bottom. A negative-height viewport gives NVN's mapping, and with it NVN's front faces.
     // (Before this, the front face was inverted instead: triangles were culled right, but every render target was
@@ -519,7 +527,7 @@ void draw_issue(VkCommandBuffer cb, const Targets& t, bool indexed, const Cmd& c
 
     VkViewport vp;
     VkRect2D sc;
-    draw_viewport(ui_x, vp, sc);
+    draw_viewport(ui_x, vs, vp, sc);
     set_dynamic(cb, vp, sc);
 
     trace_skin(indexed, c, vs, fs);
@@ -924,7 +932,7 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
         if (merging) {
             VkViewport vp;
             VkRect2D sc;
-            draw_viewport(prep.ui_x, vp, sc);
+            draw_viewport(prep.ui_x, prep.vs, vp, sc);
             if (merge_extends(cb, prep, indexed, c, in, rs, vp, sc)) {
                 merge_snapshot(*g_merge, c);
                 (*g_stats).done++;
@@ -949,7 +957,7 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
             m.nwrites = sets_set0_writes(m.writes, 64);
             m.nb = 0;
             merge_snapshot(m, c);
-            draw_viewport(prep.ui_x, m.vp, m.sc);
+            draw_viewport(prep.ui_x, prep.vs, m.vp, m.sc);
             if (!m.nwrites) merge_flush();
         }
         return true;

@@ -569,3 +569,19 @@ opacity (c6[29].x=1) and no forced colour override (c6[28].x=0). Native dark fog
 is green-tinted in this daylight sample, not the flat brown seen in the cutoff.
 The normal installed executable/library remain the promoted hashes above;
 none of the depth, stencil, worker or dark-fog diagnostics were promoted.
+
+The cutoff is now identified: the recentered ParkVR sky sphere was still drawn
+at its physical radius (600 world units), covering terrain beyond it. Dropping
+only its colour fragment shader (`d579b8327391ea0a`) reveals the ground, cliffs
+and trees (`ground-without-sky-sphere_02701.png`). The apparent terrain holes
+were sky occlusion, not absent island tiles.
+
+The runtime now maps the main-view ParkVR colour/depth, CloudVR and star draws
+to viewport depth 1 while the outdoor free camera is active. Their shading,
+geometry and projection remain native; environment-probe variants are excluded.
+This is applied consistently when issuing draws and comparing/storing merged
+draw state. Captured native background draws use LEQUAL and do not write depth.
+The fixed inclined capture `sky-depth-inclined_03361.png` and full orbit
+`sky-depth-inclined-orbit-small.png` retain the previously hidden terrain.
+The stationary inclined run reaches about 58–59 FPS. The finite ocean edge is
+now clearly visible beyond the shoreline water; this fix does not extend it.

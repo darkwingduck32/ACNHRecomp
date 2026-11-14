@@ -91,3 +91,21 @@ capture and are not patched.
 Validation so far: camera/gesture unit tests and compilation of the affected
 runtime, SDL input, and game UI hooks. Live playability, frustum coverage,
 distant-scene grounding, LOD transitions, and performance remain open gates.
+
+## Low-angle performance investigation
+
+Existing runtime samples (without another live capture) show about 31 FPS with
+an 814,000-square-unit loading rectangle at 15.8 degrees elevation, versus 60 FPS
+with a 198,000-square-unit rectangle at 37.8 degrees. These are different views,
+not a controlled benchmark; they establish a workload correlation, not causality.
+The detailed draw trace caused an additional transient slowdown and was cancelled.
+
+The native terrain worker at main+0x11fc610 enumerates the rectangle from manager
+fields +0x1a28/+0x1a38. Its per-tile path main+0x146a660 already bends the tile's
+bounding sphere using the drum parameters, then calls the frustum test at
+main+0x63e274 before passing visibility flags to main+0x146ab80. Therefore replacing
+this with a flat-world frustum test, or skipping tile updates outright, is not yet
+justified: it could lose curved terrain or leave prior-frame visibility stale.
+The next performance check must distinguish enumeration cost, accepted geometry,
+and shadows, and verify that these native culling planes follow the orbit camera.
+No LOD or outline-mode performance improvement is claimed yet.

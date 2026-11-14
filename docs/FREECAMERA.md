@@ -1140,3 +1140,48 @@ the evidence and limitations. The retained AO optimization is implemented,
 tested and installed; rejected experiments are removed. At the user's request,
 the harness is stopped and no new investigations are being started. Remaining
 distant detail/cutoff and horizon issues are deferred, not marked resolved.
+
+### River surface cutoff follow-up
+
+The user subsequently reproduced a sharp river-water cutoff in visible range.
+`river-camera-moved_24601.png` records the requested view, with eye
+(304.1,271.4,1022.1) and target (593.0,12.0,794.7). This reported fidelity defect
+is being investigated within the wrap-up; broader new optimization work remains
+deferred.
+
+An isolated bypass of the two `146a660` calls in worker `11fc610` did not change
+the cutoff (`river-water-control_04801.png`, `river-water-bypass_06181.png`). It
+has been disabled, its generated source restored, and the harness guest library
+restored to the validated `6771b173...` build. No bypass was promoted.
+
+A read-only live snapshot identifies model names at model+8, with terrain models
+at manager+508, count +500, stride 4a8. River models occupy indices 120..164 in
+this scene. Their four instance lists start at model+20 with stride 18; instance
+flags are at +10 and sphere at +14. Of 659 sampled river instances, 488 have
+both main-view and shadow visibility bits set. Projecting their spheres into
+the captured view shows visible instances on both sides of the cutoff
+(`river-queued-bounds.json`, `river-queued-overlay.png`). This is a non-atomic
+live snapshot, not proof of the separate water surface's submission.
+
+In the restored-library reproduction, temporarily skipping fragment shader
+`587e1cd12261624a` removes the blue river surface and leaves the banks intact
+(`river-surface-hidden_02701.png`). The skip is cleared afterward. This confirms
+the shader to trace for the missing surface; the queued terrain meshes alone
+cannot establish that water tiles are submitted past the cutoff. The river
+defect remains unresolved and no new runtime fix is claimed.
+
+The bounded shader-filtered trace contains 800 draws with 283 unique tile
+transforms; the first tile repeats at indices 0, 283 and 566, covering two
+complete cycles. Surface tile origins span X=420..790, Z=380..760, including
+different water elevations. Their projected edge follows the observed cutoff,
+while the river terrain instances continue beyond it. Evidence is
+`river-surface-trace.log`, `river-surface-positions.json`, and
+`river-surface-overlay.png`. This narrows the next change to the separate water
+surface selection rather than the already-expanded terrain rectangle or its
+per-model visibility flags. The diagnostic run is stopped; its slow FPS with
+uniform tracing enabled is not a performance measurement.
+
+Static lookup also locates the `mRiverBackLimitDepth` parameter registration at
+`14be3c8`, with its node at owner+338 and storage at owner+360. Its relationship
+to the surface selection is not yet established; changing it blindly is not a
+validated fix. `river-surface-refs.txt` records the registration disassembly.

@@ -717,3 +717,19 @@ Evidence: `support-cache-ab-comparison.json` and `support-cache-ab.log`.
 The enlarged-cache intervals have zero support-cache fallbacks; the control
 reaches over two million fallbacks per 300 frames. This change preserves the
 support-buffer contents and existing per-submit lifetime/deduplication rules.
+
+The final default-capacity build averaged 59.67 FPS / 13.35 ms replay / 10.97 MB
+upload over frames 2400–3419, without diagnostic overrides. Its full orbit,
+inventory and tent-entry captures preserve the scene and normal UI behavior.
+Cache peak reached 78 with zero support or driver fallbacks. Evidence:
+`support-cache-default-result.json`, `support-cache-default-orbit-small.png`,
+`support-cache-inventory_05161.png`, and `support-cache-interior_06241.png`.
+
+The runtime was promoted with backups at
+`private/freecamera/install-backups/20261115-084431`. Installed executable SHA256:
+`49f6fef1b3dca32d5ab3a50862854b9b6a492e48457889bb29a199bd6b735dd9`.
+The official guest DLL remains unchanged. A separate installed-executable run
+uses the isolated save and records `support-cache-installed-result.json` and
+`support-cache-installed_04141.png`. All five focused CTests and both harness
+unit tests pass. The outer-ocean boundary remains visible at maximum zoom;
+this performance fix does not establish ocean, distant LOD or weather acceptance.

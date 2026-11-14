@@ -600,3 +600,25 @@ investigation remains open before the next promotion.
 `NX_FREECAMERA_SKY_DEPTH=0` disables only the background-depth adjustment for
 diagnosis. Aggregate `camera fog uploads` counters distinguish host-patched fog
 copies from ordinary upload deduplication while investigating the slow state.
+
+The fog profile records about 6.57 MB of adapted copies per 300 frames
+(0.022 MB/frame), with over 1.2 million reuse hits; these copies do not explain
+the roughly 7 MB/frame difference between fast and slow runs.
+
+The promotion audit found that the earlier worker-probe source restore had
+preserved its timestamp, so Ninja had retained the diagnostic object despite
+the source being restored. Rebuilding `code_376.cpp` produces a guest library
+whose `.text`, `.rdata`, `.data`, `.pdata`, `.tls`, `.rsrc` and `.reloc` sections
+all match the pre-diagnostic installed library. Evidence:
+`promoted-sky-dll-sections.json`. The preceding repeated sky/performance runs
+used the same stale diagnostic DLL in both executable controls; final smoke
+testing uses the rebuilt official library. Do not assume a successful no-op
+build proves that a timestamp-preserving source restore reached the binary.
+
+Promotion backups are in `private/freecamera/install-backups/20261115-074920`
+and `20261115-075102`. The installed sky runtime SHA256 is
+`66ed504223ad3fb454ffdbc57c57170fac999a3cdc724372d9a5d92731aec93e`;
+the rebuilt official guest library SHA256 is
+`68e6eae88940d0b63bcb4a2d1f7e9121f3558e7e8f2a532730f8ac732cfdb6fc`.
+Original ocean assets remain installed. The user's save was not used by the
+harness; testing uses the separate copied save under `perf-test`.

@@ -109,3 +109,13 @@ justified: it could lose curved terrain or leave prior-frame visibility stale.
 The next performance check must distinguish enumeration cost, accepted geometry,
 and shadows, and verify that these native culling planes follow the orbit camera.
 No LOD or outline-mode performance improvement is claimed yet.
+
+Read-only live inspection of the active terrain frustum at scene-camera slot 0
+(main global +0x5131900, scene +0x58, slot +0x138) confirms its rotation follows
+the orbit at the inspected pose. The world eye (945.7, 103.9, 810.0) corresponds
+to culling eye (945.672, 103.928, 64.868); the Z difference is the target/drum
+offset 745.1. The view back-axis agrees with normalized eye-minus-target within
+0.001 per component. UI/minimap slots have distinct projections. This rules out
+an unchanged forward-facing terrain frustum for this pose only; it does not prove
+all transitions or other object families. The native tree archives inspected
+contain growth/animation/stump models rather than separately named distant LODs.

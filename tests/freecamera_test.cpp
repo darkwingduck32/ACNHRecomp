@@ -11,6 +11,9 @@ static void check(bool ok, const char* message) {
 }
 int main() {
     using namespace nx::freecamera;
+    check(camera_space(0x7a88a4)==CameraSpace::world && camera_space(0x7a8830)==CameraSpace::drum,
+          "Both field/drum matrix branches must receive the orbit in their own coordinate spaces");
+    check(camera_space(0x376d224)==CameraSpace::other,"Minimap camera must remain outside orbit scope");
     check(outdoor_projection(2.557646f,100000,.541052f),"The live camera303 31-degree field projection must be recognized");
     check(!outdoor_projection(7605.31f,9525.31f,.087266f) && !outdoor_projection(1,10000,.698132f),
           "Minimap and UI projections must not set outdoor visibility");

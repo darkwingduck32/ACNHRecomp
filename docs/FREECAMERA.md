@@ -47,6 +47,18 @@ placement; its relationship to foreground terrain still needs validation before
 changing distant-scenery placement. Fog palette parameters exist separately;
 increasing fog alone does not establish lower rendering cost or correct LOD.
 
+Both field-camera branches now receive the orbit, including the temporary
+stack-based LookAtCamera returned to main+0x7a88a4. Previously only the heap camera
+in the other branch was adjusted, leaving an alternate world/drum matrix in the
+original orientation. The temporary object's writable memory span is checked and
+its inputs are restored after matrix generation, as for heap cameras. This fix
+compiles and its scope classification is tested; its visual effect is unverified.
+
+Fog is an explicit outstanding requirement: attenuation must follow the current
+view direction/distance while preserving weather and palette colours. The native
+SkyScatter and DrawVolumetric shader stages have been identified for inspection.
+Consistent fog in forward, reverse, and side views is a live acceptance gate.
+
 Validation so far: camera/gesture unit tests and compilation of the affected
 runtime, SDL input, and game UI hooks. Live playability, frustum coverage,
 distant-scene grounding, LOD transitions, and performance remain open gates.

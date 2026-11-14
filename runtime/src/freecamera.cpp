@@ -211,7 +211,14 @@ void terrain_update(CPU& cpu) {
 }
 void lookat_scoped(CPU& cpu) {
     const uint64_t camera = cpu.x[0];
-    if (camera < kHeapBase || camera + 0x5c > kHeapBase + heap_size()) {
+    bool readable = camera >= kHeapBase && camera <= kHeapBase + heap_size() - 0x5c;
+    // One field-camera branch passes a temporary object on the guest stack.
+    // Verify its complete writable span instead of excluding it as non-heap.
+    if (!readable && cpu.x[30]-kModuleBase==0x7a88a4) {
+        const VmInfo vm=vm_query(camera);
+        readable=(vm.perm&3)==3 && camera>=vm.addr && vm.size>=0x5c && camera-vm.addr<=vm.size-0x5c;
+    }
+    if (!readable) {
         original_lookat(cpu);
         return;
     }
@@ -314,12 +321,16 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     static std::atomic<int> traces{0};
     if (trace && traces++ < 24) log("freecamera: lookat %llx caller %llx", (unsigned long long)cam, (unsigned long long)caller);
     // Known island camera call sites in 3.0.2/3.0.3. Leave UI, rooms and photo cameras alone.
-    if (caller != 0x292cb0c && caller != 0x374b944 && caller != 0x374b954 && caller != 0x7a8830) return;
+    const auto space=freecamera::camera_space(caller);
+    if (space==freecamera::CameraSpace::other) return;
     field_frame.store(g_frame.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    if (cam < kHeapBase || cam + 0x5c > kHeapBase + heap_size()) return;
+    if (caller==0x7a88a4) {
+        const VmInfo vm=vm_query(cam);
+        if ((vm.perm&3)!=3 || cam<vm.addr || vm.size<0x5c || cam-vm.addr>vm.size-0x5c) return;
+    } else if (cam < kHeapBase || cam + 0x5c > kHeapBase + heap_size()) return;
     std::lock_guard guard(lock);
     const bool on = enabled();
-    if (caller != 0x7a8830) {
+    if (space==freecamera::CameraSpace::world) {
         field_x = ld<float>(cam+0x44);
         field_z = ld<float>(cam+0x4c);
     }
@@ -330,7 +341,7 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     float result[3];
     std::memcpy(result,pos,sizeof result);
     if (wrapped_lookat && on && !orbit.identity() && !orbit.apply(pos, at, result)) return;
-    if (caller != 0x7a8830) {
+    if (space==freecamera::CameraSpace::world) {
         std::copy_n(result,3,field_eye.begin());
         std::copy_n(at,3,field_target.begin());
         field_view_valid=true;

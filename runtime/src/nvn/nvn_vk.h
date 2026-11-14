@@ -82,7 +82,7 @@ bool gpu_is_integrated();  // the device in use is an integrated GPU (set when t
 VkPhysicalDevice vk_physical();
 // nvn_gpu_pick.cpp: logs every device and returns the one NX_GPU asks for (default: the first discrete GPU).
 VkPhysicalDevice pick_physical_device(const std::vector<VkPhysicalDevice>& devices);
-uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want);
+uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags prefer = 0);
 
 // The image behind an NVN texture (guest NVNtexture*), made on first use.
 GpuImage* image_of(uint64_t texture);

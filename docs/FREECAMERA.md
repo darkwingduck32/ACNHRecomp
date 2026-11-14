@@ -411,8 +411,8 @@ The test process was stopped after capture.
 
 ### Outer ocean coverage
 
-The exposed seabed at maximum zoom is now corrected in the local freecamera
-overlay. The confirmed ocean surface uses vertex 911007845f398fde / fragment
+The experimental extension corrected exposed seabed at maximum zoom, but was
+rolled back after the performance comparison below. The confirmed ocean surface uses vertex 911007845f398fde / fragment
 fa26b7e08e326558, with shoreline variant 0abedcc9ad8d0174 / 613329b58bbd1870.
 Disabling those two fragment shaders removes the sea while retaining the
 shore and seabed (`sea-shader-confirmation_03001.png`). A bounded transform
@@ -422,11 +422,12 @@ archives. For example, the south tile is centered at Z=1040 and its native water
 ends at local Z=240, exposing the finite surface when the eye moves farther out.
 
 `tools/build_camera_ocean.py` extends the outer portion of native water and its
-underside from 240 to 800 units. It preserves the inner 80 units, shoreline,
+underside from 240 to an explicit experimental `--outer` extent (800 in the
+initial trial). It preserves the inner 80 units, shoreline,
 materials, UVs, triangle counts and collision data. Position, submesh bounds and
 radius writes are byte-audited against the original archives. All 116 generated
-archives match the private test overlay byte-for-byte and are installed under
-`private/game/mods/freecamera/romfs/Model`; the audit/provenance report is
+archives matched the private test overlay byte-for-byte. They were subsequently
+removed from `private/game/mods/freecamera/romfs/Model`; the audit/provenance report is
 `private/game/mods/freecamera/ocean-extension.json`. Installation records are in
 `private/freecamera/install-backups/ocean-*/manifest.json`.
 
@@ -499,6 +500,33 @@ with original water assets, versus about 42 FPS with the 800-unit extension.
 The direct-camera switch does not explain that regression. The 116 generated
 ocean archives were therefore removed from the normal freecamera installation
 after checking their installed hashes; original assets were untouched. The
-800-unit build is not an accepted release fix. A smaller extension is under
-isolated coverage/performance testing. The normal executable/library still
-remain the previously installed build while the zoom-fog update is tested.
+800-unit build is not an accepted release fix. The smaller 560-unit extension
+also costs performance and remains disabled. The generator now requires an
+explicit `--outer` argument rather than defaulting to the rejected 800 extent.
+
+The final twelve 60-frame windows of fixed low-angle harness runs are recorded
+in `private/freecamera/perf-test/ocean-performance-comparison.json`:
+
+| Water extent | Direct LookAt adapter | Mean FPS | CPU replay ms | Upload MB/frame |
+| --- | --- | ---: | ---: | ---: |
+| 800 | Off | 44.03 | 20.95 | 23.67 |
+| Original 240 | Off | 55.89 | 15.97 | 15.71 |
+| 560 | Off | 54.19 | 16.52 | 16.33 |
+| Original 240 | On | 54.78 | 16.34 | 16.40 |
+
+These use the same executable, copied save, initial pitch -90, yaw 0, zoom 1,
+time offset 28800, 2160 resolution, SSAA2, DLAA and 60 Hz. Sequential runs have
+normal scene variation; they establish the large extension regression, not a
+precise sub-millisecond cost for the camera adapter. The final default-adapter
+orbit (`fog-direct-native-orbit-small.png`) retains visible ground, water and
+consistent fog at the tested low angle. Camera/timing CTests and harness unit
+tests pass.
+
+The camera/zoom-fog runtime and matching official-hook guest library were
+promoted with backups in `private/freecamera/install-backups/20261115-070631`.
+The executable SHA256 is
+`ca74eb14ad6c16dabf2734fe8f735624e9e39036175249b62e98af61a86f6e5c`;
+the guest library SHA256 is
+`16a23643de2b61e2acd1be1b93e2ca2474daafe26be5ee2f5dbdba4eb9a5a80a`.
+Original ocean assets remain in use. This is not acceptance of maximum-zoom
+ocean coverage, elevated distant terrain, LOD or untested weather/interiors.

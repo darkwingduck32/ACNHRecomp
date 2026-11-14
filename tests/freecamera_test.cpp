@@ -27,6 +27,24 @@ int main() {
             check(std::fabs(view[row*4]*eye[0]+view[row*4+1]*eye[1]+view[row*4+2]*eye[2]+view[row*4+3])<.001f,
                   "Sky center must transform to the view origin");
     }
+    for (float yaw:{0.f,pi/2,pi,3*pi/2}) for (float scale:{.3f,1.f}) {
+        const float c=std::cos(yaw),sn=std::sin(yaw),ct=std::cos(.1276f),st=std::sin(.1276f);
+        float cloud[]{scale*c,-scale*sn*st,scale*sn*ct,100,
+                      0,scale*ct,scale*st,20,
+                      -scale*sn,-scale*c*st,scale*c*ct,200};
+        const float front_height=20-525.18f*scale*st;
+        check(cloud_horizon_model(cloud),"Native cloud tilt must become a level depressed horizon");
+        for (int degree=0;degree<360;degree+=15) {
+            const float x=525.18f*std::sin(degree*pi/180),z=525.18f*std::cos(degree*pi/180);
+            check(std::fabs(cloud[4]*x+cloud[6]*z+cloud[7]-front_height)<.001f,
+                  "Cloud equator must preserve the native front depression at every heading");
+        }
+        check(std::fabs(cloud[0]-scale*c)<.001f && std::fabs(cloud[8]+scale*sn)<.001f,
+              "Leveling the cloud horizon must retain heading and scale");
+    }
+    float invalid_cloud[]{1,0,0,0, 0,2,0,0, 0,0,1,0};
+    check(!cloud_horizon_model(invalid_cloud) && invalid_cloud[5]==2,
+          "Unexpected cloud scales must remain unchanged");
     const float invalid_sky_view[12]{};
     float unused_eye[3];
     check(!sky_camera_center(invalid_sky_view,unused_eye), "Invalid sky view must retain native placement");

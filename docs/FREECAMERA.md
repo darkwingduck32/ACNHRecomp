@@ -932,7 +932,17 @@ frames of each interval, measure 50.91 FPS / 17.30 ms replay before and 51.37 FP
 a modest CPU improvement. Five focused tests passed. Evidence is
 `host-patch-filter-ab-comparison.json`, `host-patch-filter-ab-hashes.json` and its
 log in the private test root; the A/B implementation is archived privately as
-`host-patch-filter-ab.patch`. Final-build visual validation/promotion is pending.
+`host-patch-filter-ab.patch`.
+
+The final build averages 59.70 FPS / 13.27 ms replay / 11.78 MB upload in the
+wide pose, with peak support-cache use 79 and no fallbacks. Its outdoor orbit
+and inventory were visually inspected; known distant silhouettes and horizon
+blending remain. The verified executable
+`d02944fb4389555867921641f96bb1da7a6691d13a7fa98349d12a8a6dfe5a12`
+was installed after stopping the isolated harness, with the prior runtime backed
+up at `private/freecamera/install-backups/20261115-095650`. The promotion now
+requires a visual-pass record whose executable/library hashes match the inputs.
+Guest DLL, cloud/ocean assets, normal configuration and actual save are unchanged.
 
 Static tracing also finds that terrain draw routine `146b080` tests instance
 visibility flags before binding draw data: passes 0, 1 and 2 require bit 6,

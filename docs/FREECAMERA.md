@@ -1122,3 +1122,21 @@ The installer checked that neither game executable was running, verified
 candidate hashes against visual validation, and backed up both files before
 replacement, with rollback on copy failure. It changed no assets, configuration
 or save files. The private test root's `install-ao.json` records the promotion.
+
+The installed heavy-view check averages 51.64 FPS / 14.96 ms replay / 14.05 MB
+upload, with cache peak 82 and no fallbacks (`ao-installed-heavy-result.json`).
+The shipped executable/library also passed an off/on/off AO-texture comparison:
+mean channel differences are 0.059-0.092 out of 255 for enabled/control pairs,
+versus 0.085-0.098 between the two disabled controls. Neither map loses any
+stable opaque interior pixels (11,600 and 9,899 tested pixels respectively).
+The matching first two full-scene images show no visible regression; the final
+control's full-scene camera angle changed, so it is not treated as a matching
+full-scene comparison. AO map coordinates remain independent of that orbit.
+This is animated-scene evidence, not frozen-frame equivalence or exhaustive
+coverage of every island/weather combination.
+
+`ao-installed-fidelity-result.json` and `ao-installed-fidelity-images/` record
+the evidence and limitations. The retained AO optimization is implemented,
+tested and installed; rejected experiments are removed. At the user's request,
+the harness is stopped and no new investigations are being started. Remaining
+distant detail/cutoff and horizon issues are deferred, not marked resolved.

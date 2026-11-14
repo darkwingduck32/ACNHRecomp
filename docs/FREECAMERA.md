@@ -622,3 +622,32 @@ the rebuilt official guest library SHA256 is
 `68e6eae88940d0b63bcb4a2d1f7e9121f3558e7e8f2a532730f8ac732cfdb6fc`.
 Original ocean assets remain installed. The user's save was not used by the
 harness; testing uses the separate copied save under `perf-test`.
+
+### Material batching investigation
+
+Fast and slow stationary runs both replay about 6.16 million draws per 300
+frames. The fast state combines about 5.40 million of them; the slow state
+combines only 4.71 million. Rejection reason 9 includes fragment-only bindings
+that have no vertex-shader read extent; it does not necessarily mean a dynamic
+vertex index. `merge-binding-probe.log` identifies fragment bindings 23 (c4)
+and 25 (c6). `merge-content-probe.log` confirms some 496-byte c6 blocks are
+identical at different guest addresses, while the 192-byte c4 blocks differ.
+
+A conservative whole-buffer comparison experiment was rejected: it did not
+produce a reliable improvement. One process alternated it every 600 frames,
+retaining three settled intervals per mode. The control averaged 57.88 FPS /
+15.27 MB uploaded per frame; the experiment averaged 54.69 FPS / 17.43 MB.
+The final enabled interval entered the slow state, so this is not a clean
+measurement of comparison overhead, but it provides no basis for promotion.
+Evidence: `merge-equal-ab-comparison.json`. The experimental patch is archived
+privately as `merge-equal-fragment-experiment.patch` and removed from runtime
+source. The installed executable remains the audited sky-depth build.
+
+The larger c4 case needs a more precise comparison: fragment shader
+`2330b41795e4250d` reads only c4[8].x, and `f2501b67d1064071` reads only c4[8].z,
+as verified by their SPIR-V decompilations (`merge-material.frag` and
+`merge-material-alt.frag`). Changing unused transform rows should not by itself
+break batching. Any implementation must establish the complete shader read
+footprint, reject unknown/dynamic pointer use, preserve zero-padding semantics,
+and retain the existing epoch/GPU-write guards. A visual match or identical
+whole-buffer sample alone does not establish those conditions.

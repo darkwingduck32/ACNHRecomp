@@ -357,6 +357,16 @@ VkDescriptorBufferInfo buffer_of(VkCommandBuffer cb, const void* bytes, uint64_t
 
 }  // namespace
 
+// The merger gathers raw guest blocks. Such a block must not replace a host
+// upload whose sky/fog values were adapted to the free camera.
+bool uniform_host_patch(const ShaderInfo* shader, int bank) {
+    if (!shader || shader->stage!=ShaderStage::Vertex || !freecamera_field_active()) return false;
+    const auto& hash=shader->hash;
+    if (bank==1) return hash=="fce7966c1f0b7193" || hash=="3ebba4ffae3ffdd3" || hash=="0f62b0e3657eeab0";
+    if (bank==2) return hash=="cabdc233d975169b" || freecamera_fog_shader(hash);
+    return bank==3 && hash=="fce7966c1f0b7193";
+}
+
 // A uniform block binding's buffer, from the bound range (build_sets; draw merging's run continuation, nvn_draw.cpp).
 VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, const DescriptorBinding& b, const Range& r) {
     const uint8_t* p = r.address ? guest_bytes(r.address) : nullptr;

@@ -16,6 +16,7 @@
 #include "nvn_draw_state.h"
 #include "nvn_ultrawide.h"
 #include "platform.h"
+#include <nx/game.h>
 
 namespace nx::nvn {
 
@@ -603,7 +604,7 @@ PerThread<uint64_t> g_fast_hits, g_fast_misses;
 // blocks are gathered one after another into the upload ring, bound once over the whole run, and the vertex module
 // reads instance k's copies (nvn_spirv_instance.cpp). Instances are drawn in order, as the draws were. Guest memory
 // stays as it was through the run: no upload was invalidated (an inline uniform update) since its first draw.
-// NX_DRAW_MERGE=0: off (on by default on Android).
+// NX_DRAW_MERGE=0: off (default on Android and ACNH on Windows/NVIDIA).
 constexpr uint32_t kMergeMax = 256;  // instances a run
 struct Merge {
     bool on = false;
@@ -644,6 +645,15 @@ bool merge_on() {
         const char* e = std::getenv("NX_DRAW_MERGE");
 #if defined(__ANDROID__)
         if (!e) return !parallel_replay_on();
+#elif defined(_WIN32)
+        if (!e && !std::strcmp(game::kInfo.id, "acnh")) {
+            VkPhysicalDeviceProperties p{};
+            p_vkGetPhysicalDeviceProperties(vk_physical(), &p);
+            // Low-angle island terrain: repeated identical draws dominate CPU
+            // replay. The existing merger retains order and excludes object-motion
+            // draws. Keep other vendors/games and parallel replay unchanged.
+            if (p.vendorID == 0x10de) return !parallel_replay_on();
+        }
 #endif
         return e && e[0] == '1' && !parallel_replay_on();
     }();
@@ -722,6 +732,7 @@ void merge_snapshot(Merge& m, const Cmd& c) {
 // Notes where instance m.n's block j is (the range bound for its bank); false: not gathered (no memory, or written by
 // a dispatch of this submit: its copy is composed on the GPU).
 bool merge_source(Merge& m, uint32_t j, const Range& r) {
+    if (uniform_host_patch(m.prep->vs, m.bank[j])) return false;
     const uint8_t* p = r.address ? guest_bytes(r.address) : nullptr;
     const uint32_t size = uint32_t(std::min<uint64_t>(p ? r.size : 0, 0x10000));
     if (!p || written_overlaps(p, size)) return false;

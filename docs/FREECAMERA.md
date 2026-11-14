@@ -1269,3 +1269,19 @@ rotation, player cell remained (88,195), and 315 settled frames produced no new
 refreshes (`tree-refresh-installed-result.json`). The zoomed-out candidate run
 reported approximately 60 FPS in the sampled settled view; this is not a matched
 performance benchmark or a guarantee for other scenes.
+
+The combined installed build also passed the original river reproduction after
+the foreground-refresh change. The logged eye (304.1,271.4,1022.1), target
+(593.0,12.0,794.7), and water rectangle (32,10)..(129,106) match the water-fix
+validation. `water-tree-combined_03061.png` shows the upstream and far-right
+surface filled; `water-tree-combined-result.json` pins the installed hashes and
+capture. The isolated harness was then stopped.
+
+Current wrap-up status: AO optimization, river surface selection, and stationary
+camera foreground refresh are implemented, tested and installed. The ineffective
+foreground-distance cap and diagnostic culling bypasses were rejected and are
+not shipped. Broader distant-detail/outline behavior, distant terrain cutoff,
+and horizon coverage remain unproven or incomplete. They are deferred under the
+user's instruction not to start new investigations; the full camera goal is
+not claimed complete. The earlier entries above are a chronological investigation
+record, including superseded candidate and installation states.

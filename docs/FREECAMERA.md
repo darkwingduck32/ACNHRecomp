@@ -530,3 +530,37 @@ the guest library SHA256 is
 `16a23643de2b61e2acd1be1b93e2ca2474daafe26be5ee2f5dbdba4eb9a5a80a`.
 Original ocean assets remain in use. This is not acceptance of maximum-zoom
 ocean coverage, elevated distant terrain, LOD or untested weather/interiors.
+
+### Elevated ground diagnosis
+
+The fixed inclined pose (initial pitch -7, yaw 30, zoom 3, copied save and time
+offset 28800) reproduces the brown distant silhouettes. A temporary entry probe
+at `11fc610` confirms the terrain worker itself reads the expanded rectangle
+(-25,28)..(70,129), rather than merely leaving those values after submission.
+The probe is removed from source and the isolated guest library. Both map
+representations cover the island: job+100 uses inclusive bounds, whereas
+job+108 stores dimensions (112,96) at +18 and origin (16,16) at +28. Do not
+interpret those two structures using the same field semantics.
+
+Function `1469c10` generates river ripple effects, confirmed by its references
+to `Env_RiverRippleCorner`, `Env_RiverRippleDents` and related names. It is not
+the missing grass-surface submission path.
+
+Dropping fragment `20bd0cfd20c2db06` removes nearby grass ground. Its vertex
+shader is `c0aa42f5f330ef6d`; the corresponding ground depth shader is
+`f6b2598606445ade` with fragment `9defa7b050d05f3b`. The bounded capture in
+`ground-depth-matrices.log` and `ground-matrix-comparison.json` shows identical
+view/projection constants, viewport, scissor, culling mode and depth range.
+Both passes submit nonzero draws at distant coordinates. A second capture
+(`ground-deformation.log`) confirms identical deformation rows c8[45..46],
+including (1,-979.8,1,0). These are diagnostic observations, not a terrain fix.
+
+`NX_EQUAL_ALWAYS=1` breaks nearby occlusion without filling the distant brown
+region; `NX_NO_STENCIL=1` also leaves it intact. A temporary host-upload
+dark-fog-intensity bypass changes water haze but leaves the region intact.
+These overrides are not installed; the temporary fog bypass is removed.
+Screenshots are `ground-depth-always_03181.png`, `ground-no-stencil_02341.png`
+and `ground-no-dark-fog_02941.png`. The cause of the shaded-pass cutoff remains
+unresolved. The trace switch `NX_TRACE_VS_BLOCKS` now also records deformation
+c8[45..46], dark-fog c5[10..12] and fragment material c6[27..29], so those values
+can be compared without treating matching camera matrices as sufficient proof.

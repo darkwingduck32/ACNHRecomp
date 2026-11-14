@@ -917,3 +917,26 @@ that is not evidence of a performance gain. The experiment was archived as
 preview runtime rebuilt. The installed 5625d511 runtime was never replaced.
 Further work should target the measured terrain/submission workload or actual
 distance-detail selection rather than adding these checks to every command.
+
+### Filtering camera uniform checks before reading shared state
+
+The batch continuation path calls `uniform_host_patch` for each gathered tile
+block. It now rejects irrelevant banks/stages/shaders before reading the camera
+heartbeat atomics. The same sky/fog blocks remain protected from raw guest-block
+merging; no shader constants or visibility limits change. The final code removes
+the temporary A/B switch and duplicated control path.
+
+Six paired heavy-view intervals over frames 2400-9599, excluding the first 240
+frames of each interval, measure 50.91 FPS / 17.30 ms replay before and 51.37 FPS /
+16.90 ms after. Upload volume is effectively identical at 15.45 MB/frame. This is
+a modest CPU improvement. Five focused tests passed. Evidence is
+`host-patch-filter-ab-comparison.json`, `host-patch-filter-ab-hashes.json` and its
+log in the private test root; the A/B implementation is archived privately as
+`host-patch-filter-ab.patch`. Final-build visual validation/promotion is pending.
+
+Static tracing also finds that terrain draw routine `146b080` tests instance
+visibility flags before binding draw data: passes 0, 1 and 2 require bit 6,
+and pass 9 requires bit 7. The skip at `146b1c8` branches to the next instance.
+Other pass IDs bypass this particular test. `terrain-draw-pass-code.txt` and
+`terrain-draw-pass-map.json` record the code and table at `4075b7c`, pinned to the
+native binary hash. Live per-pass counts are still needed before changing culling.

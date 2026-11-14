@@ -2,6 +2,18 @@
 #include <cmath>
 
 namespace nx::freecamera {
+// Replace the native forward tilt with the same depression around the horizon.
+// ParkVR's native radius is 2000; vertical_scale comes from its model matrix.
+inline bool sky_horizon_height(float tilt, float height, float vertical_scale, float& out) {
+    const float radius = 2000.f * vertical_scale;
+    if (!std::isfinite(tilt) || std::fabs(tilt) > .5f || !std::isfinite(height) ||
+        !std::isfinite(radius) || radius < 100.f || radius > 4000.f) return false;
+    const float result = height + radius * std::fabs(std::sin(tilt));
+    if (!std::isfinite(result)) return false;
+    out = result;
+    return true;
+}
+
 // ParkVR is a full sphere. Its model placement follows the unmodified camera,
 // while its view matrix receives the orbit. Recover the current eye from the
 // rigid world-to-view matrix so the background encloses that eye again.

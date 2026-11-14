@@ -374,6 +374,29 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     // In place (nvn_zero_copy.cpp) when every byte bound is the block's own: past it Maxwell reads 0.
     const uint64_t a = vk_robust_buffer_align();  // as buffer_of sizes the binding
     const uint64_t n = (std::max<uint64_t>((size + 15) & ~15ull, min_size) + a - 1) & ~(a - 1);
+    // Native sky lookup tilts toward the fixed forward camera. Its lower
+    // hemisphere becomes a dark band when looking backwards. Convert that
+    // horizon depression to an azimuth-independent vertical lookup offset.
+    if (p && size>=25*16 && s->stage==ShaderStage::Vertex && s->hash=="fce7966c1f0b7193" &&
+        b.nvn.source==NvnSource::UniformBlock && b.nvn.index==3 && freecamera_field_active() &&
+        !written_overlaps(p,size)) {
+        const Range& model=(*g_state).uniforms[0][1];
+        const uint8_t* model_bytes=model.address?guest_bytes(model.address):nullptr;
+        float tilt,height;
+        std::memcpy(&tilt,p+7*16,4); std::memcpy(&height,p+24*16+4,4);
+        if (model_bytes && model.size>=48 && !written_overlaps(model_bytes,48)) {
+            float row[3];std::memcpy(row,model_bytes+16,sizeof row);
+            const float scale=std::sqrt(row[0]*row[0]+row[1]*row[1]+row[2]*row[2]);
+            if (freecamera::sky_horizon_height(tilt,height,scale,height)) {
+                const float zero=0;
+                Upload u=upload_alloc(n,256);
+                std::memset(u.ptr,0,n);std::memcpy(u.ptr,p,size);
+                std::memcpy(static_cast<uint8_t*>(u.ptr)+7*16,&zero,4);
+                std::memcpy(static_cast<uint8_t*>(u.ptr)+24*16+4,&height,4);
+                return {u.buffer,u.offset,n};
+            }
+        }
+    }
     // Main-view sky/CloudVR (not their environment-probe variants) and DrawStar
     // share the stale model center. Sky/cloud c4 holds the model and c3 the
     // view; stars pack model+view into c5. Preserve rotation, UVs and weather.

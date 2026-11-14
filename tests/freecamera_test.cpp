@@ -80,6 +80,23 @@ int main() {
         }
     }
     check(!view_bounds(ground_eye,ground_target,0,1,0,0,300,0,0,0,footprint),"Invalid projection must use fallback");
+    float horizon_height = -1;
+    check(sky_horizon_height(-pi/6, 0, .3f, horizon_height) == false,
+          "Unexpected sky tilt must retain native lookup");
+    check(sky_horizon_height(-.1f, 3.f, .3f, horizon_height), "Native sky scale and tilt must be accepted");
+    // On the 600-unit sphere, the lookup equator is depressed by .1 radian
+    // at every azimuth, with the native height offset retained.
+    for (int azimuth = 0; azimuth < 360; azimuth += 15) {
+        const float angle = azimuth*pi/180.f;
+        const float x = 600.f*std::cos(.1f)*std::sin(angle);
+        const float z = 600.f*std::cos(.1f)*std::cos(angle);
+        const float y = -600.f*std::sin(.1f) + horizon_height - 3.f;
+        check(std::fabs(std::atan2(y, std::hypot(x,z))) < .00001f,
+              "Sky lookup horizon must be equally depressed in every direction");
+    }
+    horizon_height = 42;
+    check(!sky_horizon_height(0,0,0,horizon_height) && horizon_height == 42,
+          "Invalid sky scale must fail without changing the destination");
     const std::string fruit_config="ACNH_TREE_FRUIT_V1 oak -6 16.8 9.4 6.2 16 9.6 0 24.5 5.6 sakura -6 16.8 9.4 6.2 16 9.6 0 24.5 5.6 snow -9 16.8 9 10 16.5 8 -2 24.5 6 palm -2.5 15.5 3.2 2.6 16.3 2.3";
     FruitLayouts fruit;
     std::istringstream valid_fruit(fruit_config);

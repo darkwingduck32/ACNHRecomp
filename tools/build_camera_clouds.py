@@ -22,45 +22,48 @@ def remap(data):
     reports = []
     for shape, name, vertex in tree.shapes():
         positions = tree.positions(vertex)
-        old = attribute(tree, vertex, '_u0')
         triangles = tree.triangles(shape)
-        # Preserve the authored vertical profile along the good front meridian.
-        meridian = sorted(set((math.atan2(y, abs(z)), old[i][1])
-                              for i, (x, y, z) in enumerate(positions) if abs(x) < .001 and z < 0))
-        if len(meridian) < 8:
-            raise ValueError('Missing native front meridian')
-        elevations = [p[0] for p in meridian]
-        neighbors = collections.defaultdict(set)
-        for triangle in triangles:
-            for i in triangle:
-                neighbors[i].update(triangle)
-        mapped = []
-        for i, (x, y, z) in enumerate(positions):
-            angle = math.atan2(x, -z)
-            # The native mesh already duplicates its back-meridian vertices.
-            # Assign each duplicate to its own side rather than interpolating
-            # across the entire texture in the seam's adjacent triangles.
-            if abs(x) < .001 and z > 0:
-                sides = {1 if positions[j][0] > 0 else -1 for j in neighbors[i]
-                         if abs(positions[j][0]) > .001}
-                if len(sides) != 1:
-                    raise ValueError('Back seam requires a split vertex')
-                angle = math.pi if 1 in sides else -math.pi
-            elevation = math.atan2(y, math.hypot(x, z))
-            k = min(max(bisect.bisect_right(elevations, elevation), 1), len(meridian)-1)
-            a, b = meridian[k-1], meridian[k]
-            t = min(max((elevation-a[0])/(b[0]-a[0]), 0), 1)
-            mapped.append((.5+angle/(2*math.pi), a[1]+t*(b[1]-a[1])))
-        if any(max(mapped[i][0] for i in row)-min(mapped[i][0] for i in row) > .5 for row in triangles):
-            raise ValueError('Triangle crosses panoramic UV seam')
-        _, fmt, offset, buffer = next(a for a in tree.attributes(vertex) if a[0] == '_u0')
-        if fmt != 0x512:
-            raise ValueError('Expected native half-float UVs')
-        start, _, stride = list(tree.buffers(vertex))[buffer]
-        for i, uv in enumerate(mapped):
-            struct.pack_into('<2e', output, start+offset+i*stride, *uv)
+        # UV0 drives the main clouds; UV1 drives the separate horizon layer.
+        # Both native profiles are authored for the original forward camera.
+        for channel in ('_u0', '_u1'):
+            old = attribute(tree, vertex, channel)
+            # Preserve the authored vertical profile along the good front meridian.
+            meridian = sorted(set((math.atan2(y, abs(z)), old[i][1])
+                                  for i, (x, y, z) in enumerate(positions) if abs(x) < .001 and z < 0))
+            if len(meridian) < 8:
+                raise ValueError('Missing native front meridian')
+            elevations = [p[0] for p in meridian]
+            neighbors = collections.defaultdict(set)
+            for triangle in triangles:
+                for i in triangle:
+                    neighbors[i].update(triangle)
+            mapped = []
+            for i, (x, y, z) in enumerate(positions):
+                angle = math.atan2(x, -z)
+                # The native mesh already duplicates its back-meridian vertices.
+                # Assign each duplicate to its own side rather than interpolating
+                # across the entire texture in the seam's adjacent triangles.
+                if abs(x) < .001 and z > 0:
+                    sides = {1 if positions[j][0] > 0 else -1 for j in neighbors[i]
+                             if abs(positions[j][0]) > .001}
+                    if len(sides) != 1:
+                        raise ValueError('Back seam requires a split vertex')
+                    angle = math.pi if 1 in sides else -math.pi
+                elevation = math.atan2(y, math.hypot(x, z))
+                k = min(max(bisect.bisect_right(elevations, elevation), 1), len(meridian)-1)
+                a, b = meridian[k-1], meridian[k]
+                t = min(max((elevation-a[0])/(b[0]-a[0]), 0), 1)
+                mapped.append((.5+angle/(2*math.pi), a[1]+t*(b[1]-a[1])))
+            if any(max(mapped[i][0] for i in row)-min(mapped[i][0] for i in row) > .5 for row in triangles):
+                raise ValueError('Triangle crosses panoramic UV seam')
+            _, fmt, offset, buffer = next(a for a in tree.attributes(vertex) if a[0] == channel)
+            if fmt != 0x512:
+                raise ValueError('Expected native half-float UVs')
+            start, _, stride = list(tree.buffers(vertex))[buffer]
+            for i, uv in enumerate(mapped):
+                struct.pack_into('<2e', output, start+offset+i*stride, *uv)
         reports.append(dict(shape=name, vertices=len(positions), triangles=len(triangles),
-                            seam_crossings=0, native_meridian_samples=len(meridian)))
+                            uv_channels=['_u0', '_u1'], seam_crossings=0, native_meridian_samples=len(meridian)))
     if not reports:
         raise ValueError('No cloud shapes found')
     return output, reports

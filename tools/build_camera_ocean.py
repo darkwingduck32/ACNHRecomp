@@ -95,7 +95,7 @@ def main():
     parser.add_argument('--source', type=Path, default=ROOT / 'private/game/romfs/Model')
     parser.add_argument('--out', type=Path, default=ROOT / 'private/freecamera/ocean-shore-mod/romfs/Model')
     parser.add_argument('--outer', type=float, required=True,
-                        help='Experimental outer extent; 800 caused a measured FPS regression')
+                        help='Outer water extent in world units; validate coverage and frame cost with the current runtime')
     args = parser.parse_args()
     if not args.out.resolve().is_relative_to(ROOT / 'private') or args.out.resolve() == args.source.resolve():
         parser.error('Use a separate output directory under private/')

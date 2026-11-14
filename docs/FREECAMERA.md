@@ -733,3 +733,44 @@ uses the isolated save and records `support-cache-installed-result.json` and
 `support-cache-installed_04141.png`. All five focused CTests and both harness
 unit tests pass. The outer-ocean boundary remains visible at maximum zoom;
 this performance fix does not establish ocean, distant LOD or weather acceptance.
+
+### Ocean re-test with the cache fixed
+
+The earlier ocean FPS rejection was confounded by support-cache overflow.
+Fresh sequential tests with the same fixed runtime, copied save and settings
+give the following results. Day samples use frames 2400–3419; the real clock
+advances between runs, so these are not same-process A/B measurements.
+
+| View | Water extent | FPS | Replay ms/frame | Upload MB/frame |
+| --- | ---: | ---: | ---: | ---: |
+| Day, pitch -7 / yaw 30 / zoom 3 | Native 240 | 59.67 | 13.35 | 10.97 |
+| Same day view | 800 | 59.68 | 13.74 | 11.38 |
+| Same day view | 1200 | 59.52 | 14.24 | 11.79 |
+| Day, minimum pitch / yaw 0 / zoom 1 | Native 240 | 59.73 | 13.19 | 10.86 |
+| Same low day view | 1200 | 59.47 | 14.59 | 11.87 |
+| Night, minimum pitch / yaw -78.03 / zoom 3 | Native 240 | 52.71 | 16.67 | 14.80 |
+| Same low night view | 1200 | 52.41 | 16.78 | 14.77 |
+
+The 800-unit orbit retains a thin exposed strip at one heading. The 1200-unit
+day/night orbits cover the exposed boundary in this island test. The extension
+adds daytime render work, but the heavier night view is already below 60 FPS
+with native water. The night control's traced eye/target coordinates match the
+extended-water run; the latter uses its final stationary 17 windows after the
+orbit. No support or driver cache overflows occur in these tests.
+
+Evidence: `ocean-cache-fixed-comparison.json`,
+`support-cache-ocean1200-orbit-small.png`,
+`support-cache-ocean1200-night-orbit-small.png`, and
+`support-cache-ocean1200-night-low-orbit-small.png` under the private test root.
+The 116 audited 1200-unit shoreline archives were promoted with manifest and
+backups at `private/freecamera/install-backups/20261115-085718-ocean`.
+Only water/seaback positions, bounds and radii change; counts, indices, UVs,
+materials, shore geometry and collisions remain native. The actual save is
+untouched. A visible dark fog/horizon band at night, heavy-view performance,
+distant LOD/grounding and broader weather/island coverage remain open work.
+
+The final installed-runtime/installed-overlay smoke reproduces 59.53 FPS,
+14.34 ms replay and 11.79 MB upload in the wide daytime view. Peak cache use
+is 85, with no fallback copies. Evidence: `support-cache-ocean-installed-result.json`
+and `support-cache-ocean-installed_04321.png`. The harness process was stopped
+after inspection; normal game configuration and the actual save are unchanged.

@@ -243,3 +243,21 @@ indirect dispatch table does not intercept them. The screenshots cannot rule
 out the horizon/frustum tests. Both experimental runtime wrappers were removed.
 Further probing must use compiled instruction hooks or intercept a verified
 indirect caller; do not repeat dispatch replacements at these direct callees.
+
+The isolated instruction-hook rebuild subsequently confirmed execution of the
+terrain culler probe at `146a660` from `11fd40c` (log
+`terrain-instruction-bypass.log`). With that probe active, the wide rotation
+still has the ground holes (`instruction-no-cull-wide-small.png`). Native land
+worker `11fcb00` consumes its own bounds at job+e0/f0. Unlike water worker
+`11fc610`, it does not consume the already-patched manager+1a28/1a38 rectangle.
+Land submission `11fdbf8` calculates a fixed roughly 30x51-tile region and stores
+it at `11fe014`/`11fe01c`, before resetting the work index and submitting jobs.
+
+An isolated hook at `11fe020` replaced those land bounds with the foreground
+perspective footprint. It executed, but the first expanded selection stalled
+at frame 241 and the process memory guard stopped it at 33.30 GB
+(`land-fov-selection.log`). This is a failed experiment, not an accepted fix;
+its runtime changes were removed. Do not raise the memory guard to accommodate
+it. Further work must investigate allocation/culling for the added land tiles
+and bound their work before any release. The experimental source and generated
+library remain private; the normal installed executable/library are unchanged.

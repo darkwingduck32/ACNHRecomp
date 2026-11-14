@@ -92,8 +92,32 @@ struct Visibility {
     std::array<uint64_t, 4> cells{};
     std::array<float, 4> base{}, last{};
     bool initialized = false;
+    std::array<int,4> refresh_bounds{};
 };
 std::vector<Visibility> visibility;
+uint64_t visibility_revision=0;
+std::unordered_map<uint64_t,uint64_t> foreground_revision;
+void foreground_refresh(CPU& cpu) {
+    static const bool requested=[] {
+        const char* e=std::getenv("NX_FREECAMERA_FOREGROUND_REFRESH");
+        return !e || std::strcmp(e,"0")!=0;
+    }();
+    if (!requested || !freecamera_field_active()) return;
+    std::lock_guard guard(lock);
+    if (!visibility_revision) return;
+    if (foreground_revision.size()>16) foreground_revision.clear();
+    auto& seen=foreground_revision[cpu.x[19]];
+    if (seen==visibility_revision) return;
+    seen=visibility_revision;
+    // Native selection otherwise refreshes only when the player changes a
+    // five-unit cell. Set the local force-refresh bit before its mask/test;
+    // retain the native update and do not alter persistent gameplay flags.
+    cpu.x[8]|=1;
+    static const bool trace=std::getenv("NX_FREECAMERA_TRACE")!=nullptr;
+    if (trace) log("freecamera: foreground refresh revision %llu at frame %llu",
+        (unsigned long long)seen,(unsigned long long)g_frame.load(std::memory_order_relaxed));
+}
+NX_HOOK(0x10d660c, foreground_refresh);
 struct Terrain { std::array<int32_t, 4> base, last; };
 std::unordered_map<uint64_t, Terrain> terrain;
 bool enabled() {
@@ -161,6 +185,14 @@ void update_visibility(bool on) {
             if (v.family==4 || !perspective_bounds(reach,b)) b = freecamera::rotate_bounds(b, orbit.yaw);
         }
         const float values[] = {b.left, b.right, b.near, b.far};
+        if (v.family<=1) {
+            // Sub-unit projection jitter need not rebuild the loading lists.
+            // The footprint already includes twenty units of edge padding.
+            std::array<int,4> rounded;
+            for (int i=0;i<4;++i) rounded[i]=int(std::ceil(values[i]));
+            if (!v.initialized || rounded!=v.refresh_bounds) ++visibility_revision;
+            v.refresh_bounds=rounded;
+        }
         if (!v.initialized) log("freecamera: visibility family %d registered: L/R/N/F %.1f %.1f %.1f %.1f", v.family,
             double(v.base[0]), double(v.base[1]), double(v.base[2]), double(v.base[3]));
         for (int i = 0; i < 4; i++) {

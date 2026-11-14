@@ -1228,3 +1228,31 @@ native indoor camera rotation, exit, and restored outdoor orbit. Screenshots:
 `water-installed-inventory_03121.png`, `water-installed-interior_04021.png`,
 `water-installed-indoor-camera_04681.png`, `water-installed-return_05881.png`,
 and `water-installed-field-orbit_14761.png`. No tree-culling change is included.
+
+### Foreground refresh after camera changes
+
+The user clarified that movement, rather than collision itself, may restore
+missing trees. A live read-only test found that rotating the camera changed
+`mTreeArea*` values but left the foreground selection rectangles unchanged.
+Moving then refreshed them (`tree-refresh-baseline.json`). Native `10d5570`
+compares the player's five-unit cell at `10d6618..10d6624` and skips selection
+rebuilding when it is unchanged. `1125ddc` constructs the tree/general regions;
+the four stored regions are owner+1e278/1e2a8/1e2d8/1e308.
+
+The new `10d660c` hook sets only the temporary register's force-refresh bit when
+the camera's foreground/tree footprint changes. It retains the native list
+update and persistent gameplay flags. Whole-unit bounds suppress sub-unit
+projection jitter inside the existing twenty-unit footprint padding. Each
+foreground owner consumes a revision once; stationary unchanged views do not
+continually rebuild. `NX_FREECAMERA_FOREGROUND_REFRESH=0` disables this change.
+The updated 3.0.3 guest hook library is required.
+
+The candidate's stationary-player test kept cell (88,195) unchanged while
+rotation updated the tree rectangle from (2,167)..(116,271) to
+(49,168)..(157,278). A further 300 idle frames produced no new refreshes and no
+rectangle changes (`tree-refresh-stationary-result.json`). Camera tests pass.
+The zoomed-out full orbit was reviewed in `tree-refresh-wide-review.png`;
+inventory, tent entry and native indoor rotation were also checked. This proves
+the stale-selection defect and its correction; it does not establish that every
+possible disappearing-tree case has the same cause. No tree geometry, material,
+detail level, or draw-distance budget was changed.

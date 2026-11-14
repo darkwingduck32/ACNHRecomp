@@ -81,6 +81,8 @@ from its rigid view matrix. It preserves model rotation/scale, materials and gue
 constants, and excludes the environment-probe shader. Rigid-matrix checks reject
 invalid inputs. The DrawStar pass uses exactly the same stale center in its model matrix;
 its host c5 upload now receives the eye recovered from its packed view matrix too.
+The matching 800-triangle depth-only pass (`3ebba4ffae3ffdd3`) uses the same
+model/view layout and now follows the same center, keeping colour and depth aligned.
 Unit tests verify center recovery and zero view-space position at four headings;
 visual sky/star coverage and the separately transformed cloud models still need
 validation. The generic AGL full-screen sky passes were absent from this

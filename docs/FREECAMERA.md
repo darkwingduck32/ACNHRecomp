@@ -22,14 +22,28 @@ live verification before treating the control integration as complete.
 
 ## Visibility work in progress
 
-The current implementation rotates the game's foreground/furniture rectangles
-and terrain footprint with yaw. This fixes the direction of their long side but
-is not a perspective-frustum culler and does not account for pitch or zoom.
-The existing camera303 terrain scale is a separate local experiment.
+Foreground/furniture loading and the terrain rectangle now use the perspective
+frustum intersected with a conservative terrain/canopy height band. The footprint
+follows yaw, pitch, zoom and aspect ratio, retains a small neighborhood around the
+player, and respects each range's distance budget. Extension fields remain padding.
+The engine still needs to reject individual objects outside the view; this is a
+broad-phase loading rectangle, not a replacement per-object culler. Without a
+recent valid projection it falls back to rotated native bounds. The existing
+camera303 terrain scale remains a separate local experiment in that fallback.
+
+Live inspection identified camera303's field projection as 31 degrees with a
+100000-unit far plane. Its UI and minimap projections are excluded. Analytical
+ground-plane checks and camera-space sample sweeps cover yaw, pitch, zoom, aspect,
+and ground/canopy height. The corrected projection filter still needs a live
+reload and coverage/performance comparison. The height band is conservative for
+ordinary terrain; compatibility with the game's distant drum deformation remains
+part of the grounding investigation.
 
 The local parameter investigation identified `Param/Gfx/ActorDistantField.byml`
 with `mDrumOffsetYOffset.f32`, `mDrumOffsetYScale.f32`, `mYScalePeakOffset.f32`,
-`mRotateYParam.f32`, and `mScale.f32`. Their consumers still need tracing before
+`mRotateYParam.f32`, and `mScale.f32`. The matrix function at main+0x60acd4
+combines drum rotation and a quadratic vertical offset with camera-relative
+placement; its relationship to foreground terrain still needs validation before
 changing distant-scenery placement. Fog palette parameters exist separately;
 increasing fog alone does not establish lower rendering cost or correct LOD.
 

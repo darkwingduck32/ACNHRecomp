@@ -1,5 +1,6 @@
 #include "freecamera_math.h"
 #include "freecamera_fruit_layout.h"
+#include "freecamera_visibility.h"
 #include <sstream>
 #include <cstdio>
 #include <cstdlib>
@@ -10,6 +11,43 @@ static void check(bool ok, const char* message) {
 }
 int main() {
     using namespace nx::freecamera;
+    check(outdoor_projection(2.557646f,100000,.541052f),"The live camera303 31-degree field projection must be recognized");
+    check(!outdoor_projection(7605.31f,9525.31f,.087266f) && !outdoor_projection(1,10000,.698132f),
+          "Minimap and UI projections must not set outdoor visibility");
+    const float ground_eye[]{0,100,100}, ground_target[]{0,0,0};
+    Bounds footprint;
+    check(view_bounds(ground_eye,ground_target,.2f,1,0,0,300,0,0,0,footprint),"Ground footprint must be valid");
+    check(std::fabs(footprint.left-35.35534f)<.01f && std::fabs(footprint.far-50)<.01f &&
+          std::fabs(footprint.near-33.33333f)<.01f,"Perspective footprint must match analytic ground intersections");
+    const float rear_eye[]{0,100,-100};Bounds rear;
+    check(view_bounds(rear_eye,ground_target,.2f,1,0,0,300,0,0,0,rear) &&
+          std::fabs(rear.near-footprint.far)<.01f && std::fabs(rear.far-footprint.near)<.01f,
+          "Looking backward must preserve forward visibility distance");
+    const float zoom_eye[]{0,200,200};Bounds zoom;
+    check(view_bounds(zoom_eye,ground_target,.2f,1,0,0,300,0,0,0,zoom) && zoom.left>footprint.left*1.9f,
+          "Zooming out must expand the visible ground footprint");
+    Bounds wide;
+    check(view_bounds(ground_eye,ground_target,.2f,2,0,0,300,0,0,0,wide) && wide.left>footprint.left*1.9f,
+          "Wider aspect must load both newly visible edges");
+    // Independently project ground/canopy sample points into camera space at
+    // multiple yaws, elevations and zooms; every on-screen sample inside the
+    // configured distance budget must be inside the broad-phase rectangle.
+    for (int yaw=0;yaw<360;yaw+=30) for (float elevation:{.1f,.6f,1.4f}) for (float radius:{60.f,180.f,360.f}) {
+        const float a=yaw*pi/180, h=radius*std::cos(elevation);
+        const float eye[]{h*std::sin(a),radius*std::sin(elevation),h*std::cos(a)};
+        Bounds bound;
+        check(view_bounds(eye,ground_target,.2f,1.8f,0,0,300,-48,72,20,bound),"Swept footprint must be valid");
+        for (int x=-300;x<=300;x+=20) for(int z=-300;z<=300;z+=20) for(float y:{-48.f,0.f,72.f}) {
+            const float dx=x-eye[0],dy=y-eye[1],dz=z-eye[2];
+            const float depth=-(dx*eye[0]+dy*eye[1]+dz*eye[2])/radius;
+            const float sx=std::cos(a)*dx-std::sin(a)*dz;
+            const float sy=-std::sin(elevation)*(std::sin(a)*dx+std::cos(a)*dz)+std::cos(elevation)*dy;
+            if (depth>=1 && depth<=radius+300 && std::fabs(sx)<=depth*.36f && std::fabs(sy)<=depth*.2f)
+                check(x>=-bound.left-.01f && x<=bound.right+.01f && z>=-bound.far-.01f && z<=bound.near+.01f,
+                      "Visibility must contain every projected sample across yaw, pitch, zoom and height");
+        }
+    }
+    check(!view_bounds(ground_eye,ground_target,0,1,0,0,300,0,0,0,footprint),"Invalid projection must use fallback");
     const std::string fruit_config="ACNH_TREE_FRUIT_V1 oak -6 16.8 9.4 6.2 16 9.6 0 24.5 5.6 sakura -6 16.8 9.4 6.2 16 9.6 0 24.5 5.6 snow -9 16.8 9 10 16.5 8 -2 24.5 6 palm -2.5 15.5 3.2 2.6 16.3 2.3";
     FruitLayouts fruit;
     std::istringstream valid_fruit(fruit_config);

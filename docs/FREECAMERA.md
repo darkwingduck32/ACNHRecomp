@@ -1104,3 +1104,21 @@ are stored under `private/freecamera/release-candidates/ao-*` with
 `visual_passed: false` until that validation is performed. A normal game session
 was observed running separately from the harness, so further game launches and
 promotion were deferred rather than competing with that session for the GPU.
+
+After the user authorized closing the idle normal game, the final candidate
+passed outdoor orbit, inventory, tent entry, native indoor camera rotation,
+return outdoors and resumed outdoor orbit. The settled wide view averages
+59.79 FPS / 12.39 ms replay / 11.21 MB upload with peak support-cache use 82
+and no fallbacks. `ao-final-wide-result.json` records the images and exact hashes.
+The known distant terrain/tree cutoff remains visible; this validates the AO
+change, not completion of distance-detail work.
+
+The validated pair was installed with both previous files backed up at
+`private/freecamera/install-backups/20261115-105216-ao`. Installed runtime hash:
+`e4eada40e47f9990faf1280099ebb740d96691082e609754a7b222a6e1dd8e53`;
+guest library hash:
+`6771b1731ca864531bad0279efe29796d94999baeffbdf327f1d2f507ec6248d`.
+The installer checked that neither game executable was running, verified
+candidate hashes against visual validation, and backed up both files before
+replacement, with rollback on copy failure. It changed no assets, configuration
+or save files. The private test root's `install-ao.json` records the promotion.

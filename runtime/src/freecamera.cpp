@@ -161,7 +161,7 @@ void update_visibility(bool on) {
             if (v.family==4 || !perspective_bounds(reach,b)) b = freecamera::rotate_bounds(b, orbit.yaw);
         }
         const float values[] = {b.left, b.right, b.near, b.far};
-        if (!v.initialized && on) log("freecamera: visibility family %d registered: L/R/N/F %.1f %.1f %.1f %.1f", v.family,
+        if (!v.initialized) log("freecamera: visibility family %d registered: L/R/N/F %.1f %.1f %.1f %.1f", v.family,
             double(v.base[0]), double(v.base[1]), double(v.base[2]), double(v.base[3]));
         for (int i = 0; i < 4; i++) {
             if (ld<float>(v.cells[i]) != values[i]) st<float>(v.cells[i], values[i]);

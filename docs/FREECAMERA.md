@@ -1069,3 +1069,26 @@ freecamera test passes. Broader visual/transition validation is still pending.
 The normal installed executable/library remain unchanged, the harness is stopped,
 and its exact official guest DLL has been restored. These hooks are experimental,
 not a completed performance fix or release candidate.
+
+### Foreground range check
+
+The missing registration messages were a logging issue, not a broken getter:
+visibility groups initialize before the outdoor camera becomes active, so the
+old `!initialized && on` log condition suppresses them. The existing getter is
+called and the perspective/land-footprint logs confirm that FOV coverage runs.
+Registration is now logged on initialization regardless of camera state.
+
+Captured L/R/N/F ranges are 280/280/120/530 for generic foreground and
+300/300/180/650 for trees; the main furniture creation range is
+270/270/200/690. An isolated test capped only generic foreground reach at 360,
+retaining tree and terrain ranges. Two headless pairs over frames 2400-4799
+measured 44.82 versus 45.51 FPS, 19.11 versus 18.86 ms replay, and essentially
+identical uploads (15.361 versus 15.358 MB). Off/on images show no substantial
+scene change in this shore-facing pose. This does not establish useful distant
+detail reduction, so the cap and its test switches were removed.
+
+Evidence: `detail-distance-ab-comparison.json`, `detail-distance-ab-hashes.json`,
+`shots/detail360-off_03721.png`, and `shots/detail360-on_04261.png` in the private
+test root. The rejected implementation is archived as
+`private/freecamera/detail-distance-experiment.patch`. The harness is stopped;
+installed game files and the actual save are unchanged.

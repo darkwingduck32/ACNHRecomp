@@ -69,8 +69,20 @@ The native SkyScatter shader generates a spherical latitude/longitude atmosphere
 texture. DrawCloud composites a screen-space cloud image; DrawStar transforms
 points through separate model, view and projection matrices. These are distinct
 passes, so changing the atmosphere generator alone cannot establish a 360-degree
-sky. The final background draw and cloud/star camera inputs still need tracing;
-no sky fix has been validated.
+sky. A live draw trace identifies the displayed background as Park UBER VR vertex
+`fce7966c1f0b7193` / fragment `d579b8327391ea0a`, sampling SkyScatter's target.
+It draws ParkVR's 800-triangle full sphere, with radius 2000 in model units.
+The captured model scale was 0.3, with center (524.041, -75.8444, -1166.58),
+while the orbit eye was (381.887, 59.4954, 5.80881): outside the 600-unit sphere.
+The native sky placement therefore does not follow the modified view.
+
+The host uniform adapter now centers this main-view sphere at the eye recovered
+from its rigid view matrix. It preserves model rotation/scale, materials and guest
+constants, and excludes the environment-probe shader. Rigid-matrix checks reject
+invalid inputs. Unit tests verify center recovery and zero view-space position at
+four headings; visual coverage and the separately transformed stars/clouds still
+need validation. The generic AGL full-screen sky passes were absent from this
+capture and are not patched.
 
 Validation so far: camera/gesture unit tests and compilation of the affected
 runtime, SDL input, and game UI hooks. Live playability, frustum coverage,

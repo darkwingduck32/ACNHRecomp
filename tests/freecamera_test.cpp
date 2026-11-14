@@ -2,6 +2,7 @@
 #include "freecamera_fruit_layout.h"
 #include "freecamera_visibility.h"
 #include "freecamera_fog.h"
+#include "freecamera_sky.h"
 #include <sstream>
 #include <cstdio>
 #include <cstdlib>
@@ -12,6 +13,23 @@ static void check(bool ok, const char* message) {
 }
 int main() {
     using namespace nx::freecamera;
+    for (float yaw : {0.f, pi/2, pi, 3*pi/2}) {
+        const float c = std::cos(yaw), s = std::sin(yaw);
+        const float expected[]{381.887f, 59.4954f, 5.80881f};
+        const float view[]{c,0,s,-(c*expected[0]+s*expected[2]),
+                           0,1,0,-expected[1],
+                          -s,0,c,-(-s*expected[0]+c*expected[2])};
+        float eye[3];
+        check(sky_camera_center(view,eye), "Rigid sky view must recover the camera eye");
+        for (int k=0;k<3;++k)
+            check(std::fabs(eye[k]-expected[k])<.001f, "Sky center must follow the eye at every heading");
+        for (int row=0;row<3;++row)
+            check(std::fabs(view[row*4]*eye[0]+view[row*4+1]*eye[1]+view[row*4+2]*eye[2]+view[row*4+3])<.001f,
+                  "Sky center must transform to the view origin");
+    }
+    const float invalid_sky_view[12]{};
+    float unused_eye[3];
+    check(!sky_camera_center(invalid_sky_view,unused_eye), "Invalid sky view must retain native placement");
     float normal[3];
     for (float angle:{0.f,pi/2,pi,3*pi/2}) {
         const float plane[]{std::sin(angle),.5f,-std::cos(angle),-.25f};

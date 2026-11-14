@@ -13,6 +13,7 @@
 #include <cstdlib>
 
 #include <nx/runtime.h>
+#include "freecamera.h"
 
 namespace nx {
 
@@ -202,6 +203,14 @@ void focus_hover(CPU& c, uint64_t f) {
 
 // main+3c48c60 (x0 = the manager, w3 bit 0: input blocked), before it reads this frame's input.
 void focus_input(CPU& c) {
+    // A live cursor is stronger evidence of menu ownership than the outdoor
+    // camera continuing to draw behind an inventory/phone overlay.
+    const uint64_t manager = c.x[0];
+    if (manager && !(c.x[3] & 1) && ld<uint32_t>(manager + 0x18)) {
+        const uint64_t entries = ld<uint64_t>(manager + 0x20);
+        const uint64_t entry = entries ? ld<uint64_t>(entries) : 0;
+        if (entry && ld<uint64_t>(entry + 0x10)) freecamera_ui_input();
+    }
     uint64_t f = g_frame.load();
     if (!g_click.pending) focus_hover(c, f);
     if (!g_click.pending) {
@@ -268,6 +277,7 @@ void button_input(CPU& c) {
         if (!known) log("acnh: a button handler is on, owner class %s", describe(vt).c_str());
     }
     if (!owner || ld<uint64_t>(owner) != kModuleBase + g_page_turner) return;
+    freecamera_ui_input();
     uint64_t f = g_frame.load();
     if (!g_click.pending) {
         uint32_t x, y;

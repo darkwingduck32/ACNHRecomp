@@ -19,11 +19,12 @@ namespace nx {
 namespace {
 std::mutex lock;
 freecamera::Orbit orbit;
-freecamera::Mode mode;
+freecamera::Controls controls;
 Fn original_lookat = nullptr;
 Fn original_float_storage = nullptr, original_terrain = nullptr;
 thread_local bool wrapped_lookat = false;
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
+std::atomic<uint64_t> ui_frame{~uint64_t(0)};
 float field_x = 0, field_z = 0;
 struct Visibility {
     uint64_t group;
@@ -205,6 +206,9 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
         }
     }
 }
+void freecamera_ui_input() {
+    ui_frame.store(g_frame.load(std::memory_order_relaxed), std::memory_order_relaxed);
+}
 void freecamera_input(plat::PadState& p) {
     using namespace plat;
     using Clock = std::chrono::steady_clock;
@@ -214,37 +218,28 @@ void freecamera_input(plat::PadState& p) {
     float dt = std::clamp(std::chrono::duration<float>(now - last).count(), 0.0f, 0.05f);
     last = now;
     const bool on = enabled();
-    const bool toggle = (p.buttons & kFreeCameraToggle) != 0 || (on && (p.buttons & kStickR));
-    const bool reset = (p.buttons & kFreeCameraReset) != 0 || (on && mode.editing && (p.buttons & kStickL));
-    p.buttons &= ~(kFreeCameraToggle | kFreeCameraReset);
-    if (on) p.buttons &= ~kStickR;
-    if (reset && on && mode.editing) p.buttons &= ~kStickL;
-    const bool was_editing = mode.editing;
-    mode.update(toggle, on);
-    if (toggle && !on) {
-        static bool warned = false;
-        if (!warned) log("freecamera: F6 ignored: enable freecamera in Mod Manager and restart"), warned = true;
-    }
-    if (was_editing != mode.editing) log("freecamera: camera controls %s (F6/R3 toggle, F7/L3 reset)", mode.editing ? "on" : "off");
-    if (!on) { orbit = {}; return; }
+    const bool zoom_key = (p.buttons & kFreeCameraZoom) != 0;
+    const bool reset = (p.buttons & kFreeCameraReset) != 0;
+    const bool stick_button = (p.buttons & kStickR) != 0;
+    p.buttons &= ~(kFreeCameraZoom | kFreeCameraReset);
+    if (!on) { orbit = {}; controls.cancel(); return; }
     const uint64_t seen = field_frame.load(std::memory_order_relaxed);
     const uint64_t now_frame = g_frame.load(std::memory_order_relaxed);
-    if (seen != ~uint64_t(0) && now_frame >= seen && now_frame-seen <= 2) {
+    const uint64_t ui_seen = ui_frame.load(std::memory_order_relaxed);
+    const bool ui_active = ui_seen != ~uint64_t(0) && now_frame >= ui_seen && now_frame-ui_seen <= 2;
+    const bool active = seen != ~uint64_t(0) && now_frame >= seen && now_frame-seen <= 2 &&
+                        !ui_active && !plat::keyboard_typing();
+    controls.update(orbit, active, reset, zoom_key, stick_button, axis(p.rx), axis(p.ry), dt);
+    if (active) {
         float x, y;
         freecamera::movement(orbit.yaw, float(p.lx), float(p.ly), x, y);
         p.lx = std::clamp(int32_t(std::lround(x)), -kStickMax, kStickMax);
         p.ly = std::clamp(int32_t(std::lround(y)), -kStickMax, kStickMax);
         p.buttons &= ~(kStickLLeft | kStickLRight | kStickLUp | kStickLDown);
     }
-    if (reset) orbit = {};
-    if (!mode.editing) return;
-    if (reset) { orbit = {}; }
-    else {
-        int direction = int(bool(p.buttons & kDown)) - int(bool(p.buttons & kUp));
-        orbit.advance(axis(p.rx), axis(p.ry), direction, dt);
-    }
+    if (!active) return;
     p.rx = p.ry = 0;
-    p.buttons &= ~(kUp | kDown | kStickRLeft | kStickRRight | kStickRUp | kStickRDown);
+    p.buttons &= ~(kStickR | kStickRLeft | kStickRRight | kStickRUp | kStickRDown);
 }
 void freecamera_lookat(uint64_t cam, uint64_t caller) {
     static const bool trace = std::getenv("NX_FREECAMERA_TRACE") != nullptr;

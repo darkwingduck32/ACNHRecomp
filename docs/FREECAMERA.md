@@ -810,3 +810,28 @@ from active source and both test binaries restored/rebuilt. Every rebuilt
 guest DLL code/data section matches the official library
 (`tile-probe-restored-dll-sections.json`); the test root uses the exact official
 68e6eae DLL. The installed runtime and ocean overlay remain the verified ones.
+
+### Avoiding redundant fixed-state invalidation
+
+A sampled CPU profile that preserves fast drawing and merging attributes most
+draw-processing cost to full setup, despite about 95.6% of draws taking the fast
+path. The probe is archived as `sampled-fast-draw-profile.patch` and removed
+from active source. Turning off debug-file polling alone does not resolve the
+heavy view: `heavy-no-debug-control-result.json` measures 50.85 FPS / 17.27 ms.
+Private harness launchers now default that polling off; live input/screenshots
+remain available, and explicit `NX_DEBUG_FILES=1` enables diagnostic files.
+
+Fixed-state commands now preserve the prepared draw and pending instance batch
+when the copied state is unchanged. Comparisons include complete relevant blobs,
+vector lengths and exact floating-point bit patterns. Resource/program/pool
+bindings, deferred bindings, memory writes and counters keep their existing path.
+`NX_STATE_DEDUP=0` restores the control; `NX_STATE_DEDUP_AB=1` alternates every
+600 frames. The final path has no new shared mutable profiling counters.
+
+The heavy-view same-process A/B test, six intervals per mode over frames
+2400–9599 excluding the first 240 frames of each interval, measures 50.21 FPS /
+17.63 ms replay without suppression and 51.16 FPS / 16.90 ms with it. Upload
+volume remains about 15.45 MB/frame. About 4,300 fixed-state commands/frame are
+redundant, and fast-path use rises to about 97.3%. Evidence is
+`state-dedup-ab-comparison.json` and `state-dedup-ab.log`. This is a modest CPU
+improvement, not a resolution of the remaining distance-detail requirements.

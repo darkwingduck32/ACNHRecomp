@@ -13,6 +13,7 @@
 #include "nvn_ultrawide.h"
 #include "freecamera.h"
 #include "freecamera_fog.h"
+#include "freecamera_sky.h"
 
 namespace nx::nvn {
 uint64_t bound_generation();  // nvn_draw.cpp
@@ -373,6 +374,27 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     // In place (nvn_zero_copy.cpp) when every byte bound is the block's own: past it Maxwell reads 0.
     const uint64_t a = vk_robust_buffer_align();  // as buffer_of sizes the binding
     const uint64_t n = (std::max<uint64_t>((size + 15) & ~15ull, min_size) + a - 1) & ~(a - 1);
+    // Park UBER VR's main-view sky (not its environment-probe variant). c4 is
+    // the model transform; c3 starts with the rigid view matrix. Only the host
+    // copy moves, preserving the native sphere, rotation, UVs and weather.
+    if (p && size >= 48 && s->stage == ShaderStage::Vertex &&
+        b.nvn.source == NvnSource::UniformBlock && b.nvn.index == 1 &&
+        s->hash == "fce7966c1f0b7193" && freecamera_field_active() && !written_overlaps(p, size)) {
+        const Range& camera = (*g_state).uniforms[0][0];
+        const auto* view_bytes = camera.address ? guest_bytes(camera.address) : nullptr;
+        float view[12], eye[3];
+        if (view_bytes && camera.size >= sizeof view && !written_overlaps(view_bytes, sizeof view)) {
+            std::memcpy(view, view_bytes, sizeof view);
+            if (freecamera::sky_camera_center(view, eye)) {
+                Upload u = upload_alloc(n, 256);
+                std::memset(u.ptr, 0, n);
+                std::memcpy(u.ptr, p, size);
+                for (int row = 0; row < 3; ++row)
+                    std::memcpy(static_cast<uint8_t*>(u.ptr) + row*16 + 12, eye+row, sizeof(float));
+                return {u.buffer, u.offset, n};
+            }
+        }
+    }
     // Park UBER's c5[10..12] is the dark-fog colour/intensity, plane and
     // inverse range. Patch only a host upload, never shared guest constants.
     if (p && size>=13*16 && s->stage==ShaderStage::Vertex &&

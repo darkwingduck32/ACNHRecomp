@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <unordered_map>
@@ -26,6 +27,7 @@
 
 #include "platform.h"
 #include "users.h"
+#include "freecamera_fruit.h"
 
 namespace fs = std::filesystem;
 
@@ -53,6 +55,8 @@ struct RecentOp {
 uint64_t g_recent_seq = 0;
 
 void note_open(const char* what, const std::string& guest_path, const char* result) {
+    if ((!std::strcmp(result,"ok") || !std::strcmp(result,"virtual")) && !std::strcmp(what,"OpenFile"))
+        freecamera_fruit_resource(guest_path);
     if (result[0] == 'o' && result[1] == 'k' && !result[2]) discord_presence_file(guest_path);
     std::lock_guard lk(g_recent_lock);
     RecentOp& r = g_recent[g_recent_seq % kRecentOps];

@@ -950,3 +950,36 @@ and pass 9 requires bit 7. The skip at `146b1c8` branches to the next instance.
 Other pass IDs bypass this particular test. `terrain-draw-pass-code.txt` and
 `terrain-draw-pass-map.json` record the code and table at `4075b7c`, pinned to the
 native binary hash. Live per-pass counts are still needed before changing culling.
+
+### Terrain pass counts identify world ambient occlusion
+
+An isolated guest-library probe counts instances at `146b19c` before the native
+visibility tests and at `146b260` after them, without changing guest registers,
+memory or draw decisions. Over the last 20 million diagnostic observations,
+pass 12 accepts 2,134,146 instances, including 702,072 with both visibility bits
+clear. Passes 0 and 2 accept none with bit 6 clear; pass 9 accepts none with bit 7
+clear. The pass-12 clear-bit instances are about 8.4% of accepted instances across
+these four passes, not a measured fraction of GPU cost. Diagnostic overhead means
+this run is not an FPS benchmark.
+
+Guest frame-chain sampling identifies pass 12's caller at `157226c`. The descriptor
+there explicitly selects pass 12 and references the native string `Model(WorldAo)`
+at `3f87121`. Pass 13 similarly references `Model(FieldUnitMap)` at `3f9685d` from
+`145dfb0`. Thus the unculled pass is world-space ambient occlusion, not evidence
+that the main-view culler is broken. Reusing main-camera visibility would risk
+removing contributors to a different map. The next culling investigation must
+compare tile bounds with the AO pass's own projection/coverage.
+
+Evidence: `terrain-pass-probe-result.json`, `terrain-pass-probe-stderr.log`,
+`terrain-pass-stack-stderr.log`, `terrain-extra-pass-callers.txt`, and
+`world-ao-decoded-parameters.json` under the private freecamera/test directories.
+The latter decodes native outdoor AO intensity 0.4, near/far 1/200, Gaussian
+level 10 and sigma 4; unresolved vector fields are still labelled by hash and
+must not be treated as established coverage dimensions.
+
+Probe variants are archived as `code_427.pass-count-probe.cpp` and
+`code_427.pass-stack-probe.cpp`. The original generated source was restored and
+rebuilt; all PE sections match the official guest DLL
+(`terrain-pass-restored-sections.json`). The test root again uses the exact
+official DLL, the harness is stopped, and the installed runtime/assets and actual
+save were not changed by this investigation.

@@ -417,6 +417,10 @@ void trace_draw(const Targets& t, uint32_t mode, bool indexed, const Cmd& c, con
     static const char* target_env = std::getenv("NX_TRACE_TARGET");
     static const uint64_t trace_target = target_env ? std::strtoull(target_env, nullptr, 16) : 0;
     static uint64_t traced = 0;
+    // Narrow a bounded trace to a known primitive size without logging the
+    // thousands of unrelated terrain draws preceding a water/fullscreen quad.
+    static const uint64_t trace_vertices = std::getenv("NX_TRACE_VERT_COUNT")
+        ? std::strtoull(std::getenv("NX_TRACE_VERT_COUNT"), nullptr, 10) : 0;
     // NX_TRACE_FS_HASH=<hash>[,<hash>...]: only draws with those fragment shaders.
     static const char* fs_env = std::getenv("NX_TRACE_FS_HASH");
     static const uint64_t trace_count = std::getenv("NX_TRACE_COUNT") ? std::strtoull(std::getenv("NX_TRACE_COUNT"), nullptr, 10) : 80;
@@ -424,7 +428,7 @@ void trace_draw(const Targets& t, uint32_t mode, bool indexed, const Cmd& c, con
     static const uint64_t trace_frame = std::getenv("NX_TRACE_FRAME") ? std::strtoull(std::getenv("NX_TRACE_FRAME"), nullptr, 10) : 0;
     LiveDebug& live = live_debug();
     if ((trace_env && (*g_stats).done >= trace_from && traced < trace_count && (!trace_target || t.colors[0] == trace_target) &&
-         g_frame.load(std::memory_order_relaxed) >= trace_frame &&
+         g_frame.load(std::memory_order_relaxed) >= trace_frame && (!trace_vertices || count == trace_vertices) &&
          (!fs_env || (fs && std::strstr(fs_env, fs->hash.c_str())))) ||  // one hash or a comma list
         (live.trace_left && live.trace_left--)) {
         traced++;

@@ -366,3 +366,19 @@ palette remain visible: `cloud-level-wide-small.png` and
 `cloud-level-evening-wide-small.png`. Storm/snow/cloudless conditions remain
 untested. The wide ocean near edge is still exposed independently of this fix.
 The normal installed game remains unchanged.
+
+The first ocean-edge asset probe extended ten `FldOut*SeaOnly` water/back-face
+meshes beyond their native 240-unit outer limit, preserving the inner 80 units,
+indices and materials. A byte audit limited changes to positions and culling
+bounds/radii. It did not change the visible gap (`ocean-extended-forward_02881.png`).
+A subsequent file-open trace explains why: this scene loads `WaterModel` and the
+seabed/coast archives, but none of those `SeaOnly` assets. The unused `oceantest`
+overlay is disabled. Do not promote this failed probe as an ocean fix.
+
+`NX_TRACE_VERT_COUNT=<n>` now narrows an existing bounded `NX_TRACE_DRAWS` capture
+to draws with that vertex/index count, alongside the existing frame, target and
+fragment-shader filters. With 4 vertices and a count limit of 24, the harness
+recorded exactly 24 matching draws (`water-quad-trace.log`), including 10-unit
+water-preparation tiles. A main-target capture is needed to distinguish those
+from the actual sea surface. Tracing still disables fast replay; these diagnostic
+runs are not performance measurements.

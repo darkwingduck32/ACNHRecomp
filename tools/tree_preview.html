@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tree workshop · before / after</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#111a20;color:#dce6e8;font:14px system-ui,sans-serif}header{padding:18px 24px;background:#1b2930;border-bottom:1px solid #3a4c53}h1{margin:0 0 5px;font-size:22px}p{margin:5px 0;color:#adbec3}button,select,input{accent-color:#8fceae}button,select{color:inherit;background:#283e48;border:1px solid #536a73;border-radius:5px;padding:6px 10px}button{cursor:pointer}label{display:inline-flex;align-items:center;gap:5px}nav{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:12px 24px;background:#19252c}.views{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:#536a73}.view{position:relative;background:#18252d;height:61vh;min-height:350px}.view canvas{width:100%;height:100%;display:block;touch-action:none}.badge{position:absolute;left:16px;top:12px;pointer-events:none;font-weight:650;background:#142129dd;padding:7px 11px;border-radius:5px}.stats{position:absolute;left:16px;bottom:12px;pointer-events:none;color:#c6d6da;font-size:12px}.panel{padding:14px 24px}#shapes{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px}#shapes label{background:#253640;padding:6px 10px;border-radius:4px;font-size:12px}details{font-size:12px;overflow-wrap:anywhere;color:#9fb4bd;margin-top:14px}#frame{width:210px}#error{background:#712f36;padding:16px;display:none}@media(max-width:800px){.views{grid-template-columns:1fr}.view{height:44vh}}
+[hidden]{display:none!important}
+</style>
+<header><h1>Tree workshop <span style="color:#8fceae">/ before &amp; after</span></h1>
+<p>Drag either tree to orbit · wheel to zoom · Shift-drag to pan · synchronized cameras and animation</p></header>
+<div id="error"></div>
+<nav id="catalogBar" hidden><label>Tree <select id="asset"></select></label><button id="previousAsset">← Previous</button><button id="nextAsset">Next →</button><label>Compare with <select id="baseline"><option value="stock">Original game</option><option value="previous">Previous review</option></select></label><span id="catalogSummary"></span></nav>
+<nav><span id="assetStatus"></span><label>Review <select id="review"><option value="unreviewed">Unreviewed</option><option value="approved">Approved</option><option value="changes">Needs changes</option></select></label><input id="note" aria-label="Review notes" placeholder="Notes for this model" style="min-width:280px;flex:1;padding:7px"><button id="exportReviews">Export reviews</button></nav>
+<nav><label>Model <select id="model"></select></label><button id="front">Front</button><button id="back">Rear</button><button id="side">Side</button><button id="top">Top</button><button id="reset">Fit</button>
+<label><input id="turn" type="checkbox">Turntable</label><label><input id="wire" type="checkbox">Wireframe</label><label title="Unchecked: use each game material?s display-face setting. Checked: force both sides on every mesh."><input id="double" type="checkbox">Force all backfaces</label><span class="muted">Default: game material faces</span>
+<label><input id="textured" type="checkbox" checked>Leaf cutouts &amp; textures</label><label>Light <input id="light" type="range" min="0" max="360" value="35"></label></nav>
+<nav><label>Fruit <select id="fruit"><option value="">Hidden</option><option>Apple</option><option>Orange</option><option>Pear</option><option>Peach</option><option>Cherry</option><option>Coconut</option></select></label><span>Hanging positions on mature trees; hidden during skeletal clips.</span></nav>
+<nav><label>Motion <select id="clip"></select></label><button id="play">Play</button><button id="restart">Restart</button><label><input id="loop" type="checkbox" checked>Loop</label>
+<label>Speed <select id="speed"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+<input id="frame" type="range" min="0" max="1" value="0" step="0.01" aria-label="Animation frame"><span id="time">Bind pose</span></nav>
+<main class="views"><div class="view" id="before"><div class="badge">BEFORE · stock</div><div class="stats"></div></div><div class="view" id="after"><div class="badge">AFTER · modified</div><div class="stats"></div></div></main>
+<div class="panel"><strong>Shapes</strong><div id="shapes"></div><p id="motionNote"></p>
+<p>Recorded game skeletal clips, sampled at 30 fps. Lighting and green/brown tints are preview approximations; opacity and grayscale textures come from each asset. Game shaders, seasonal grading, procedural wind, collision physics, and runtime animation blending are not reproduced.</p>
+<details><summary>Source files and hashes (regenerate to pick up edits)</summary><pre id="sources"></pre></details></div>
+<script>/* THREE_LIBRARY */</script>
+<script id="tree-data" type="application/json">/* TREE_DATA */</script>
+<script>
+'use strict';
+window.addEventListener('error',e=>{const box=document.getElementById('error');box.style.display='block';box.textContent=e.message;});
+const CONFIG=JSON.parse(document.getElementById('tree-data').textContent), $=id=>document.getElementById(id);
+let DATA=CONFIG.assets?null:CONFIG,assetIndex=0,loadVersion=0;
+let reviews={...(CONFIG.reviews||{})};try{Object.assign(reviews,JSON.parse(localStorage.getItem('acnh-tree-reviews')||'{}'));}catch{}
+const views=[],textureLoader=new THREE.TextureLoader();
+let yaw=0,pitch=.12,distance=40,target=new THREE.Vector3(0,9,0),playing=false,frame=0,last=0,currentClip=null,shapeVisibility={};
+const tempP=new THREE.Vector3(),tempN=new THREE.Vector3();
+for(const key of ['before','after']){
+ const host=$(key),renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
+ const scene=new THREE.Scene();scene.background=new THREE.Color('#18252d');
+ const camera=new THREE.PerspectiveCamera(35,1,.01,2000),group=new THREE.Group();scene.add(group);
+ scene.add(new THREE.HemisphereLight(0xd6ebff,0x55503c,2));
+ const sun=new THREE.DirectionalLight(0xffefcf,2.3);scene.add(sun);
+ const grid=new THREE.GridHelper(40,20,0x52716d,0x30444b);scene.add(grid);
+ const textures={};
+ views.push({key,host,renderer,scene,camera,group,sun,textures,meshes:[],model:null});
+ const canvas=renderer.domElement;let pointer=null;
+ canvas.addEventListener('pointerdown',e=>{pointer={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);});
+ canvas.addEventListener('pointermove',e=>{if(!pointer)return;const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer={x:e.clientX,y:e.clientY};
+  if(e.shiftKey){const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0),up=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,1);target.addScaledVector(right,-dx*distance/800).addScaledVector(up,dy*distance/800);}
+  else {yaw-=dx*.008;pitch=Math.max(-1.55,Math.min(1.55,pitch+dy*.008));}
+ });
+ for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,()=>pointer=null);
+ canvas.addEventListener('wheel',e=>{e.preventDefault();distance=Math.max(.2,Math.min(600,distance*Math.exp(e.deltaY*.001)));},{passive:false});
+}
+function activeModel(){return DATA.before.models[$('model').value];}
+function reviewKey(){return (DATA?.meta?.file||DATA?.after.path||'')+'/'+$('model').value;}
+function refreshReview(){const review=reviews[reviewKey()]||{};$('review').value=review.after_sha256===DATA.after.sha256?review.status||'unreviewed':'unreviewed';$('note').value=review.note||'';}
+function saveReview(){reviews[reviewKey()]={status:$('review').value,note:$('note').value,after_sha256:DATA.after.sha256};try{localStorage.setItem('acnh-tree-reviews',JSON.stringify(reviews));}catch{}}
+$('review').onchange=saveReview;$('note').oninput=saveReview;
+$('exportReviews').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(reviews,null,2)],{type:'application/json'}));a.download='tree-reviews.json';a.click();URL.revokeObjectURL(a.href);};
+function setAsset(data,keepModel=false){
+ const previousModel=$('model').value;data.stock ||= data.before;data.before=$('baseline').value==='previous'&&data.previous?data.previous:data.stock;
+ DATA=data;$('model').replaceChildren();
+ const modelNames=Object.keys(DATA.before.models).filter(n=>DATA.after.models[n]);
+ for(const name of modelNames)$('model').add(new Option(name,name));
+ $('model').value=keepModel&&modelNames.includes(previousModel)?previousModel:modelNames.find(n=>/4(?:Snow|Sakura)?Node$/.test(n))||modelNames.find(n=>!n.includes('Stump'))||modelNames[0];
+ $('before').querySelector('.badge').textContent=$('baseline').value==='previous'&&data.previous?'BEFORE · previous review':'BEFORE · stock';
+ for(const view of views){for(const texture of Object.values(view.textures))texture.dispose();view.textures={};
+  for(const [name,url] of Object.entries(DATA[view.key].textures)){
+   const tex=textureLoader.load(url);tex.flipY=false;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;if(name.endsWith('_Alb'))tex.colorSpace=THREE.SRGBColorSpace;view.textures[name]=tex;
+  }
+ }
+ $('assetStatus').textContent=DATA.meta?.status==='retained'?'Original retained · '+(DATA.meta.reason||'Existing geometry preserved'):'360° foliage candidate · '+(DATA.meta?.file||'Oak');
+ $('sources').textContent=['before','after'].map(k=>`${k}: ${DATA[k].path}\nSHA256: ${DATA[k].sha256}`).join('\n\n');
+ loadModel();
+}
+function selectAsset(index){
+ assetIndex=(index+CONFIG.assets.length)%CONFIG.assets.length;$('asset').value=String(assetIndex);
+ $('catalogSummary').textContent=`Loading ${assetIndex+1} / ${CONFIG.assets.length}…`;playing=false;const version=++loadVersion;
+ const script=document.createElement('script');script.src=CONFIG.assets[assetIndex].data;
+ script.onload=()=>{if(version===loadVersion){setAsset(window.TREE_ASSET);$('catalogSummary').textContent=`${assetIndex+1} / ${CONFIG.assets.length} assets · ${CONFIG.modelCount} models`;}script.remove();};
+ script.onerror=()=>{const box=$('error');box.style.display='block';box.textContent='Could not load this tree. Keep the assets folder beside index.html.';script.remove();};document.body.appendChild(script);
+}
+function fit(){
+ const box=new THREE.Box3();for(const view of views){view.group.updateMatrixWorld(true);box.expandByObject(view.group);}
+ if(!box.isEmpty()){box.getCenter(target);distance=Math.max(3,box.getSize(new THREE.Vector3()).length()*1.65);}
+}
+function updateMaterials(){for(const view of views)for(const mesh of view.meshes){
+ const mat=mesh.material,src=mesh.userData.source,base=src.name.split('__').pop();
+ mat.wireframe=$('wire').checked;mat.side=$('double').checked||src.displayFace==='both'?THREE.DoubleSide:src.displayFace==='back'?THREE.BackSide:THREE.FrontSide;
+ mat.map=$('textured').checked?view.textures[base+'_Alb']||view.textures[base+'_AlbGry']||null:null;
+ mat.color.setHex(mesh.userData.tint);if(mat.map&&view.textures[base+'_Alb']===mat.map)mat.color.setHex(0xffffff);
+ mat.alphaMap=$('textured').checked?view.textures[base+'_OP']||null:null;
+ mat.alphaTest=mat.alphaMap?.5:0;mat.needsUpdate=true;
+ mesh.visible=shapeVisibility[src.name]!==false&&($('double').checked||src.displayFace!=='none')&&(!src.fruitSpecies||(!currentClip&&src.fruitSpecies===$('fruit').value));
+}}
+function loadModel(){
+ playing=false;frame=0;shapeVisibility={};$('play').textContent='Play';
+ $('clip').replaceChildren(new Option('Bind pose',''));
+ for(const clip of activeModel().clips)$('clip').add(new Option(clip.name,clip.name));
+ $('motionNote').textContent=activeModel().clips.length?'Node models carry the game’s shake/cut skeleton. Select a clip and press Play.':'This is a static model. Select the corresponding Node model to play the recorded shake/cut reactions.';
+ $('shapes').replaceChildren();
+ const names=[...new Set(views.flatMap(v=>DATA[v.key].models[$('model').value].shapes.map(s=>s.name)))];
+ for(const name of names){
+  shapeVisibility[name]=!name.includes('Shadow');const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=shapeVisibility[name];
+  input.addEventListener('change',()=>{shapeVisibility[name]=input.checked;updateMaterials();});label.append(input,document.createTextNode(name));$('shapes').appendChild(label);
+ }
+ for(const view of views){
+  for(const mesh of view.meshes){view.group.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();}view.meshes=[];
+  view.model=DATA[view.key].models[$('model').value];
+  for(const src of view.model.shapes){
+   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(src.positions.flat(),3));geometry.setIndex(src.triangles.flat());
+   if(src.normals)geometry.setAttribute('normal',new THREE.Float32BufferAttribute(src.normals.flat(),3));else geometry.computeVertexNormals();
+   if(src.uv)geometry.setAttribute('uv',new THREE.Float32BufferAttribute(src.uv.flat(),2));
+    const color=src.fruitSpecies?0xffffff:src.name.includes('Shadow')?0x303b38:src.name.includes('WinterSnow')?0xffffff:src.name.includes('Trunk')?0x9e7953:src.name.includes('Sakura')?0xf5b5d2:src.name.includes('Back')?0x7eac5b:0xa5cf71;
+   const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color,roughness:.95}));mesh.userData.source=src;mesh.userData.tint=color;mesh.frustumCulled=false;
+   view.group.add(mesh);view.meshes.push(mesh);
+  }
+  const triangles=view.model.shapes.reduce((n,s)=>n+s.triangles.length,0),vertices=view.model.shapes.reduce((n,s)=>n+s.positions.length,0);
+  view.host.querySelector('.stats').textContent=`${vertices.toLocaleString()} vertices · ${triangles.toLocaleString()} triangles (all shapes)`;
+ }
+ const actions=(DATA.meta?.shapes||[]).filter(s=>s.model===$('model').value&&s.action!=='retained');
+ $('assetStatus').textContent=actions.length?'Modified ? '+[...new Set(actions.map(s=>s.action.replaceAll('_',' ')))].join(', '):'Original geometry retained for this model';
+ updateMaterials();selectClip();pose();fit();refreshReview();
+}
+function selectClip(){currentClip=activeModel().clips.find(c=>c.name===$('clip').value)||null;frame=0;playing=false;$('play').textContent='Play';$('frame').max=currentClip?.frames||1;$('play').disabled=!currentClip;$('restart').disabled=!currentClip;}
+function boneMatrices(model,clip,at){
+ const matrices=[];
+ for(let b=0;b<model.bones.length;b++){
+   const bone=model.bones[b],i=Math.min(clip?.frames||0,Math.floor(at)),j=Math.min(clip?.frames||0,i+1),f=at-i;
+   let values=bone.transform;
+   if(clip)values=clip.samples[i][b].map((v,k)=>v+(clip.samples[j][b][k]-v)*f);
+   const rotation=bone.quaternion?new THREE.Quaternion(...values.slice(3,7)):new THREE.Quaternion().setFromEuler(new THREE.Euler(values[3],values[4],values[5],'ZYX'));
+   const matrix=new THREE.Matrix4().compose(new THREE.Vector3(...values.slice(7,10)),rotation,new THREE.Vector3(...values.slice(0,3)));
+   if(bone.parent>=0)matrix.premultiply(matrices[bone.parent]);matrices.push(matrix);
+ }
+ return matrices;
+}
+function pose(){
+ for(const view of views){
+  const clip=view.model.clips.find(c=>c.name===currentClip?.name),matrices=boneMatrices(view.model,clip,frame);
+  const inverses=boneMatrices(view.model,null,0).map(m=>m.invert());
+  const skinMatrices=matrices.map((m,i)=>new THREE.Matrix4().multiplyMatrices(m,inverses[i]));
+  const blended=new THREE.Matrix4(),normalMatrix=new THREE.Matrix3();
+  for(const mesh of view.meshes){
+   const src=mesh.userData.source,positions=mesh.geometry.attributes.position,normals=mesh.geometry.attributes.normal;
+   if(src.fruitSpecies)mesh.visible=!currentClip&&src.fruitSpecies===$('fruit').value&&shapeVisibility[src.name]!==false&&($('double').checked||src.displayFace!=='none');
+   for(let i=0;i<src.positions.length;i++){
+    let matrix=matrices[src.bones[i]];
+    if(src.weights){blended.elements.fill(0);for(const [bone,weight] of src.weights[i])for(let k=0;k<16;k++)blended.elements[k]+=skinMatrices[bone].elements[k]*weight;matrix=blended;}
+    if(!matrix)throw Error(`Invalid bone for ${src.name}`);
+    tempP.fromArray(src.positions[i]).applyMatrix4(matrix);positions.setXYZ(i,tempP.x,tempP.y,tempP.z);
+    if(src.normals){normalMatrix.getNormalMatrix(matrix);tempN.fromArray(src.normals[i]).applyMatrix3(normalMatrix).normalize();normals.setXYZ(i,tempN.x,tempN.y,tempN.z);}
+   }
+   positions.needsUpdate=true;normals.needsUpdate=true;
+  }
+ }
+ $('frame').value=frame;$('time').textContent=currentClip?`${frame.toFixed(1)} / ${currentClip.frames} frames · ${(frame/30).toFixed(2)} s`:'Bind pose';
+}
+$('model').onchange=loadModel;$('clip').onchange=()=>{selectClip();pose();};
+$('baseline').onchange=()=>{if(DATA)setAsset(DATA,true);};
+for(const id of ['wire','double','textured','fruit'])$(id).onchange=updateMaterials;
+$('play').onclick=()=>{if(!currentClip)return;if(frame>=currentClip.frames)frame=0;playing=!playing;$('play').textContent=playing?'Pause':'Play';};
+$('restart').onclick=()=>{frame=0;pose();};$('frame').oninput=()=>{playing=false;$('play').textContent='Play';frame=+$('frame').value;pose();};
+$('front').onclick=()=>{yaw=0;pitch=.12;};$('back').onclick=()=>{yaw=Math.PI;pitch=.12;};$('side').onclick=()=>{yaw=Math.PI/2;pitch=.12;};$('top').onclick=()=>{yaw=0;pitch=1.5;};$('reset').onclick=fit;
+function tick(now){
+ requestAnimationFrame(tick);const dt=last?Math.min((now-last)/1000,.1):0;last=now;
+ if($('turn').checked)yaw+=dt*.35;
+ if(playing&&currentClip){frame+=dt*30*+$('speed').value;if(frame>currentClip.frames){if($('loop').checked)frame%=currentClip.frames;else{frame=currentClip.frames;playing=false;$('play').textContent='Play';}}pose();}
+ for(const view of views){
+  if(!view.model)continue;
+  const w=view.host.clientWidth,h=view.host.clientHeight;
+  view.renderer.setSize(w,h,false);view.camera.aspect=w/h;view.camera.updateProjectionMatrix();
+  view.camera.position.copy(target).add(new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(distance));view.camera.lookAt(target);
+  const angle=+$('light').value*Math.PI/180;view.sun.position.set(Math.sin(angle)*20,25,Math.cos(angle)*20);
+  view.renderer.render(view.scene,view.camera);
+ }
+}
+if(CONFIG.assets){$('catalogBar').hidden=false;for(let i=0;i<CONFIG.assets.length;i++)$('asset').add(new Option(CONFIG.assets[i].label,String(i)));$('asset').onchange=()=>selectAsset(+$('asset').value);$('previousAsset').onclick=()=>selectAsset(assetIndex-1);$('nextAsset').onclick=()=>selectAsset(assetIndex+1);selectAsset(0);}else setAsset(DATA);
+requestAnimationFrame(tick);
+</script></html>

@@ -16,9 +16,10 @@ editing mode to enter or exit.
 
 The camera retains its orientation when leaving outdoor play. Active layout
 cursors, dialogue page handlers, and text entry suspend camera input and movement
-rotation; the regular game input then passes through. These signals do not yet
-prove every overlay or cutscene is covered. Outdoor/menu/indoor transitions require
-live verification before treating the control integration as complete.
+rotation; the regular game input then passes through. Installed-build harness
+checks cover outdoor orbit, inventory, settled tent interiors, native indoor
+camera rotation, the phone UI and return outdoors. These checks do not yet prove
+every overlay, dialogue interaction or cutscene is covered.
 
 ## Visibility work in progress
 
@@ -34,9 +35,9 @@ camera303 terrain scale remains a separate local experiment in that fallback.
 Live inspection identified camera303's field projection as 31 degrees with a
 100000-unit far plane. Its UI and minimap projections are excluded. Analytical
 ground-plane checks and camera-space sample sweeps cover yaw, pitch, zoom, aspect,
-and ground/canopy height. The corrected projection filter still needs a live
-reload and coverage/performance comparison. The height band is conservative for
-ordinary terrain; compatibility with the game's distant drum deformation remains
+and ground/canopy height. Live coverage and performance comparisons, including
+the installed build, are recorded below. The height band is conservative for
+ordinary terrain; broader coverage of the game's distant drum deformation remains
 part of the grounding investigation.
 
 The local parameter investigation identified `Param/Gfx/ActorDistantField.byml`
@@ -46,13 +47,15 @@ combines drum rotation and a quadratic vertical offset with camera-relative
 placement; its relationship to foreground terrain still needs validation before
 changing distant-scenery placement. Fog palette parameters exist separately;
 increasing fog alone does not establish lower rendering cost or correct LOD.
+Subsequent asset inspection identifies `FldDistantView*` as separate background
+islands, rather than playable-island terrain or a general tree LOD system.
 
 Both field-camera branches now receive the orbit, including the temporary
 stack-based LookAtCamera returned to main+0x7a88a4. Previously only the heap camera
 in the other branch was adjusted, leaving an alternate world/drum matrix in the
 original orientation. The temporary object's writable memory span is checked and
 its inputs are restored after matrix generation, as for heap cameras. This fix
-compiles and its scope classification is tested; its visual effect is unverified.
+is compiled, scope-tested and exercised by the live orbit captures recorded below.
 
 The view-relative fog adapter targets Park UBER's vertex dark-fog plane. Its host
 uniform upload replaces the plane normal with negative view Z of the same length,
@@ -853,3 +856,21 @@ The previous runtime is backed up in
 normal configuration and actual save are unchanged. The isolated harness was
 stopped after validation. Heavy-view performance, distance detail/grounding,
 night horizon and broader weather coverage remain open.
+
+### Installed grounding coverage checkpoint
+
+The installed 5625d511 runtime and official 68e6eae guest library were checked
+at maximum zoom from a steep overhead pose, then an oblique pose, while orbiting
+the starting island location. Terrain remains continuous beneath foreground
+trees and buildings across the captured headings, and the shoreline remains
+covered. No foreground floating was reproduced in this test. Distant terrain
+cutoffs/silhouettes remain visible through fog, so this is not full acceptance
+of distant grounding or detail selection.
+
+Evidence is `grounding-installed-result.json`, `grounding-overhead-installed.log`,
+`grounding-overhead-installed-orbit-small.png` and
+`grounding-oblique-installed-orbit-small.png` under the private test root.
+The JSON pins executable/library hashes and records the input sequences and
+full-resolution contact sheets. This test covers one island position in daytime;
+it makes no new performance or weather-coverage claim. No runtime or asset change
+was made for the test, and only the isolated save was used.

@@ -406,3 +406,38 @@ windows measured about 55-56 FPS. Evidence: installed-camera-smoke.log,
 installed-smoke-result.json and shots/installed-camera-smoke_03181.png.
 Both CTests (freecamera/thread_time) and both live-harness tests passed.
 The test process was stopped after capture.
+
+### Outer ocean coverage
+
+The exposed seabed at maximum zoom is now corrected in the local freecamera
+overlay. The confirmed ocean surface uses vertex 911007845f398fde / fragment
+fa26b7e08e326558, with shoreline variant 0abedcc9ad8d0174 / 613329b58bbd1870.
+Disabling those two fragment shaders removes the sea while retaining the
+shore and seabed (`sea-shader-confirmation_03001.png`). A bounded transform
+capture (`sea-transform.log`) and matching index counts identify the actual
+`FldOutS03`, airport, rocky coast and corner meshes, rather than only SeaOnly
+archives. For example, the south tile is centered at Z=1040 and its native water
+ends at local Z=240, exposing the finite surface when the eye moves farther out.
+
+`tools/build_camera_ocean.py` extends the outer portion of native water and its
+underside from 240 to 800 units. It preserves the inner 80 units, shoreline,
+materials, UVs, triangle counts and collision data. Position, submesh bounds and
+radius writes are byte-audited against the original archives. All 116 generated
+archives match the private test overlay byte-for-byte and are installed under
+`private/game/mods/freecamera/romfs/Model`; the audit/provenance report is
+`private/game/mods/freecamera/ocean-extension.json`. Installation records are in
+`private/freecamera/install-backups/ocean-*/manifest.json`.
+
+The maximum-zoom forward capture (`ocean-shore-forward_03541.png`) no longer
+shows the dark seabed strip, and the full low-angle orbit
+(`ocean-shore-orbit-small.png`) retains coverage around the tested island.
+This establishes one island layout in daylight; other layouts and storm waves
+are not yet visually verified. There are no added triangles or draw calls,
+although enlarged bounds can affect native culling. This run is not a matched
+performance comparison. Distant scenery placement/LOD and broader weather
+acceptance remain outstanding.
+
+The high-angle capture (ocean-shore-high_07741.png) also retains nearby ocean
+coverage, but exposes distant tree/terrain silhouettes and missing ground beyond
+the resident island region. This is evidence for the remaining distant-grounding
+and LOD work, not a pass for overall high-angle scenery.

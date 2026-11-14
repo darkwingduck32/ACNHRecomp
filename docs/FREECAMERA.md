@@ -1216,3 +1216,15 @@ removed from source and the candidate runtime.
 The user additionally reports trees disappearing until a collision occurs.
 That issue is queued after the water fix; it has not yet been reproduced or
 attributed to a particular culling change.
+
+The water candidate is installed in `private/acnh/build/acnh.exe` with its
+matching guest library. Runtime SHA256 is
+`d37b54b51dae2125ca0992f173c7b413b684fb51edd825c998ea7070cf205aae`; guest SHA256 is
+`019dac144bcf642b7a84e226d1b7f950b3e4ad911b25fb4d99c907bddf87522b`.
+The previous pair is backed up in
+`private/freecamera/install-backups/20261115-114940-water`; `install-water.json`
+records promotion. Installed-build checks passed for inventory, tent entry,
+native indoor camera rotation, exit, and restored outdoor orbit. Screenshots:
+`water-installed-inventory_03121.png`, `water-installed-interior_04021.png`,
+`water-installed-indoor-camera_04681.png`, `water-installed-return_05881.png`,
+and `water-installed-field-orbit_14761.png`. No tree-culling change is included.

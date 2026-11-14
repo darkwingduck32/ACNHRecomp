@@ -128,3 +128,19 @@ Existing zero-CPU log entries must not be used to infer a GPU bottleneck. The
 capture also includes 5760x3240 targets; the saved configuration requests 2160p
 with 2x supersampling. A controlled CPU/wall comparison is still required before
 choosing between submission, detail-level, shadow and pixel-cost optimizations.
+
+## Prepared live validation
+
+The existing `NX_INPUT`/`input_live` harness now accepts `RUp`, `RDown`, `RLeft`,
+`RRight`, `StickL` and `StickR`. Right-stick commands pass through normal camera
+input, including UI gating and click/hold gesture handling. Ordinary input is
+unchanged when no script is supplied.
+
+`tools/play/scenarios/freecamera_sweep.txt` is a stationary outdoor low/high-angle
+sweep with settling periods and a final reset. It must start with outdoor control
+and no dialogue/menu, in an isolated save copy. Generate it with `tools/play/gen.py`
+for inspection before executing it through the live harness. Camera rotation uses
+wall time, so actual captured headings must be checked rather than assuming a
+frame count always corresponds to 90 degrees. This scenario is prepared and
+compiled, but has not been executed. Separate movement/menu, zoom, transitions,
+weather and geometry-grounding tests remain necessary.

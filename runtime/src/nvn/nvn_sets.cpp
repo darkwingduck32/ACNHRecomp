@@ -441,15 +441,15 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     if (p && size>=13*16 && s->stage==ShaderStage::Vertex &&
         b.nvn.source==NvnSource::UniformBlock && b.nvn.index==2 &&
         freecamera_field_active() && freecamera_fog_shader(s->hash) && !written_overlaps(p,size)) {
-        float fog[12], normal[3];
+        float fog[12], plane[4];
         std::memcpy(fog,p+10*16,sizeof fog);
-        if (freecamera::view_fog_normal(fog+4,fog[3],fog[8],normal)) {
+        if (freecamera::view_fog_plane(fog+4,fog[3],fog[8],freecamera_zoom_depth_offset(),plane)) {
             BufMemo& m=(*g_fog_memo)[(uintptr_t(p)>>4 ^ uintptr_t(p)>>15 ^ size)&255];
             if (m.p==p && m.size==size && m.n==n && m.epoch==(*g_upload_epoch)) return m.info;
             Upload u=upload_alloc(n,256);
             std::memset(u.ptr,0,n);
             std::memcpy(u.ptr,p,size);
-            std::memcpy(static_cast<uint8_t*>(u.ptr)+11*16,normal,sizeof normal);
+            std::memcpy(static_cast<uint8_t*>(u.ptr)+11*16,plane,sizeof plane);
             m={p,size,n,(*g_upload_epoch),{u.buffer,u.offset,n}};
             return m.info;
         }

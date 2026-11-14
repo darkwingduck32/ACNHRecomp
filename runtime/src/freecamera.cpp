@@ -1,5 +1,6 @@
 #include "freecamera.h"
 #include "freecamera_math.h"
+#include "freecamera_visibility.h"
 #include "freecamera_fruit.h"
 #include "config.h"
 #include "kernel.h"
@@ -22,10 +23,52 @@ freecamera::Orbit orbit;
 freecamera::Controls controls;
 Fn original_lookat = nullptr;
 Fn original_float_storage = nullptr, original_terrain = nullptr;
+Fn original_projection = nullptr;
 thread_local bool wrapped_lookat = false;
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
 std::atomic<uint64_t> ui_frame{~uint64_t(0)};
 float field_x = 0, field_z = 0;
+std::array<float,3> field_eye{}, field_target{};
+bool field_view_valid = false;
+struct Projection {
+    float tan_half, aspect, offset_x, offset_y;
+    uint64_t frame, updates;
+};
+std::unordered_map<uint64_t,Projection> projections;
+bool perspective_bounds(float reach, freecamera::Bounds& bounds) {
+    if (!field_view_valid) return false;
+    const uint64_t now=g_frame.load(std::memory_order_relaxed);
+    const Projection* best=nullptr;
+    for (const auto& [address,p]:projections)
+        if (p.frame<=now && now-p.frame<=2 && (!best || p.updates>best->updates)) best=&p;
+    if (!best) return false;
+    const bool valid=freecamera::view_bounds(field_eye.data(),field_target.data(),best->tan_half,best->aspect,
+        best->offset_x,best->offset_y,reach,field_target[1]-48,field_target[1]+72,20,bounds);
+    static const bool trace=std::getenv("NX_FREECAMERA_TRACE")!=nullptr;
+    static uint64_t next_trace=0;
+    if (valid && trace && now>=next_trace) {
+        next_trace=now+120;
+        log("freecamera: perspective tan/aspect %.3f %.3f reach %.1f eye %.1f %.1f %.1f target %.1f %.1f %.1f bounds %.1f %.1f %.1f %.1f",
+            double(best->tan_half),double(best->aspect),double(reach),double(field_eye[0]),double(field_eye[1]),double(field_eye[2]),
+            double(field_target[0]),double(field_target[1]),double(field_target[2]),double(bounds.left),double(bounds.right),double(bounds.near),double(bounds.far));
+    }
+    return valid;
+}
+void projection_update(CPU& cpu) {
+    const uint64_t object=cpu.x[0], caller=cpu.x[30]-kModuleBase;
+    original_projection(cpu); // includes the existing aspect-ratio/jitter hook
+    if (caller==0x376d214 || caller==0x376d224) return; // minimap
+    const VmInfo vm=vm_query(object);
+    if (!(vm.perm&1) || object<vm.addr || vm.size<0xbc || object-vm.addr>vm.size-0xbc) return;
+    const float far=ld<float>(object+0x9c), fov=ld<float>(object+0xa0);
+    if (!freecamera::outdoor_projection(ld<float>(object+0x98),far,fov)) return;
+    std::lock_guard guard(lock);
+    const uint64_t now=g_frame.load(std::memory_order_relaxed);
+    if (projections.size()>32) projections.clear();
+    auto& p=projections[object];
+    const uint64_t updates=(p.frame<=now && now-p.frame<=2)?p.updates+1:1;
+    p={ld<float>(object+0xac),ld<float>(object+0xb0),ld<float>(object+0xb4),ld<float>(object+0xb8),now,updates};
+}
 struct Visibility {
     uint64_t group;
     int family;
@@ -95,7 +138,11 @@ void update_visibility(bool on) {
         }
         if (!valid) continue;
         freecamera::Bounds b{v.base[0], v.base[1], v.base[2], v.base[3]};
-        if (on) b = freecamera::rotate_bounds(b, orbit.yaw);
+        if (on) {
+            const float reach=std::max({b.left,b.right,b.near,b.far});
+            // Extensions are padding, not an independently visible region.
+            if (v.family==4 || !perspective_bounds(reach,b)) b = freecamera::rotate_bounds(b, orbit.yaw);
+        }
         const float values[] = {b.left, b.right, b.near, b.far};
         if (!v.initialized && on) log("freecamera: visibility family %d registered: L/R/N/F %.1f %.1f %.1f %.1f", v.family,
             double(v.base[0]), double(v.base[1]), double(v.base[2]), double(v.base[3]));
@@ -120,6 +167,21 @@ void terrain_update(CPU& cpu) {
     if (found != terrain.end() && current == found->second.last) current = found->second.base;
     const int64_t w = int64_t(current[2])-current[0]+1, d = int64_t(current[3])-current[1]+1;
     if (w < 18 || w > 76 || d < 6 || d > 28) return;
+    // Cover the same height-band footprint as foreground/furniture. This uses
+    // camera pitch, zoom, aspect and yaw, not a scaled stock terrain rectangle.
+    float reach=0;
+    for (const Visibility& v:visibility) if (v.initialized)
+        reach=std::max(reach,*std::max_element(v.base.begin(),v.base.end()));
+    freecamera::Bounds footprint;
+    if (reach>=20 && perspective_bounds(reach,footprint)) {
+        if (terrain.size()>16) terrain.clear();
+        const std::array<int32_t,4> result{
+            int32_t(std::floor((field_x-footprint.left)/10)),int32_t(std::floor((field_z-footprint.far)/10)),
+            int32_t(std::ceil((field_x+footprint.right)/10)),int32_t(std::ceil((field_z+footprint.near)/10))};
+        terrain[object]=Terrain{current,result};
+        lo[0]=result[0];lo[1]=result[1];hi[0]=result[2];hi[1]=result[3];
+        return;
+    }
     if (std::abs(orbit.yaw) < .00001f) {
         lo[0] = current[0]; lo[1] = current[1]; hi[0] = current[2]; hi[1] = current[3];
         terrain[object] = Terrain{current, current};
@@ -194,6 +256,12 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
         break;
     }
     for (size_t i = 0; i < module->func_count; i++) {
+        if (functions[i].offset == 0x37e5968 && ld<uint32_t>(module->base+0x37e5968)==0xbd409800 &&
+            ld<uint32_t>(module->base+0x37e596c)==0x1e2c1003) {
+            original_projection=functions[i].fn;
+            functions[i].fn=projection_update;
+            log("freecamera: perspective visibility projection capture installed");
+        }
         if (functions[i].offset == 0x60cba4 && ld<uint32_t>(module->base+0x60cba4) == 0x91009000 && ld<uint32_t>(module->base+0x60cba8) == 0xd65f03c0) {
             original_float_storage = functions[i].fn;
             functions[i].fn = float_storage;
@@ -255,14 +323,20 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
         field_x = ld<float>(cam+0x44);
         field_z = ld<float>(cam+0x4c);
     }
-    update_visibility(on);
-    if (!wrapped_lookat || !on || orbit.identity()) return;
     float pos[3], at[3];
     std::memcpy(pos, reinterpret_cast<void*>(cam + 0x38), sizeof pos);
     std::memcpy(at, reinterpret_cast<void*>(cam + 0x44), sizeof at);
     for (int i = 0; i < 3; i++) if (!std::isfinite(pos[i]) || !std::isfinite(at[i])) return;
     float result[3];
-    if (!orbit.apply(pos, at, result)) return;
+    std::memcpy(result,pos,sizeof result);
+    if (wrapped_lookat && on && !orbit.identity() && !orbit.apply(pos, at, result)) return;
+    if (caller != 0x7a8830) {
+        std::copy_n(result,3,field_eye.begin());
+        std::copy_n(at,3,field_target.begin());
+        field_view_valid=true;
+    }
+    update_visibility(on);
+    if (!wrapped_lookat || !on || orbit.identity()) return;
     std::memcpy(reinterpret_cast<void*>(cam + 0x38), result, sizeof result);
     // Orbit about the world's vertical axis. The stock camera's tilted up vector
     // produces roll as the yaw passes the sides of the island.

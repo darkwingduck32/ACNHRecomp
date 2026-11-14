@@ -651,3 +651,33 @@ break batching. Any implementation must establish the complete shader read
 footprint, reject unknown/dynamic pointer use, preserve zero-padding semantics,
 and retain the existing epoch/GPU-write guards. A visual match or identical
 whole-buffer sample alone does not establish those conditions.
+
+The standalone `uniform_reads` tests now prove scalar/vector read footprints
+for the restricted translated c[] layout, reject dynamic indexing and pointer
+escapes, and check truncated-buffer zero padding. `uniform_reads_acnh` checks
+the two actual shader binaries against offsets 128 and 136. The experimental
+runtime comparison initially contained a loop-bound error: a two-stage merge
+snapshot was traversed using the full six-stage state count. Those earlier
+comparison figures are not reliable optimization evidence. A regression test
+now covers snapshots with fewer stages than the current state.
+
+After correcting the bound, a fresh six-interval-per-mode stationary A/B test
+averaged 50.225 FPS / 18.271 ms replay / 20.107 MB uploaded with comparison off,
+and 50.078 FPS / 18.357 ms / 20.331 MB with it on. Evidence:
+`merge-reads-bounded-ab-comparison.json`; intervals 2400–9599, with the first
+240 frames of each interval excluded. There is no measured benefit, so the
+runtime integration is removed and archived privately in
+`merge-read-footprint-experiment.patch`. Only the standalone proof utility and
+its tests are retained; the installed game is unchanged.
+
+`merge-read-values.log` establishes why ignoring unused rows is insufficient:
+shader `2330b41795e4250d` actually reads palette values 0.09375, 0.03125 and
+0.21875 at c4 offset 128 across consecutive draws. Shader `63a579cd6aed8229`
+reads changing values around 0.36–0.39 at offset 136. These are used values,
+not merely different source addresses or unused transforms. Further batching
+must preserve per-instance fragment constants. The current merger gathers
+only vertex constants and its SPIR-V rewrite supplies `InstanceIndex` only
+to the vertex stage. Extending that path requires an unused flat varying
+between stages, fragment-block gathering, pipeline-key/module support and
+paired shader validation. Temporal motion already reserves locations 30/31;
+any additional varying must avoid those and the original shader interfaces.

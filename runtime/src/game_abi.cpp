@@ -19,7 +19,7 @@
 extern "C" NX_GAME_EXPORT const char* nx_game_abi() { return NX_GAME_ABI; }
 
 // A guest longjmp: thrown here so that the exception's type is this library's, the one its setjmp frames catch.
-extern "C" NX_GAME_EXPORT [[noreturn]] void nx_game_longjmp(uint64_t buf, uint64_t val) {
+extern "C" [[noreturn]] NX_GAME_EXPORT void nx_game_longjmp(uint64_t buf, uint64_t val) {
     throw nx::LongJmp{buf, val};
 }
 

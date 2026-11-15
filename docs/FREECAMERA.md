@@ -1363,3 +1363,20 @@ and through an eight-frame orbit (`soft-lighting-title_01681.png`,
 `soft-lighting-low_04141.png`, `soft-lighting-orbit-review.png`). Water retains
 wave detail and highlights, with reduced broad white glare. The contact sheet's
 ninth empty tile is padding. Weather/night coverage remains untested.
+
+### Upper-corner surface coverage (2026-11-15)
+
+Land and water submission now use the camera footprint for the default/reset
+orbit as well as modified orbits. Camera303 already changes the default/title
+camera, so the previous identity-orbit early returns retained undersized stock
+surface rectangles on the title screen. Terrain, land and water footprints now
+union with the native tile rectangle, preventing finite-distance camera bounds
+from reducing native coverage at other angles.
+
+The camera test passes with the traced title pose, both upper corners, rotated
+coverage containment and a larger native rectangle. A separate hidden session
+verified the title screen, outdoor entry, shallow orbit and reset; captures are
+`private/freecamera/perf-test/shots/corners-title_01561.png`,
+`corners-enter_03481.png` and `corners-orbit_04056.png`. The title trace confirms
+land and water expansion without camera input. This covers the tested poses;
+all islands and camera combinations have not been exhaustively checked.

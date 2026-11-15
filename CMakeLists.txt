@@ -178,7 +178,12 @@ set(NX_IMGUI_DIR "${CMAKE_SOURCE_DIR}/private/third_party/imgui" CACHE PATH "Dea
 add_library(nx_save_storage STATIC runtime/src/save_storage.cpp runtime/src/save_profiles.cpp)
 target_include_directories(nx_save_storage PUBLIC ${CMAKE_SOURCE_DIR}/runtime/src)
 
-add_library(nx_mod_manager STATIC runtime/src/mod_manager.cpp)
+add_library(nx_mod_manager STATIC runtime/src/mod_manager.cpp runtime/src/mod_package.cpp)
+if(NX_TESTS AND NOT ANDROID)
+    add_executable(mod_package_test tests/mod_package_test.cpp launcher/save_log_stub.cpp)
+    target_link_libraries(mod_package_test PRIVATE nx_mod_manager)
+    add_test(NAME mod_package COMMAND mod_package_test)
+endif()
 target_include_directories(nx_mod_manager PUBLIC ${CMAKE_SOURCE_DIR}/runtime/src)
 target_link_libraries(nx_mod_manager PUBLIC nx_save_storage)
 if(WIN32)
@@ -262,6 +267,8 @@ foreach(mod ${NX_MODULES})
     endif()
 endforeach()
 
+include(runtime/src/features/camera/camera.cmake)
+
 set(NX_RUNTIME_SOURCES
     runtime/src/game_folder.cpp
     runtime/src/main.cpp
@@ -285,10 +292,6 @@ set(NX_RUNTIME_SOURCES
     runtime/src/hle_ro.cpp
     runtime/src/hle_vi.cpp
     runtime/src/hle_hid.cpp
-    runtime/src/freecamera.cpp
-    runtime/src/freecamera_ao.cpp
-    runtime/src/freecamera_fruit.cpp
-    runtime/src/freecamera_fog.cpp
     runtime/src/hle_hid_system_nfc.cpp
     runtime/src/hle_net.cpp
     runtime/src/hle_web.cpp
@@ -608,7 +611,7 @@ else()
     target_sources(${NX_GAME} PRIVATE runtime/src/ui/ui_stub.cpp)
 endif()
 target_sources(${NX_GAME} PRIVATE runtime/src/saves.cpp)
-target_link_libraries(${NX_GAME} PRIVATE nx_save_storage)
+target_link_libraries(${NX_GAME} PRIVATE nx_save_storage nx_camera nx_mod_manager)
 
 # Mbed TLS (Apache-2.0): the game's nn::ssl connections (NEX, the island services) and the signed account id_token
 # for Nextendo Online (docs/NEXTENDO.md). Fetched as a release archive on the first configure.

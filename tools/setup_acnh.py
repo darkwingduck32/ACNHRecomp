@@ -184,6 +184,21 @@ def free_mb():
         return next(int(l.split()[1]) for l in f if l.startswith("MemAvailable:")) // 1024
 
 
+def hook_profile_fingerprint(path):
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    from recomp.hooks import hooks_fingerprint
+    return hooks_fingerprint(path)
+
+
+def hook_profile_mtime(path):
+    # This script can also be launched directly from tools/, outside Python's repo-root path.
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    from recomp.hooks import hooks_mtime
+    return hooks_mtime(path)
+
+
 def msvc_env():
     """The environment of a "x64 Native Tools" prompt (Visual Studio's vcvars64.bat), LLVM first on PATH."""
     vswhere = os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe")
@@ -565,6 +580,8 @@ def main():
         if mod == "main" and version in ("3.0.2", "3.0.3") and os.path.exists(pch):
             h += ["--variant", pch]  # the native 60 FPS variant (tools/setup_60fps.sh; tmouh's patch has both builds)
         profile = " ".join(h) or "none"
+        if mod == "main" and hooks != "-":
+            profile += " hooks-sha256=" + hook_profile_fingerprint(os.path.join(ROOT, hooks))
         gen = os.path.join(G, "gen", mod)
         table, prof_file = os.path.join(gen, "table.cpp"), os.path.join(gen, "profile.txt")
         if os.path.exists(table) and not os.path.exists(prof_file):  # recompiled before profiles existed: 3.0.2 as is
@@ -572,7 +589,7 @@ def main():
         stale = (not os.path.exists(table) or force("recomp")
                  or recomp_mtime > os.path.getmtime(table)
                  or open(prof_file).read().strip() != profile
-                 or (hooks != "-" and mod == "main" and os.path.getmtime(os.path.join(ROOT, hooks)) > os.path.getmtime(table)))
+                 or (hooks != "-" and mod == "main" and hook_profile_mtime(os.path.join(ROOT, hooks)) > os.path.getmtime(table)))
         log = os.path.join(logs, f"recomp_{mod}.log")
         pre = prepared_gen(G, mod, profile) if stale else None
         if pre:

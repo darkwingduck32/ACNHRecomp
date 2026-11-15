@@ -78,8 +78,8 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     e = emit.Emitter(an, prefix=name)
     if args.hooks:
-        with open(args.hooks) as hf:
-            e.hooks = {int(ln.split("#")[0], 16) for ln in hf if ln.split("#")[0].strip()}
+        from .hooks import read_hooks
+        e.hooks = read_hooks(args.hooks)
         print(f"  {len(e.hooks)} hooks from {args.hooks}")
     funcs = an.functions
     global _variant

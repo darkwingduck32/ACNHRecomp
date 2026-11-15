@@ -1,9 +1,9 @@
-#include "freecamera_math.h"
-#include "freecamera_fruit_layout.h"
-#include "freecamera_visibility.h"
-#include "freecamera_fog.h"
-#include "freecamera_sky.h"
-#include "freecamera_ao_math.h"
+#include "features/camera/freecamera_math.h"
+#include "features/camera/freecamera_fruit_layout.h"
+#include "features/camera/freecamera_visibility.h"
+#include "features/camera/freecamera_fog.h"
+#include "features/camera/freecamera_sky.h"
+#include "features/camera/freecamera_ao_math.h"
 #include <sstream>
 #include <cstdio>
 #include <cstdlib>
@@ -185,6 +185,25 @@ int main() {
                       "Visibility must contain every projected sample across yaw, pitch, zoom and height");
         }
     }
+    // Default/title camera303 pose from the live trace. No user orbit is
+    // necessary for its shallow view to exceed native surface job bounds.
+    const float title_eye[]{725,57.6f,1026.2f}, title_target[]{725,8,890};
+    Bounds title_view;
+    check(view_bounds(title_eye,title_target,.306f,1.778f,0,0,690,-40,80,20,title_view),
+          "Default title camera must provide a surface footprint");
+    const std::array<int32_t,4> native_surface{52,49,92,98};
+    const auto title_tiles=expand_surface_tiles(native_surface,725,890,title_view);
+    check(title_tiles[0]<native_surface[0] && title_tiles[2]>native_surface[2] && title_tiles[1]<native_surface[1],
+          "Unmodified orbit must expand both title screen corners and distant surface");
+    for (int yaw=0;yaw<360;yaw+=15) {
+        const auto tiles=expand_surface_tiles(native_surface,725,890,rotate_bounds(title_view,yaw*pi/180));
+        check(tiles[0]<=native_surface[0] && tiles[1]<=native_surface[1] &&
+              tiles[2]>=native_surface[2] && tiles[3]>=native_surface[3],
+              "Camera footprint must never reduce native surface coverage at any heading");
+    }
+    const std::array<int32_t,4> negative_tiles{-100,-100,100,100};
+    check(expand_surface_tiles(negative_tiles,-5,-5,Bounds{20,20,20,20})==negative_tiles,
+          "A smaller camera footprint must preserve an existing larger rectangle");
     check(!view_bounds(ground_eye,ground_target,0,1,0,0,300,0,0,0,footprint),"Invalid projection must use fallback");
     float horizon_height = -1;
     check(sky_horizon_height(-pi/6, 0, .3f, horizon_height) == false,

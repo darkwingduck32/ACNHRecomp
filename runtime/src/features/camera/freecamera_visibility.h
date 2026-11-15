@@ -3,6 +3,16 @@
 #include <array>
 
 namespace nx::freecamera {
+// Expand a native inclusive 10-unit tile rectangle to cover the camera view.
+// Retain native coverage: its jobs can include off-screen dependencies, and a
+// finite camera distance budget must never trim those away at screen corners.
+inline std::array<int32_t,4> expand_surface_tiles(const std::array<int32_t,4>& native,
+                                                float x, float z, const Bounds& view) {
+    return {std::min(native[0],int32_t(std::floor((x-view.left)/10))),
+            std::min(native[1],int32_t(std::floor((z-view.far)/10))),
+            std::max(native[2],int32_t(std::ceil((x+view.right)/10))),
+            std::max(native[3],int32_t(std::ceil((z+view.near)/10)))};
+}
 inline bool outdoor_projection(float near_plane, float far_plane, float fov) {
     // Live 3.0.3 field: far=100000, fov=31 degrees with camera303. Do not
     // inherit the temporal renderer's <0.5-radian stock-camera assumption.

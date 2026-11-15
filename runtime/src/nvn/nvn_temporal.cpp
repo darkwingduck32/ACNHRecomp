@@ -28,7 +28,7 @@
 #include <vector>
 
 #include "config.h"
-#include "freecamera.h"
+#include "features/camera/freecamera.h"
 #include "kernel.h"
 #include "nvn_shaders.h"
 #include "nvn_temporal.h"

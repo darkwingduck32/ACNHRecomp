@@ -1,3 +1,5 @@
+#include "package.h"
+#include "version_303.h"
 // The game shares these origins between attached fruit and fruit-drop setup.
 // Keep the model-local table, rather than translating the fruit mesh (which is
 // also used for loose items). Opt-in profiles accompany the reviewed tree mod.
@@ -15,7 +17,7 @@ std::mutex fruit_lock;
 freecamera::FruitLayouts layouts;
 uint64_t oak_table = 0;
 int active_variant = -1;
-constexpr uint64_t palm_offset=0x40746a8, oak_offset=0x40746c0;
+constexpr uint64_t palm_offset=camera303::offset_40746a8, oak_offset=camera303::offset_40746c0;
 
 void select_variant(int variant) {
     if (!oak_table || variant<0 || variant==active_variant) return;
@@ -29,7 +31,7 @@ void select_variant(int variant) {
 
 void freecamera_fruit_install(const ModuleInfo* module, bool enabled) {
     if (!enabled || std::strcmp(module->name,"main")) return;
-    std::ifstream input(plat::data_root()+"/mods/freecamera/tree_fruit_offsets.txt");
+    std::ifstream input(camera_profile_path("tree_fruit_offsets.txt"));
     if (!input) return;
     freecamera::FruitLayouts candidate;
     if (!freecamera::read_fruit_layouts(input,candidate)) {
@@ -39,9 +41,9 @@ void freecamera_fruit_install(const ModuleInfo* module, bool enabled) {
     // Check the complete native table AND its consumer instructions. Other game
     // versions/layouts fail closed; no executable or game files are rewritten.
     if (oak_offset+sizeof(freecamera::stock_oak_fruit)>module->ro+module->ro_size ||
-        palm_offset<module->ro || module->text_size<0x21b747c ||
-        ld<uint32_t>(module->base+0x10e669c)!=0xd10483ff ||
-        ld<uint32_t>(module->base+0x21b7458)!=0xbd400100 ||
+        palm_offset<module->ro || module->text_size<camera303::offset_21b747c ||
+        ld<uint32_t>(module->base+camera303::offset_10e669c)!=camera303::instruction_d10483ff ||
+        ld<uint32_t>(module->base+camera303::offset_21b7458)!=camera303::instruction_bd400100 ||
         std::memcmp(reinterpret_cast<void*>(module->base+palm_offset),freecamera::stock_palm_fruit.data(),sizeof(freecamera::stock_palm_fruit)) ||
         std::memcmp(reinterpret_cast<void*>(module->base+oak_offset),freecamera::stock_oak_fruit.data(),sizeof(freecamera::stock_oak_fruit))) {
         log("freecamera: fruit placement patch skipped: 3.0.3 fingerprint mismatch");

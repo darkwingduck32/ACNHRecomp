@@ -1,0 +1,10 @@
+# Feature-owned instruction hooks; imported by the base game profile.
+37e4724  # LookAtCamera leaf return: restore direct-call camera inputs (freecamera.cpp)
+1462bb8  # terrain instance capacity before CPU/GPU allocation (freecamera.cpp)
+11fe020  # land bounds before worker submission (freecamera.cpp)
+14b76e8  # water surface bounds before worker submission, x24=job (freecamera.cpp)
+10d660c  # refresh foreground selection when camera footprint changes (freecamera.cpp)
+146ac2c  # terrain instance bounds before binding allocation (freecamera_ao.cpp)
+1571a70  # world AO matrices complete (freecamera_ao.cpp)
+146b1d4  # AO-only skip predicate, before native instance flag branch (freecamera_ao.cpp)
+146b1dc  # AO-only skip through native next-instance branch (freecamera_ao.cpp)

@@ -13,7 +13,7 @@
 #include <cstdlib>
 
 #include <nx/runtime.h>
-#include "freecamera.h"
+#include "features/camera/freecamera.h"
 
 namespace nx {
 

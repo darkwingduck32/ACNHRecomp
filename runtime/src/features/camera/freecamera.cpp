@@ -1,3 +1,5 @@
+#include "package.h"
+#include "version_303.h"
 #include "freecamera.h"
 #include "freecamera_math.h"
 #include "freecamera_visibility.h"
@@ -75,7 +77,7 @@ bool perspective_bounds(float reach, freecamera::Bounds& bounds) {
 void projection_update(CPU& cpu) {
     const uint64_t object=cpu.x[0], caller=cpu.x[30]-kModuleBase;
     original_projection(cpu); // includes the existing aspect-ratio/jitter hook
-    if (caller==0x376d214 || caller==0x376d224) return; // minimap
+    if (caller==camera303::offset_376d214 || caller==camera303::offset_376d224) return; // minimap
     const VmInfo vm=vm_query(object);
     if (!(vm.perm&1) || object<vm.addr || vm.size<0xbc || object-vm.addr>vm.size-0xbc) return;
     const float far=ld<float>(object+0x9c), fov=ld<float>(object+0xa0);
@@ -118,22 +120,11 @@ void foreground_refresh(CPU& cpu) {
     if (trace) log("freecamera: foreground refresh revision %llu at frame %llu",
         (unsigned long long)seen,(unsigned long long)g_frame.load(std::memory_order_relaxed));
 }
-NX_HOOK(0x10d660c, foreground_refresh);
+NX_HOOK(camera303::offset_10d660c, foreground_refresh);
 struct Terrain { std::array<int32_t, 4> base, last; };
 std::unordered_map<uint64_t, Terrain> terrain;
-bool enabled() {
-    if (std::strcmp(game::kInfo.id, "acnh")) return false;
-    const char* env = std::getenv("NX_MODS");
-    const std::string csv = env ? env : config_get("game.mods");
-    for (size_t begin = 0; begin < csv.size();) {
-        size_t end = csv.find(',', begin);
-        std::string id = csv.substr(begin, end == std::string::npos ? end : end - begin);
-        const size_t first = id.find_first_not_of(" \t"), last = id.find_last_not_of(" \t");
-        if (first != std::string::npos && id.substr(first, last - first + 1) == "freecamera") return true;
-        begin = end == std::string::npos ? csv.size() : end + 1;
-    }
-    return false;
-}
+bool enabled() { return camera_package_enabled(); }
+
 float axis(int32_t v) {
     float x = std::clamp(float(v) / plat::kStickMax, -1.0f, 1.0f);
     return std::fabs(x) < 0.15f ? 0 : std::copysign((std::fabs(x) - 0.15f) / 0.85f, x);
@@ -143,7 +134,7 @@ void float_storage(CPU& cpu) {
     original_float_storage(cpu);
     if (node < kHeapBase || node + 0x30 > kHeapBase + heap_size()) return;
     const uint64_t name = ld<uint64_t>(node + 8);
-    if (name < kModuleBase || name >= kModuleBase + 0x4b57930 - 64) return;
+    if (name < kModuleBase || name >= kModuleBase + camera303::offset_4b57930 - 64) return;
     const char* text = reinterpret_cast<const char*>(name);
     static constexpr const char* names[5][4] = {
         {"mAreaLeft", "mAreaRight", "mAreaNear", "mAreaFar"},
@@ -234,9 +225,7 @@ void terrain_update(CPU& cpu) {
     freecamera::Bounds footprint;
     if (reach>=20 && perspective_bounds(reach,footprint)) {
         if (terrain.size()>16) terrain.clear();
-        const std::array<int32_t,4> result{
-            int32_t(std::floor((field_x-footprint.left)/10)),int32_t(std::floor((field_z-footprint.far)/10)),
-            int32_t(std::ceil((field_x+footprint.right)/10)),int32_t(std::ceil((field_z+footprint.near)/10))};
+        const auto result=freecamera::expand_surface_tiles(current,field_x,field_z,footprint);
         terrain[object]=Terrain{current,result};
         lo[0]=result[0];lo[1]=result[1];hi[0]=result[2];hi[1]=result[3];
         return;
@@ -275,7 +264,7 @@ void terrain_instance_capacity(CPU& cpu) {
     cpu.x[8]=40000;
     log("freecamera: terrain instance capacity 10000 -> 40000 before allocation");
 }
-NX_HOOK(0x1462bb8, terrain_instance_capacity);
+NX_HOOK(camera303::offset_1462bb8, terrain_instance_capacity);
 void land_bounds_update(CPU& cpu) {
     if (!freecamera_field_active()) return;
     const uint64_t object=cpu.x[19];
@@ -286,20 +275,21 @@ void land_bounds_update(CPU& cpu) {
     const int64_t w=int64_t(hi[0])-lo[0]+1, d=int64_t(hi[1])-lo[1]+1;
     if (w<20 || w>50 || d<20 || d>70) return;
     std::lock_guard guard(lock);
-    if (orbit.identity()) return;
+    // The camera303 default/title view is already wider and shallower than
+    // stock. It needs surface coverage even before the user moves the camera.
     float reach=0;
     for (const Visibility& v:visibility) if (v.initialized)
         reach=std::max(reach,*std::max_element(v.base.begin(),v.base.end()));
     freecamera::Bounds bounds;
     if (!perspective_bounds(reach,bounds)) return;
+    const auto result=freecamera::expand_surface_tiles({lo[0],lo[1],hi[0],hi[1]},field_x,field_z,bounds);
     static const bool trace=std::getenv("NX_FREECAMERA_TRACE")!=nullptr;
     static uint64_t next_log=0;
     const uint64_t frame=g_frame.load(std::memory_order_relaxed);
     if (trace && frame>=next_log) {
         next_log=frame+120;
-        log("freecamera: land bounds old %d %d %d %d new %.0f %.0f %.0f %.0f at frame %llu",
-            lo[0],lo[1],hi[0],hi[1],std::floor((field_x-bounds.left)/10),std::floor((field_z-bounds.far)/10),
-            std::ceil((field_x+bounds.right)/10),std::ceil((field_z+bounds.near)/10),(unsigned long long)frame);
+        log("freecamera: land bounds old %d %d %d %d new %d %d %d %d at frame %llu",
+            lo[0],lo[1],hi[0],hi[1],result[0],result[1],result[2],result[3],(unsigned long long)frame);
         const uint64_t map=ld<uint64_t>(object+0x100);
         const VmInfo mv=vm_query(map);
         if ((mv.perm&1) && map>=mv.addr && mv.size>=0x30 && map-mv.addr<=mv.size-0x30)
@@ -307,15 +297,12 @@ void land_bounds_update(CPU& cpu) {
                 (unsigned long long)map,(unsigned long long)object,ld<int32_t>(map+0x18),
                 ld<int32_t>(map+0x1c),ld<int32_t>(map+0x28),ld<int32_t>(map+0x2c));
     }
-    lo[0]=int32_t(std::floor((field_x-bounds.left)/10));
-    lo[1]=int32_t(std::floor((field_z-bounds.far)/10));
-    hi[0]=int32_t(std::ceil((field_x+bounds.right)/10));
-    hi[1]=int32_t(std::ceil((field_z+bounds.near)/10));
+    lo[0]=result[0];lo[1]=result[1];hi[0]=result[2];hi[1]=result[3];
     static bool logged=false;
     if (!logged) { logged=true; log("freecamera: land tile footprint updated before submission (%lldx%lld)",
         (long long)w,(long long)d); }
 }
-NX_HOOK(0x11fe020, land_bounds_update);
+NX_HOOK(camera303::offset_11fe020, land_bounds_update);
 void water_bounds_update(CPU& cpu) {
     static const bool requested=[] {
         const char* value=std::getenv("NX_FREECAMERA_WATER_BOUNDS");
@@ -336,17 +323,14 @@ void water_bounds_update(CPU& cpu) {
     const int64_t width=int64_t(hi[0])-lo[0]+1, depth=int64_t(hi[1])-lo[1]+1;
     if (width<10 || width>100 || depth<10 || depth>100) return;
     std::lock_guard guard(lock);
-    if (orbit.identity()) return;
     float reach=0;
     for (const Visibility& v:visibility) if(v.initialized)
         reach=std::max(reach,*std::max_element(v.base.begin(),v.base.end()));
     freecamera::Bounds bounds;
     if (!perspective_bounds(reach,bounds)) return;
     const std::array<int32_t,4> old{lo[0],lo[1],hi[0],hi[1]};
-    lo[0]=int32_t(std::floor((field_x-bounds.left)/10));
-    lo[1]=int32_t(std::floor((field_z-bounds.far)/10));
-    hi[0]=int32_t(std::ceil((field_x+bounds.right)/10));
-    hi[1]=int32_t(std::ceil((field_z+bounds.near)/10));
+    const auto result=freecamera::expand_surface_tiles(old,field_x,field_z,bounds);
+    lo[0]=result[0];lo[1]=result[1];hi[0]=result[2];hi[1]=result[3];
     static uint64_t next_log=0;
     const uint64_t frame=g_frame.load(std::memory_order_relaxed);
     if (std::getenv("NX_FREECAMERA_TRACE") && frame>=next_log) {
@@ -355,7 +339,7 @@ void water_bounds_update(CPU& cpu) {
             old[0],old[1],old[2],old[3],lo[0],lo[1],hi[0],hi[1],(unsigned long long)frame);
     }
 }
-NX_HOOK(0x14b76e8, water_bounds_update);
+NX_HOOK(camera303::offset_14b76e8, water_bounds_update);
 void lookat_return(CPU& cpu) {
     if (direct_lookat_camera && cpu.x[0]==direct_lookat_camera) {
         std::memcpy(reinterpret_cast<void*>(direct_lookat_camera+0x38),
@@ -366,13 +350,13 @@ void lookat_return(CPU& cpu) {
             log("freecamera: direct LookAt inputs restored after matrix update");
     }
 }
-NX_HOOK(0x37e4724, lookat_return);
+NX_HOOK(camera303::offset_37e4724, lookat_return);
 void lookat_scoped(CPU& cpu) {
     const uint64_t camera = cpu.x[0];
     bool readable = camera >= kHeapBase && camera <= kHeapBase + heap_size() - 0x5c;
     // One field-camera branch passes a temporary object on the guest stack.
     // Verify its complete writable span instead of excluding it as non-heap.
-    if (!readable && cpu.x[30]-kModuleBase==0x7a88a4) {
+    if (!readable && cpu.x[30]-kModuleBase==camera303::offset_7a88a4) {
         const VmInfo vm=vm_query(camera);
         readable=(vm.perm&3)==3 && camera>=vm.addr && vm.size>=0x5c && camera-vm.addr<=vm.size-0x5c;
     }
@@ -400,9 +384,9 @@ void lookat_scoped(CPU& cpu) {
 void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
     if (std::strcmp(game::kInfo.id, "acnh") || std::strcmp(module->name, "main")) return;
     // Verify the beginning of the 3.0.3 implementation before replacing its dispatch.
-    constexpr uint64_t entry = 0x37e4634;
+    constexpr uint64_t entry = camera303::offset_37e4634;
     if (entry + 16 > module->text_size) return;
-    const uint32_t words[] = {0x2d470801, 0x2d480c00, 0x1e232020, 0x2d491404};
+    const uint32_t words[] = {camera303::instruction_2d470801, camera303::instruction_2d480c00, camera303::instruction_1e232020, camera303::instruction_2d491404};
     if (std::memcmp(reinterpret_cast<void*>(module->base + entry), words, sizeof words)) return;
     freecamera_fruit_install(module, enabled());
     freecamera_fog_install(enabled());
@@ -439,18 +423,18 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
         break;
     }
     for (size_t i = 0; i < module->func_count; i++) {
-        if (functions[i].offset == 0x37e5968 && ld<uint32_t>(module->base+0x37e5968)==0xbd409800 &&
-            ld<uint32_t>(module->base+0x37e596c)==0x1e2c1003) {
+        if (functions[i].offset == camera303::offset_37e5968 && ld<uint32_t>(module->base+camera303::offset_37e5968)==camera303::instruction_bd409800 &&
+            ld<uint32_t>(module->base+camera303::offset_37e596c)==camera303::instruction_1e2c1003) {
             original_projection=functions[i].fn;
             functions[i].fn=projection_update;
             log("freecamera: perspective visibility projection capture installed");
         }
-        if (functions[i].offset == 0x60cba4 && ld<uint32_t>(module->base+0x60cba4) == 0x91009000 && ld<uint32_t>(module->base+0x60cba8) == 0xd65f03c0) {
+        if (functions[i].offset == camera303::offset_60cba4 && ld<uint32_t>(module->base+camera303::offset_60cba4) == camera303::instruction_91009000 && ld<uint32_t>(module->base+camera303::offset_60cba8) == camera303::instruction_d65f03c0) {
             original_float_storage = functions[i].fn;
             functions[i].fn = float_storage;
             log("freecamera: yaw-aware foreground/furniture bounds installed");
         }
-        if (functions[i].offset == 0x14681fc && ld<uint32_t>(module->base+0x14681fc) == 0xd10383ff && ld<uint32_t>(module->base+0x14688b8) == 0xb91a3e69) {
+        if (functions[i].offset == camera303::offset_14681fc && ld<uint32_t>(module->base+camera303::offset_14681fc) == camera303::instruction_d10383ff && ld<uint32_t>(module->base+camera303::offset_14688b8) == camera303::instruction_b91a3e69) {
             original_terrain = functions[i].fn;
             functions[i].fn = terrain_update;
             log("freecamera: yaw-aware terrain footprint installed");
@@ -512,7 +496,7 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     const auto space=freecamera::camera_space(caller);
     if (space==freecamera::CameraSpace::other) return;
     field_frame.store(g_frame.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    if (caller==0x7a88a4) {
+    if (caller==camera303::offset_7a88a4) {
         const VmInfo vm=vm_query(cam);
         if ((vm.perm&3)!=3 || cam<vm.addr || vm.size<0x5c || cam-vm.addr>vm.size-0x5c) return;
     } else if (cam < kHeapBase || cam + 0x5c > kHeapBase + heap_size()) return;
@@ -565,5 +549,12 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     // produces roll as the yaw passes the sides of the island.
     const float up[] = {0, 1, 0};
     std::memcpy(reinterpret_cast<void*>(cam + 0x50), up, sizeof up);
+}
+}
+
+namespace nx {
+bool camera_background_depth(const std::string& hash) {
+    return freecamera_field_active() && (hash==camera303::shader_fce7966c1f0b7193 ||
+        hash==camera303::shader_3ebba4ffae3ffdd3 || hash==camera303::shader_0f62b0e3657eeab0 || hash==camera303::shader_cabdc233d975169b);
 }
 }

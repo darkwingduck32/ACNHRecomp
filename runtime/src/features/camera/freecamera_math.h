@@ -1,3 +1,4 @@
+#include "version_303.h"
 #pragma once
 #include <algorithm>
 #include <cmath>
@@ -9,9 +10,9 @@ enum class CameraSpace { other, world, drum };
 inline CameraSpace camera_space(uint64_t caller) {
     // The alternate drum branch builds a temporary WORLD camera on the stack.
     // Both branches must receive the same orbit as the main world camera.
-    if (caller==0x292cb0c || caller==0x374b944 || caller==0x374b954 || caller==0x7a88a4)
+    if (caller==camera303::offset_292cb0c || caller==camera303::offset_374b944 || caller==camera303::offset_374b954 || caller==camera303::offset_7a88a4)
         return CameraSpace::world;
-    if (caller==0x7a8830) return CameraSpace::drum;
+    if (caller==camera303::offset_7a8830) return CameraSpace::drum;
     return CameraSpace::other;
 }
 struct Bounds {

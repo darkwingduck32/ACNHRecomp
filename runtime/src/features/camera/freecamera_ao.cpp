@@ -1,3 +1,4 @@
+#include "version_303.h"
 #include "freecamera.h"
 #include "freecamera_ao.h"
 #include "freecamera_ao_math.h"
@@ -70,7 +71,7 @@ inline void begin(uint64_t context) {
     for(unsigned i=0;i<12;++i) view[i]=ld<float>(context+0x6db0+4*i);
     for(unsigned i=0;i<16;++i) projection[i]=ld<float>(context+0x6e70+4*i);
     if(!map.clip.set(view,projection)) return;
-    const auto scene=nx::ld<uint64_t>(nx::ld<uint64_t>(main_base+0x4ab2200));
+    const auto scene=nx::ld<uint64_t>(nx::ld<uint64_t>(main_base+camera303::offset_4ab2200));
     const auto drum=scene?nx::ld<uint64_t>(scene+0x78):0;
     map.shift=drum?nx::ld<float>(drum+0x38)*nx::ld<float>(drum+0x3c):0;
     map.valid=std::isfinite(map.shift);
@@ -97,16 +98,16 @@ void capture_bound(CPU& c) {
     if(installed) record(c.x[24],c.x[8],c.x[1],ld<uint64_t>(c.x[29]-8));
 }
 void capture_map(CPU& c) { if(installed) begin(c.x[25]); }
-NX_HOOK(0x146ac2c,capture_bound);
-NX_HOOK(0x1571a70,capture_map);
-NX_HOOK(0x146b1d4,prepare_skip);
-NX_HOOK(0x146b1dc,apply_skip);
+NX_HOOK(camera303::offset_146ac2c,capture_bound);
+NX_HOOK(camera303::offset_1571a70,capture_map);
+NX_HOOK(camera303::offset_146b1d4,prepare_skip);
+NX_HOOK(camera303::offset_146b1dc,apply_skip);
 }
 void freecamera_ao_install(const ModuleInfo* module,bool enabled) {
-    if(!enabled || !requested() || module->text_size<=0x1571a74) return;
+    if(!enabled || !requested() || module->text_size<=camera303::offset_1571a74) return;
     const std::pair<uint64_t,uint32_t> words[]={
-        {0x146ac2c,0xf90007e8},{0x1571a70,0x3ddb6f04},
-        {0x146b1d4,0x34000068},{0x146b1dc,0x34fffd28}};
+        {camera303::offset_146ac2c,camera303::instruction_f90007e8},{camera303::offset_1571a70,camera303::instruction_3ddb6f04},
+        {camera303::offset_146b1d4,camera303::instruction_34000068},{camera303::offset_146b1dc,camera303::instruction_34fffd28}};
     for(const auto& [offset,word]:words)
         if(ld<uint32_t>(module->base+offset)!=word) return;
     main_base=module->base;

@@ -27,7 +27,9 @@
 
 #include "platform.h"
 #include "users.h"
-#include "freecamera_fruit.h"
+#include "features/camera/freecamera_fruit.h"
+#include "features/camera/package.h"
+#include "mod_package.h"
 
 namespace fs = std::filesystem;
 
@@ -203,6 +205,13 @@ const std::vector<fs::path>& mod_roots() {
             while (!name.empty() && name.back() == ' ') name.pop_back();
             while (!name.empty() && name.front() == ' ') name.erase(0, 1);
             if (name.empty() || name.find("..") != std::string::npos) continue;
+            fs::path package=data_root()/"mods"/fs::u8path(name);
+            if(fs::exists(package/"manifest.json")) {
+                std::string error;mod_package::Manifest manifest;
+                if(!mod_package::validate(package,plat::data_root(),&manifest,&error)) {
+                    log("fs: mod %s skipped: %s",name.c_str(),error.c_str());continue;
+                }
+            }
             fs::path root = data_root() / "mods" / fs::u8path(name) / "romfs";
             std::error_code ec;
             if (fs::is_directory(root, ec)) {
@@ -464,6 +473,9 @@ void OpenFile(CPU& c) {  // (FileHandle* out, path, int mode: 1 read, 2 write, 4
         }
         std::fwrite(v->data(), 1, v->size(), f);
         std::fflush(f);
+        if(!(mode&2)&&camera_parameter_file(guest)) {
+            if(FILE* patched=camera_parameter_overlay(f,0,v->size())){std::fclose(f);f=patched;}
+        }
         uint64_t h = g_next++;
         g_files[h] = std::make_shared<File>(f, guest);
         st<uint64_t>(c.x[0], h);
@@ -482,7 +494,8 @@ void OpenFile(CPU& c) {  // (FileHandle* out, path, int mode: 1 read, 2 write, 4
             return;
         }
         uint64_t h = g_next++;
-        g_files[h] = std::make_shared<File>(k->f, guest, it->second.first, it->second.second);
+        FILE* patched=camera_parameter_file(guest)?camera_parameter_overlay(k->f,it->second.first,it->second.second):nullptr;
+        g_files[h] = patched?std::make_shared<File>(patched,guest):std::make_shared<File>(k->f, guest, it->second.first, it->second.second);
         st<uint64_t>(c.x[0], h);
         note_open("OpenFile", guest, "ok");
         if (trace_fs()) log("fs: OpenFile(%s, %d) -> %llu (packed)", guest.c_str(), mode, (unsigned long long)h);
@@ -502,6 +515,10 @@ void OpenFile(CPU& c) {  // (FileHandle* out, path, int mode: 1 read, 2 write, 4
         if (trace_fs()) log("fs: OpenFile(%s) failed to open on the host (errno %d)", guest.c_str(), errno);
         c.x[0] = kPathNotFound;
         return;
+    }
+    if(!(mode&2)&&camera_parameter_file(guest)) {
+        plat::fseek64(f,0,SEEK_END);auto size=plat::ftell64(f);
+        if(FILE* patched=camera_parameter_overlay(f,0,size)){std::fclose(f);f=patched;}
     }
     uint64_t h = g_next++;
     g_files[h] = std::make_shared<File>(f, guest);

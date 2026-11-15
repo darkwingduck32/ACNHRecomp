@@ -1,3 +1,5 @@
+#include "package.h"
+#include "version_303.h"
 #include "freecamera_fog.h"
 #include "platform.h"
 #include <nx/runtime.h>
@@ -8,7 +10,7 @@ namespace nx {
 namespace { std::unordered_set<std::string> fog_shaders, scattering_shaders; }
 void freecamera_fog_install(bool enabled) {
     if (!enabled) return;
-    std::ifstream input(plat::data_root()+"/mods/freecamera/view_fog_shaders.txt");
+    std::ifstream input(camera_profile_path("view_fog_shaders.txt"));
     std::string word;
     if (!(input>>word) || (word!="ACNH_VIEW_FOG_V1" && word!="ACNH_VIEW_FOG_V2")) return;
     const bool staged=word=="ACNH_VIEW_FOG_V2";

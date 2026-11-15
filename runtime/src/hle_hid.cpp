@@ -18,7 +18,7 @@
 #include <nx/runtime.h>
 
 #include "config.h"
-#include "freecamera.h"
+#include "features/camera/freecamera.h"
 #include "platform.h"
 
 namespace nx {

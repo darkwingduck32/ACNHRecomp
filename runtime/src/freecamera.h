@@ -10,6 +10,7 @@ void freecamera_input(plat::PadState& pad);
 void freecamera_ui_input();
 bool freecamera_field_active();
 float freecamera_zoom_depth_offset();
+float freecamera_directional_glare_scale(const float* direction, float exponent);
 void freecamera_lookat(uint64_t camera, uint64_t caller);
 void freecamera_install(const ModuleInfo* module, FuncEntry* functions);
 }

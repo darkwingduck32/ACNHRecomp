@@ -34,6 +34,7 @@ thread_local std::array<float,9> direct_lookat_source{};
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
 std::atomic<bool> field_enabled{false};
 std::atomic<float> zoom_depth_offset{0};
+std::atomic<float> view_ray[3]{{0},{-1},{0}};
 // The look-at call sites are shared with interiors. Only the island's
 // populated terrain window supplies this heartbeat; it stops inside rooms.
 // Resource loads cannot substitute for this: island models remain cached
@@ -466,6 +467,11 @@ bool freecamera_field_active() {
 float freecamera_zoom_depth_offset() {
     return zoom_depth_offset.load(std::memory_order_relaxed);
 }
+float freecamera_directional_glare_scale(const float* direction, float exponent) {
+    float ray[3];
+    for (int i=0;i<3;++i) ray[i]=view_ray[i].load(std::memory_order_relaxed);
+    return freecamera::directional_glare_scale(ray,direction,exponent);
+}
 void freecamera_input(plat::PadState& p) {
     using namespace plat;
     using Clock = std::chrono::steady_clock;
@@ -536,6 +542,9 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
             after+=(result[i]-at[i])*(result[i]-at[i]);
         }
         zoom_depth_offset.store(on ? std::sqrt(after)-std::sqrt(before) : 0,std::memory_order_relaxed);
+        for (int i=0;i<3;++i)
+            view_ray[i].store(on && after>1 ? (at[i]-result[i])/std::sqrt(after) : (i==1 ? -1.f : 0.f),
+                              std::memory_order_relaxed);
     }
     update_visibility(on);
     if (!on || orbit.identity()) return;

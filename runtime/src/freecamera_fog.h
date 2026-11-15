@@ -6,6 +6,23 @@ namespace nx {
 void freecamera_fog_install(bool enabled);
 bool freecamera_fog_shader(const std::string& hash, bool fragment=false);
 namespace freecamera {
+// Park UBER's directional glint is pow(dot(viewRay,direction),exponent).
+// Below 45 degrees, cap its centre-view response to the same azimuth at
+// 45 degrees. This avoids the low-angle white wash without disabling glints.
+inline float directional_glare_scale(const float* ray, const float* direction, float exponent) {
+    float norm=0, dot=0;
+    for (int i=0;i<3;++i) {
+        if (!std::isfinite(ray[i]) || !std::isfinite(direction[i])) return 1;
+        norm+=ray[i]*ray[i]; dot+=ray[i]*direction[i];
+    }
+    if (std::abs(norm-1)> .001f || ray[1]>0 || ray[1]<=-.70710678f || dot<=0 ||
+        !std::isfinite(exponent) || exponent<=0 || exponent>128) return 1;
+    const float horizontal=std::sqrt(.5f/(1-ray[1]*ray[1]));
+    const float reference=(ray[0]*direction[0]+ray[2]*direction[2])*horizontal-.70710678f*direction[1];
+    const float current=std::fmin(dot,1.f);
+    if (reference>=current) return 1;
+    return std::pow(std::fmax(reference,0.f)/current,exponent);
+}
 // Park UBER's fragment scattering uses clamp(viewDepth-start,0,range).
 // Translate its onset by the added eye-to-player distance, retaining the
 // native range, weather colour and scattering intensity.

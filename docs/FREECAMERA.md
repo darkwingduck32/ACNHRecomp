@@ -1325,3 +1325,41 @@ return outdoors (`scattering-native-reset_05761.png`,
 `scattering-close-zoom_06601.png`, `scattering-interior_08581.png`,
 `scattering-return_10021.png`). This covers the reproduced daytime zoom wash,
 not every weather combination. Temporary layer-disable diagnostics are removed.
+
+### Softer outdoor lighting (2026-11-15)
+
+The remaining wash includes intentional game lighting. The user requested a
+less washed-out look even where that changes the original art direction.
+Separate layer tests identified the Park UBER directional glint as the largest
+shallow-angle contributor; simply adjusting material Fresnel/rim strengths was
+insufficient and those material edits were discarded.
+
+The outdoor adapter now reduces the directional glint strength (`c7[76].w`)
+to 25%, and below 45 degrees limits its centre-view response to the same
+azimuth at 45 degrees. This covers the default mod camera as well as shallower
+views. It never increases the glint. It also uses 75% of the atmospheric
+scattering intensity (`c7[23].y`) and 60% of the dark-fog blend intensity
+(`c5[10].w`). These are deliberate visual choices, not corrections of shader
+arithmetic. Atmospheric colour, distance ramps and weather variation remain,
+as do material albedo, wave normals, shadows and other reflection terms.
+
+The changes are host-upload-only, scoped to the active outdoor free camera and
+profiled Park UBER shaders. The V2 shader profile is required. Interiors and
+UI are outside that scope. `NX_FREECAMERA_LIGHTING=0` restores the original
+lighting strengths while retaining the camera-relative fog and zoom corrections.
+`NX_FREECAMERA_GLARE=0` disables just the directional-glint adjustment.
+
+The glint cap uses the centre ray, not a per-pixel highlight clamp. Tests cover
+its reference response, rotation of both light and view, steep/away-facing
+views and invalid inputs. Camera and background-scan tests pass.
+
+The final default-zoom old/new/old sequence is in
+`soft-lighting-default-images/manifest.json`. A fixed grass crop changed from
+RGB (125,192,86) to (117,189,78), returning to (125,192,86) in the repeat;
+`comparison.json` records crop coordinates and tree measurements. These are
+rendered RGB averages, not linear-light measurements. The final production
+executable was also reviewed on the title screen, at shallow zoomed-out angles,
+and through an eight-frame orbit (`soft-lighting-title_01681.png`,
+`soft-lighting-low_04141.png`, `soft-lighting-orbit-review.png`). Water retains
+wave detail and highlights, with reduced broad white glare. The contact sheet's
+ninth empty tile is padding. Weather/night coverage remains untested.

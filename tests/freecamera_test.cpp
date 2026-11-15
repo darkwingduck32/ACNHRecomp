@@ -15,6 +15,37 @@ static void check(bool ok, const char* message) {
 int main() {
     using namespace nx::freecamera;
     {
+        const float direction[]{-.0597f,.3177f,-.9463f};
+        for (float elevation : {.05f,.15f,.3f,.53f,.707f}) {
+            const float ray[]{0,-elevation,-std::sqrt(1-elevation*elevation)};
+            const float scale=directional_glare_scale(ray,direction,12);
+            const float dot=ray[1]*direction[1]+ray[2]*direction[2];
+            const float reference=-.70710678f*direction[1]-std::sqrt(.5f)*direction[2];
+            check(scale>0 && scale<=1 && std::fabs(scale*std::pow(dot,12)-std::pow(reference,12))<.000001f,
+                  "Directional glint must retain the reference response at shallow angles");
+            for (float yaw : {pi/2,pi,3*pi/2}) {
+                const float c=std::cos(yaw),s=std::sin(yaw);
+                const float rotated_ray[]{s*ray[2],ray[1],c*ray[2]};
+                const float rotated_light[]{c*direction[0]+s*direction[2],direction[1],-s*direction[0]+c*direction[2]};
+                check(std::fabs(directional_glare_scale(rotated_ray,rotated_light,12)-scale)<.00001f,
+                      "Glint correction must depend on light-relative heading, not world direction");
+            }
+        }
+        for (float elevation : {.70710678f,.8f,1.f}) {
+            const float ray[]{0,-elevation,-std::sqrt(1-elevation*elevation)};
+            check(directional_glare_scale(ray,direction,12)==1,"Normal camera glints must remain unchanged");
+        }
+        const float ray[]{0,0,-1}, away[]{0,0,1};
+        check(directional_glare_scale(ray,away,12)==1,"Views away from the glint must remain unchanged");
+        check(directional_glare_scale(ray,direction,0)==1 &&
+              directional_glare_scale(ray,direction,std::numeric_limits<float>::quiet_NaN())==1,
+              "Invalid glint powers must leave lighting unchanged");
+        const float bad_ray[]{0,0,-2}, bad_light[]{0,std::numeric_limits<float>::infinity(),-1};
+        check(directional_glare_scale(bad_ray,direction,12)==1 &&
+              directional_glare_scale(ray,bad_light,12)==1,
+              "Invalid light and view directions must leave lighting unchanged");
+    }
+    {
         const float projection[]{.01f,0,0,0, 0,.01f,0,0, 0,0,-.01f,0, 0,0,0,1};
         for(float yaw:{0.f,pi/4,pi/2,pi,3*pi/2}) {
             const float c=std::cos(yaw),s=std::sin(yaw);

@@ -4,8 +4,17 @@
 
 namespace nx {
 void freecamera_fog_install(bool enabled);
-bool freecamera_fog_shader(const std::string& hash);
+bool freecamera_fog_shader(const std::string& hash, bool fragment=false);
 namespace freecamera {
+// Park UBER's fragment scattering uses clamp(viewDepth-start,0,range).
+// Translate its onset by the added eye-to-player distance, retaining the
+// native range, weather colour and scattering intensity.
+inline bool scattering_start(float start, float range, float offset, float& adapted) {
+    if (!std::isfinite(start) || !std::isfinite(range) || range<=0 ||
+        !std::isfinite(offset) || std::abs(offset)>10000) return false;
+    adapted=start+offset;
+    return std::isfinite(adapted) && adapted!=start;
+}
 // The native dark-fog equation is saturate(dot(viewPosition, plane.xyz)
 // * inverseRange + plane.w)^2 * intensity. Retain its ramp and weather;
 // replace the world-facing plane normal with camera-forward depth. Anchor the

@@ -451,6 +451,32 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
             }
         }
     }
+    // Park UBER's fragment scattering is separate from vertex dark fog.
+    // It adds light according to view depth; anchor its onset to the player
+    // so zooming out does not push nearby scenery into full scattering.
+    static const bool scattering_on=[] {
+        const char* e=std::getenv("NX_FREECAMERA_SCATTERING");
+        return !e || std::strcmp(e,"0")!=0;
+    }();
+    if (scattering_on && p && size>=24*16 && s->stage==ShaderStage::Fragment &&
+        b.nvn.source==NvnSource::UniformBlock && b.nvn.index==4 &&
+        freecamera_field_active() && freecamera_fog_shader(s->hash,true) && !written_overlaps(p,size)) {
+        float params[4], start; std::memcpy(params,p+20*16,sizeof params);
+        if (freecamera::scattering_start(params[2],params[1],freecamera_zoom_depth_offset(),start)) {
+            BufMemo& m=(*g_fog_memo)[(uintptr_t(p)>>4 ^ uintptr_t(p)>>15 ^ size)&255];
+            if (m.p==p && m.size==size && m.n==n && m.epoch==(*g_upload_epoch)) {
+                (*g_fog_hits)++;
+                return m.info;
+            }
+            (*g_fog_misses)++; (*g_fog_bytes)+=n;
+            Upload u=upload_alloc(n,256);
+            std::memset(u.ptr,0,n);
+            std::memcpy(u.ptr,p,size);
+            std::memcpy(static_cast<uint8_t*>(u.ptr)+20*16+8,&start,4);
+            m={p,size,n,(*g_upload_epoch),{u.buffer,u.offset,n}};
+            return m.info;
+        }
+    }
     // Park UBER's c5[10..12] is the dark-fog colour/intensity, plane and
     // inverse range. Patch only a host upload, never shared guest constants.
     if (p && size>=13*16 && s->stage==ShaderStage::Vertex &&

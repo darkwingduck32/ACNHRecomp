@@ -95,12 +95,26 @@ int main() {
     const float forward_fog[]{0,0,-1,-.25f};
     for (float zoom:{.25f,1.f,3.f}) {
         const float offset=150*(zoom-1);
+        float start=149;
+        scattering_start(149,104,offset,start);
+        for (float relative_depth:{-100.f,0.f,50.f,200.f}) {
+            const float native=std::clamp(150+relative_depth-149,0.f,104.f);
+            const float adapted=std::clamp(150*zoom+relative_depth-start,0.f,104.f);
+            check(std::fabs(native-adapted)<1e-5f,
+                  "Scattering must preserve foreground and distant ramp weights through zoom");
+        }
         view_fog_plane(forward_fog,.8f,.01f,offset,normal);
         check(std::fabs(150*zoom*.01f+normal[3]-(150*.01f+forward_fog[3]))<1e-5f,
               "Zoom must preserve fog attenuation at the player");
         check(std::fabs((150*zoom+50)*.01f+normal[3]-(200*.01f+forward_fog[3]))<1e-5f,
               "Zoom must retain the same fog ramp beyond the player");
     }
+    float scattering=0;
+    check(!scattering_start(149,104,0,scattering) && scattering==149,
+          "Native zoom must preserve atmospheric scattering exactly");
+    check(!scattering_start(149,0,300,scattering) &&
+          !scattering_start(149,104,std::numeric_limits<float>::infinity(),scattering),
+          "Invalid scattering parameters must retain native uniforms");
     check(camera_space(0x7a88a4)==CameraSpace::world && camera_space(0x7a8830)==CameraSpace::drum,
           "Both field/drum matrix branches must receive the orbit in their own coordinate spaces");
     check(camera_space(0x376d224)==CameraSpace::other,"Minimap camera must remain outside orbit scope");

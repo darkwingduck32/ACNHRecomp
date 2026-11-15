@@ -1285,3 +1285,43 @@ and horizon coverage remain unproven or incomplete. They are deferred under the
 user's instruction not to start new investigations; the full camera goal is
 not claimed complete. The earlier entries above are a chronological investigation
 record, including superseded candidate and installation states.
+
+### Zoom-dependent foreground haze
+
+The camera branch includes the Saves-menu background scan via cherry-pick
+`48cf681`. The subsequent foreground-haze report was tested independently of
+the existing vertex dark-fog adapter. In matched 3x-zoom captures, disabling
+vertex dark fog removed distant haze but left the foreground wash
+(`fog-layer-ab-images/`). Park UBER has a separate fragment scattering term:
+`clamp(viewDepth-c7[20].z,0,c7[20].y)`, which adds light to the material result.
+Its measured onset was about 149 units and range 104, while zoom added about
+300 units to camera-to-player distance. The existing correction did not cover
+this term.
+
+Two repeated disabled/corrected/native scattering sequences at one fixed pose
+isolate that term (`scatter-layer-ab-images/manifest.json`). Correcting its onset
+removes the foreground wash while retaining distant scattering; disabling it
+entirely also removes the distant atmospheric contribution. In a fixed foreground
+grass crop, native scattering averaged about RGB (190,213,134), versus corrected
+(170,205,113) and disabled (171,207,114) in the second sequence. Animation/time
+changes prevent pixel-exact comparisons; `foreground-comparison.json` records
+the crop and both sequences. These are rendered RGB values, not linear-light
+measurements.
+
+The production adapter adds the existing zoom-depth offset only to fragment
+`c7[20].z`, in host uploads for profiled Park UBER shaders during outdoor play.
+It preserves range, weather colours, intensity and native zoom. Invalid inputs
+and compute-written blocks remain untouched. `NX_FREECAMERA_SCATTERING=0`
+disables this correction for comparison. The profile generator now writes V2
+with 1,351 vertex and 2,013 fragment hashes; the runtime also reads legacy V1
+profiles, which retain only the previous vertex adapter. Regenerate/install
+`mods/freecamera/view_fog_shaders.txt` together with the new runtime.
+
+Camera math tests verify unchanged scattering weights before/at/beyond the
+player at zoom .25, 1 and 3, plus invalid-input handling. Camera and background
+scan tests pass. The final candidate was reviewed across low-angle headings at
+3x zoom (`scattering-low-review.png`), native reset, close zoom, tent entry and
+return outdoors (`scattering-native-reset_05761.png`,
+`scattering-close-zoom_06601.png`, `scattering-interior_08581.png`,
+`scattering-return_10021.png`). This covers the reproduced daytime zoom wash,
+not every weather combination. Temporary layer-disable diagnostics are removed.

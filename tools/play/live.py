@@ -18,6 +18,9 @@ usage: live.py <root> <command> [args]
   wait <frames>                 wait until the game is <frames> further
   play <session> [last frame]   replay a recorded session (the root's sent.txt, or a scenario in that form) at
                                 the frames it was recorded at
+  settings open|close|open-temporal
+                                control settings; open-temporal waits for the first DLSS/FSR frame
+  configure <key> <value>        transient harness setting through config_set; does not save the INI
   alive                         exit 0 when the game process of this root is running
 <root> is a name under private/play/roots or a path.
 """
@@ -141,6 +144,35 @@ def send(root, script, wait=True):
             if time.time() - t0 > 60 + end / 5:
                 sys.exit("live: timed out waiting for the input to play out")
             time.sleep(0.2)
+    return frame(root)
+
+
+def settings(root, action):
+    if action not in ("open","close","open-temporal"):
+        raise ValueError("settings expects open, close, or open-temporal")
+    need_alive(root)
+    path=os.path.join(root,"ui_live")
+    write_atomic(path,action)
+    start=time.time()
+    while os.path.exists(path):
+        need_alive(root)
+        if time.time()-start>(180 if action=="open-temporal" else 15):raise TimeoutError("renderer did not acknowledge the settings command")
+        time.sleep(.1)
+    return frame(root)
+
+
+def configure(root, key, value):
+    """Transient harness setting; uses config_set without writing the saved INI."""
+    need_alive(root)
+    if not key or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789._' for c in key) or any(c in str(value) for c in '\r\n\0'):
+        raise ValueError('Invalid harness setting')
+    path = os.path.join(root, 'config_live')
+    write_atomic(path, key+'='+str(value))
+    start=time.monotonic()
+    while os.path.exists(path):
+        need_alive(root)
+        if time.monotonic()-start>15: raise TimeoutError('renderer did not acknowledge the setting')
+        time.sleep(.05)
     return frame(root)
 
 
@@ -328,6 +360,10 @@ def main():
         sys.exit(0 if alive(root) else 1)
     elif cmd == "wait":
         print(wait_frames(root, int(rest[0])))
+    elif cmd == "settings":
+        print(settings(root,rest[0]))
+    elif cmd == "configure":
+        print(configure(root,rest[0],rest[1]))
     elif cmd == "send":
         print(send(root, rest[0], wait="--no-wait" not in rest))
     elif cmd == "play":

@@ -22,6 +22,13 @@ bool write_enabled(const std::string& data_root, const std::vector<std::string>&
 
 bool set_enabled(const std::string& data_root, const std::string& id, bool on, std::string* error = nullptr);
 
+// Settings controls edit the caller's config snapshot; no file write or runtime activation.
+enum class FeatureAvailability { Ready, Missing, Unavailable };
+FeatureAvailability feature_availability(const std::string &data_root, const std::string &id);
+bool feature_selected(const std::string &enabled_csv, const std::string &id);
+bool configure_feature(const std::string &data_root, const std::string &id, bool on, const std::string &current_csv,
+                       std::string &result_csv, std::string *error = nullptr);
+
 // Move `id` one step earlier (toward first / higher priority) or later in game.mods.
 bool move_enabled(const std::string& data_root, const std::string& id, int delta, std::string* error = nullptr);
 

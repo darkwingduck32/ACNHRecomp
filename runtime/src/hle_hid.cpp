@@ -18,7 +18,7 @@
 #include <nx/runtime.h>
 
 #include "config.h"
-#include "features/camera/freecamera.h"
+#include "features/runtime.h"
 #include "platform.h"
 
 namespace nx {
@@ -171,7 +171,7 @@ PadState read() {
             if (s.rx) p.rx = s.rx;
             if (s.ry) p.ry = s.ry;
         }
-    freecamera_input(p);
+    features::input(p);
     stick_buttons(p);
     return p;
 }

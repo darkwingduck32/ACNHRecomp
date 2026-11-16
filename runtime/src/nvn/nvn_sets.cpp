@@ -11,7 +11,7 @@
 
 #include "nvn_draw_state.h"
 #include "nvn_ultrawide.h"
-#include "features/camera/uniform_adapter.h"
+#include "nvn_extensions.h"
 
 namespace nx::nvn {
 uint64_t bound_generation();  // nvn_draw.cpp
@@ -368,7 +368,7 @@ VkDescriptorBufferInfo buffer_of(VkCommandBuffer cb, const void* bytes, uint64_t
 }  // namespace
 
 bool uniform_host_patch(const ShaderInfo* shader, int bank) {
-    return camera_uniform_host_patch(shader,bank);
+    return extension_uniform_host_patch(shader,bank);
 }
 
 // A uniform block binding's buffer, from the bound range (build_sets; draw merging's run continuation, nvn_draw.cpp).
@@ -388,7 +388,7 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     // In place (nvn_zero_copy.cpp) when every byte bound is the block's own: past it Maxwell reads 0.
     const uint64_t a = vk_robust_buffer_align();  // as buffer_of sizes the binding
     const uint64_t n = (std::max<uint64_t>((size + 15) & ~15ull, min_size) + a - 1) & ~(a - 1);
-    if (auto patched=camera_uniform_patch(s,b,p,size,n)) return *patched;
+    if (auto patched=extension_uniform_patch(s,b,p,size,n)) return *patched;
     if (Upload u; p && n <= r.size && zero_copy_range(r.address, n, zero_copy_uniform_align(), u)) return {u.buffer, u.offset, n};
     return buffer_of(cb, p, size, min_size);
 }
@@ -972,7 +972,7 @@ void sets_log() {
         (unsigned long long)*g_support_peak,(unsigned long long)support_capacity(),
         (unsigned long long)*g_support_fallbacks,(unsigned long long)*g_constants_fallbacks);
     *g_support_peak=*g_support_fallbacks=*g_constants_fallbacks=0;
-    camera_uniform_stats();
+    extension_uniform_stats();
     if (*g_binds_made + *g_binds_kept)
         log("nvn: descriptor binds: %llu recorded, %llu repeats left out", (unsigned long long)*g_binds_made,
             (unsigned long long)*g_binds_kept);

@@ -1,9 +1,35 @@
 ﻿#pragma once
-#include "package_sha256.h"
+#include "common/sha256.h"
+#include "version_303.h"
+#include <algorithm>
 #include <cstring>
 #include <set>
 #include <sstream>
+#include <vector>
 namespace nx::camera {
+inline bool apply_lens(std::string &archive, int degrees, std::string &error) {
+  using namespace camera303;
+  if (archive.size() != parameter_archive_size || archive.compare(0, 4, "SARC") ||
+      hash::digest(archive.substr(0, parameter_header_size)) != parameter_header_sha256) {
+    error = "camera lens archive layout mismatch";
+    return false;
+  }
+  const float fov = float(std::clamp(degrees, 20, 80));
+  for (const auto &field : outdoor_lenses) {
+    float value;
+    std::memcpy(&value, archive.data() + field.offset, 4);
+    if (uint8_t(archive[field.offset - 1]) != 0xd2 ||
+        (value != field.stock && value != field.camera && value != fov)) {
+      error = "another mod changed an outdoor camera lens";
+      return false;
+    }
+  }
+  // Validate the whole set before writing any field; independent mod bytes,
+  // indoor/UI lenses and the on-disk archive are never changed here.
+  for (const auto &field : outdoor_lenses)
+    std::memcpy(archive.data() + field.offset, &fov, 4);
+  return true;
+}
 // Operates on the already-resolved archive, never on the independently managed
 // mod.
 inline bool apply_parameters(std::string &archive, std::istream &profile,
@@ -13,7 +39,7 @@ inline bool apply_parameters(std::string &archive, std::istream &profile,
   if (!(profile >> magic >> size >> header >> sum) ||
       magic != "ACNH_CAMERA_PARAMS_V1" || size != archive.size() ||
       header < 20 || header > size || archive.compare(0, 4, "SARC") ||
-      mod_package::digest(archive.substr(0, header)) != sum) {
+      hash::digest(archive.substr(0, header)) != sum) {
     error = "parameter archive layout mismatch";
     return false;
   }

@@ -649,6 +649,66 @@ bool set_enabled(const std::string& data_root, const std::string& id, bool on, s
     return write_enabled(data_root, cur, error);
 }
 
+FeatureAvailability feature_availability(const std::string &data_root, const std::string &id) {
+    if (id != "freecamera" && id != "tool_durability")
+        return FeatureAvailability::Unavailable;
+    const auto root = mods_root(data_root) / id;
+    if (!fs::is_directory(root / "romfs"))
+        return FeatureAvailability::Missing;
+    if (fs::exists(root / "manifest.json")) {
+        mod_package::Manifest manifest;
+        if (!mod_package::validate(root, data_root, &manifest, nullptr) || manifest.id != id ||
+            (id == "freecamera" && manifest.runtime != mod_package::camera_capability) ||
+            (id == "tool_durability" && manifest.runtime != "romfs.v1"))
+            return FeatureAvailability::Unavailable;
+    } else if (id == "freecamera" &&
+               (!fs::is_directory(mods_root(data_root) / "camera303/romfs") ||
+                !fs::is_regular_file(mods_root(data_root) / "camera303/terrain_scale.txt"))) {
+        return FeatureAvailability::Unavailable;
+    }
+    return FeatureAvailability::Ready;
+}
+bool feature_selected(const std::string &csv, const std::string &id) {
+    const auto ids = split_mods(csv);
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+bool configure_feature(const std::string &data_root, const std::string &id, bool on, const std::string &current_csv,
+                       std::string &result_csv, std::string *error) {
+    if (id != "freecamera" && id != "tool_durability")
+        return set_err(error, "Unknown feature"), false;
+    auto ids = split_mods(current_csv);
+    std::vector<std::string> conflicts;
+    bool legacy_camera = false;
+    if (id == "freecamera")
+        conflicts.push_back("camera303");
+    if (on) {
+        if (feature_availability(data_root, id) != FeatureAvailability::Ready)
+            return set_err(error, "Install a complete, compatible feature package first."), false;
+        const auto root = mods_root(data_root) / id;
+        if (fs::exists(root / "manifest.json")) {
+            mod_package::Manifest m;
+            if (!mod_package::read(root, m, error))
+                return false;
+            conflicts = m.conflicts;
+        } else if (id == "freecamera") {
+            legacy_camera = true;
+        }
+    }
+    ids.erase(std::remove_if(ids.begin(), ids.end(),
+                             [&](const std::string &name) {
+                                 return name == id ||
+                                        std::find(conflicts.begin(), conflicts.end(), name) != conflicts.end();
+                             }),
+              ids.end());
+    if (on) {
+        if (legacy_camera)
+            ids.insert(ids.begin(), "camera303");
+        ids.insert(ids.begin(), id);
+    }
+    result_csv = join_mods(ids);
+    return true;
+}
+
 bool move_enabled(const std::string& data_root, const std::string& id, int delta, std::string* error) {
     if (!valid_id(id) || delta == 0) return set_err(error, "invalid move"), false;
     std::vector<std::string> cur = read_enabled(data_root);

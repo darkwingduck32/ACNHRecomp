@@ -193,6 +193,9 @@ NX_HLE("__process_return", process_return);
 // ---- boot -----------------------------------------------------------------------------------------------------
 
 void boot() {
+#ifdef NX_VERSION_STRING
+    log("runtime: version %s; native features revision 7 (delta resources)",NX_VERSION_STRING);
+#endif
     if (const char* t = std::getenv("NX_TRACE")) g_trace = *t == '1';
     if (plat::setting("trace") == "1") g_trace = true;
     memory_init();

@@ -1,5 +1,5 @@
 ﻿#!/usr/bin/env python3
-"""Add feature packages after the release's existing native mods have been bundled."""
+"""Legacy package builder for older players; native-feature releases do not call this."""
 import argparse
 import hashlib
 import json

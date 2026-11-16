@@ -32,3 +32,5 @@ refs/
 /gen/
 /build/
 .DS_Store
+# Generated native payload sources contain private reviewed game-derived assets.
+native-features/

@@ -16,7 +16,7 @@
 #include "nvn_draw_state.h"
 #include "nvn_ultrawide.h"
 #include "platform.h"
-#include "features/camera/freecamera.h"
+#include "features/runtime.h"
 #include <nx/game.h>
 
 namespace nx::nvn {
@@ -397,7 +397,7 @@ void draw_viewport(float ui_x, const ShaderInfo* vs, VkViewport& vp, VkRect2D& s
     // distant terrain. Keep native sky/cloud/star shading and projection, but
     // place their main-view colour and depth draws at background depth. The
     // environment-probe variants and inactive/indoor cameras remain native.
-    if (sky_depth && vs && camera_background_depth(vs->hash)) vp.minDepth=vp.maxDepth=1.f;
+    if (sky_depth && vs && features::background_depth(vs->hash)) vp.minDepth=vp.maxDepth=1.f;
     // NVN's upper-left window origin (what Wonder sets) maps NDC +Y to the top of the render target, like D3D;
     // Vulkan maps it to the bottom. A negative-height viewport gives NVN's mapping, and with it NVN's front faces.
     // (Before this, the front face was inverted instead: triangles were culled right, but every render target was

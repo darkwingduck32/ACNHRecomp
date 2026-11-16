@@ -18,7 +18,7 @@
 #include <nx/runtime.h>
 
 #include "platform.h"
-#include "features/camera/freecamera.h"
+#include "features/runtime.h"
 
 namespace nx {
 
@@ -481,8 +481,7 @@ FastModule fast_module(const ModuleInfo* mi) {
     auto* funcs = new FuncEntry[mi->func_count + 1];
     std::copy(mi->funcs, mi->funcs + mi->func_count, funcs);
     std::sort(funcs, funcs + mi->func_count, [](const FuncEntry& a, const FuncEntry& b) { return a.offset < b.offset; });
-    camera_install_terrain(mi, funcs);
-    freecamera_install(mi, funcs);
+    features::module_loaded(*mi, funcs);
     funcs[mi->func_count] = {~0ull, nullptr};
     size_t blocks = (mi->text_size + 63) / 64;
     auto* block = new uint32_t[blocks];

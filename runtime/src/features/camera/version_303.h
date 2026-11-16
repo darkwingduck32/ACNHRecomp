@@ -64,4 +64,28 @@ inline constexpr uint32_t instruction_d10383ff = 0xd10383ff;
 inline constexpr uint32_t instruction_d10483ff = 0xd10483ff;
 inline constexpr uint32_t instruction_d65f03c0 = 0xd65f03c0;
 inline constexpr uint32_t instruction_f90007e8 = 0xf90007e8;
+// Reviewed mFovy.f32 leaves in Param/Camera/CameraParams.byml. Apply the
+// preference before native camera/frustum construction, not at GPU projection
+// update time. Room, UI, dialogue and photo presets retain their own lenses.
+inline constexpr uint32_t parameter_archive_size = 6800572;
+inline constexpr uint32_t parameter_header_size = 109984;
+inline constexpr const char* parameter_header_sha256 =
+    "a425af135b1a6e72069d5bb79c79cbae1e65d7702f86469bfe6dee3d9d5e83fb";
+struct LensField { uint32_t offset; float stock, camera; };
+inline constexpr LensField outdoor_lenses[] = {
+    {5001752, 22.f, 31.f}, // cSwim
+    {5005812, 34.f, 34.f}, // cFirstPersonWherearenOutdoorFar
+    {5002032, 22.f, 31.f}, // cSlingShot
+    {4994332, 22.f, 31.f}, // cBehind
+    {5005252, 34.f, 34.f}, // cFirstPersonOutdoorNormal
+    {5007212, 22.f, 22.f}, // cTitleNpcUpgrade
+    {5005672, 34.f, 34.f}, // cFirstPersonWherearenOutdoorNormal
+    {4993632, 22.f, 31.f}, // cNormal
+    {5005532, 34.f, 34.f}, // cFirstPersonWherearenOutdoorNear
+    {5005392, 34.f, 34.f}, // cFirstPersonOutdoorFar
+    {4993772, 22.f, 31.f}, // cSky
+    {5003012, 22.f, 31.f}, // cTitleNpc
+    {5001892, 22.f, 31.f}, // cDive
+    {5005112, 34.f, 34.f}, // cFirstPersonOutdoorNear
+};
 } // namespace nx::camera303

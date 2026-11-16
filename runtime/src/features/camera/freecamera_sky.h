@@ -2,6 +2,12 @@
 #include <cmath>
 
 namespace nx::freecamera {
+// Sky placement follows the camera view, independently of orbit input or the
+// optional replacement models. Ordinary native views keep their stock path.
+inline bool sky_correction_required(bool outdoor, bool orbit_enabled, int fov_degrees, float zoom_depth_offset) {
+    return outdoor && (orbit_enabled || fov_degrees != 31 ||
+                       (std::isfinite(zoom_depth_offset) && std::fabs(zoom_depth_offset) > .001f));
+}
 // Replace the native forward tilt with the same depression around the horizon.
 // ParkVR's native radius is 2000; vertical_scale comes from its model matrix.
 inline bool sky_horizon_height(float tilt, float height, float vertical_scale, float& out) {

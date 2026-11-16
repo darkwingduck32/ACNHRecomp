@@ -8,6 +8,9 @@
 #include "nvn_vk.h"
 
 namespace nx::nvn {
+// Recorded temporal frames, for progress reporting and deterministic live tests.
+uint64_t temporal_frames();
+
 
 // One frame's inputs, all w x h, in these layouts: color, depth and motion vectors SHADER_READ_ONLY_OPTIMAL (depth
 // through depth_view, its depth aspect; motion vectors RG16F in UV, the last frame's minus this one's, without the

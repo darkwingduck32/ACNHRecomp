@@ -35,6 +35,10 @@
 
 #include "bug_report.h"
 #include "config.h"
+#include "features/camera/native.h"
+#include "features/capabilities.h"
+#include "features/camera/preferences.h"
+#include <nx/game.h>
 #include "touch_layout.h"
 #include "game_clock.h"
 #include "platform.h"
@@ -576,6 +580,42 @@ void store_custom_game_time(int year, int month, int day, int hour, int minute) 
     game_clock_apply_config();
 }
 
+void camera_settings() {
+    if (std::string(game::kInfo.id) != "acnh")
+        return;
+    section("camera.defaults_section");
+    for (const auto &option : freecamera::kCameraOptions)
+        row(option.label, option.description,
+            [&](float w) { slider(option.key, option.min, option.max, option.fallback, option.format, w); });
+    row("camera.reduce_fog", "camera.reduce_fog.desc", [&](float w) { toggle("camera.reduce_fog", true, w); });
+    section("camera.section");
+    row("camera.enabled", "camera.enabled.desc", [&](float w) { toggle("camera.enabled", true, w); });
+    const bool on = config_get_bool("camera.enabled", true);
+    ImGui::BeginDisabled(!on);
+    for (const auto &option : freecamera::kOrbitOptions)
+        row(option.label, option.description,
+            [&](float w) { slider(option.key, option.min, option.max, option.fallback, option.format, w); });
+    row("camera.invert_vertical", "camera.invert_vertical.desc",
+        [&](float w) { toggle("camera.invert_vertical", false, w); });
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("%s", tr("camera.enhancements"));
+    ImGui::BeginDisabled(!features::camera_models_available);
+    row("camera.replace_models", "camera.replace_models.desc", [&](float w) { toggle("camera.replace_models", true, w); });
+    ImGui::EndDisabled();
+    if (!features::camera_models_available) ImGui::TextWrapped("%s", tr("camera.native_assets_missing"));
+    if (camera_models_need_reload()) ImGui::TextWrapped("%s", tr("camera.models_reload"));
+    if (!camera_models_compatible()) ImGui::TextWrapped("%s", tr("camera.models_conflict"));
+    ImGui::BeginDisabled(!on);
+    row("camera.reduce_glare", "camera.reduce_glare.desc", [&](float w) { toggle("camera.reduce_glare", true, w); });
+    ImGui::EndDisabled();
+    if (on)
+        ImGui::TextWrapped("%s", tr("camera.controls"));
+    section("camera.gameplay_section");
+    ImGui::BeginDisabled(!features::tool_durability_available);
+    row("camera.durability", "camera.durability.desc", [&](float w) { toggle("gameplay.extended_tool_durability", true, w); });
+    ImGui::EndDisabled();
+}
+
 void page_game() {
     Choices langs = {{"auto", tr("game.language.system")},
                      {"en-US", "English (US)"},     {"en-GB", "English (UK)"},  {"es", "Español (España)"},
@@ -596,6 +636,7 @@ void page_game() {
     row("ui.language", "ui.language.desc", [&](float w) { combo("ui.language", "auto", ui_langs, w); });
     row("video.show_fps", "video.show_fps.desc", [&](float w) { toggle("video.show_fps", config_show_fps(), w); });
 
+    camera_settings();
     section("game.section.time");
     row("game.time_travel.sync", "game.time_travel.sync.desc", [&](float w) { toggle("game.time_travel_enabled", true, w); });
     if (!config_get_bool("game.time_travel_enabled", true)) {
@@ -1659,6 +1700,7 @@ void settings_show_online() { g_show_online = true; }
 
 bool settings_draw(float scale, ImFont* title, float opening) {
     g_scale = scale;
+    if (opening == 0.f)
     if (g_show_online.exchange(false)) g_page = kOnlinePage;
     static const bool cycle = std::getenv("NX_UI_CYCLE") != nullptr;  // tests: every page in turn, 10 s each
     if (cycle) g_page = int(double(plat::monotonic_ns()) / 1e10) % kPageCount;

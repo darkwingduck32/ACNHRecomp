@@ -1,10 +1,5 @@
 #pragma once
-#include "nvn/nvn_pipeline.h"
-#include <optional>
+#include "nvn/nvn_extensions.h"
 namespace nx::nvn::replay {
-void camera_uniform_stats();
-bool camera_uniform_host_patch(const ShaderInfo *shader, int bank);
-std::optional<VkDescriptorBufferInfo>
-camera_uniform_patch(const ShaderInfo *shader, const DescriptorBinding &binding,
-                     const uint8_t *data, uint64_t size, uint64_t padded_size);
+void register_camera_uniform_extension();
 } // namespace nx::nvn::replay

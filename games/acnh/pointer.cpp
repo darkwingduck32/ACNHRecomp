@@ -13,7 +13,7 @@
 #include <cstdlib>
 
 #include <nx/runtime.h>
-#include "features/camera/freecamera.h"
+#include "features/runtime.h"
 
 namespace nx {
 
@@ -209,7 +209,7 @@ void focus_input(CPU& c) {
     if (manager && !(c.x[3] & 1) && ld<uint32_t>(manager + 0x18)) {
         const uint64_t entries = ld<uint64_t>(manager + 0x20);
         const uint64_t entry = entries ? ld<uint64_t>(entries) : 0;
-        if (entry && ld<uint64_t>(entry + 0x10)) freecamera_ui_input();
+        if (entry && ld<uint64_t>(entry + 0x10)) features::game_ui_input();
     }
     uint64_t f = g_frame.load();
     if (!g_click.pending) focus_hover(c, f);
@@ -277,7 +277,7 @@ void button_input(CPU& c) {
         if (!known) log("acnh: a button handler is on, owner class %s", describe(vt).c_str());
     }
     if (!owner || ld<uint64_t>(owner) != kModuleBase + g_page_turner) return;
-    freecamera_ui_input();
+    features::game_ui_input();
     uint64_t f = g_frame.load();
     if (!g_click.pending) {
         uint32_t x, y;

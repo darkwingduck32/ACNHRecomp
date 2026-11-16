@@ -1,4 +1,4 @@
-#include "features/camera/package.h"
+#include "features/runtime.h"
 // <data root>/config.ini: see config.h.
 #include "config.h"
 
@@ -287,7 +287,7 @@ void config_apply() {
     if (!g_loaded) config_load();
     log_environment();  // before set_env_default adds the settings' own
     mods_fetch();  // before the language and the frame rate look for them
-    camera_package_defaults();
+    features::configure();
     // Game language "auto": from the system, unless a language file or NX_LANGUAGE says otherwise. Only applied:
     // the entry keeps "auto", so the choice stays automatic.
     std::string game_lang = config_get("game.language", "auto");
@@ -459,6 +459,7 @@ std::vector<ConfigEntry> config_all() {
 }
 
 bool config_needs_restart(const std::string& key) {
+    if (features::restart_required(key)) return true;
     for (const Mapping& m : kMappings)
         if (key == m.key) return m.restart;
     return key == "game.mods" || key == "video.gpu_driver" || key == "controls.glyphs" || key == "input.layout" || key == "video.preset";  // icons: read at boot

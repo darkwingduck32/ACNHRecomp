@@ -42,6 +42,7 @@ namespace nx::nvn {
 std::mutex& vk_queue_mutex();  // nvn_vk.cpp: held around every use of the game's queue
 int hdr_ui_params(float& ui_nits, bool& gamma22);  // nvn_present.cpp: 0 SDR, 1 scRGB, 2 HDR10
 void screenshot_request(const std::string& stem = std::string());  // nvn_screenshot.cpp: F12
+uint64_t temporal_frames();
 uint64_t ffx_fg_presents();                        // nvn_temporal.cpp: AMD frame generation's presents, 0 when off
 }  // namespace nx::nvn
 
@@ -504,6 +505,37 @@ void rotate_draw_data(ImDrawData* dd, int r, float uw, float uh) {
 }  // namespace
 
 void ui_record(VkCommandBuffer cb, VkImage image, VkFormat format, VkExtent2D extent) {
+    // Harness-only UI control: use the same toggle path as F1, even during loading
+    // when guest pad injection cannot reach the host settings screen.
+    static const bool live_ui=std::getenv("NX_LIVE_FRAME")!=nullptr;
+    if(live_ui) {
+        // Isolated harness requests exercise the same config generation path as
+        // settings controls. Transient overrides do not write the user's INI.
+        const std::string config_path=plat::data_root()+"/config_live";
+        if(FILE* f=plat::fopen_utf8(config_path,"rb")) {
+            char request[256]{};const size_t n=std::fread(request,1,sizeof(request)-1,f);std::fclose(f);
+            const std::string_view command(request,n);
+            const auto split=command.find('=');
+            if(split!=command.npos && split>0 &&
+               command.substr(0,split).find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789._")==command.npos &&
+               command.substr(split+1).find_first_of("\r\n\0") == command.npos) {
+                const std::string key(command.substr(0,split)),value(command.substr(split+1));
+                config_set(key,value);
+                log("harness: transient setting %s=%s",key.c_str(),value.c_str());
+            }
+            std::remove(config_path.c_str());
+        }
+        const std::string path=plat::data_root()+"/ui_live";
+        if(FILE* f=plat::fopen_utf8(path,"rb")) {
+            char command[16]{};const size_t n=std::fread(command,1,sizeof(command)-1,f);std::fclose(f);
+            const bool on_temporal=std::strcmp(command,"open-temporal")==0;
+            const bool ready=!on_temporal || nx::nvn::temporal_frames()>0;
+            if(ready) {
+                if(n && (((std::strcmp(command,"open")==0||on_temporal)&&!ui_visible())||(std::strcmp(command,"close")==0&&ui_visible())))ui_toggle();
+                std::remove(path.c_str());
+            }
+        }
+    }
     static bool open_checked = false;  // NX_UI_OPEN read here too: Android sets config.txt's variables after static init
     if (!open_checked) open_checked = true, g_visible = g_visible || std::getenv("NX_UI_OPEN") != nullptr;
     const int quarter = g_quarter.load();
@@ -855,7 +887,8 @@ void ui_open_online() {
 void ui_toggle() {
     g_visible = !g_visible;
     g_first_hint = false;
-    log("ui: settings %s", g_visible ? "opened" : "closed");
+    log("ui: settings %s at game frame %llu, temporal frames %llu", g_visible ? "opened" : "closed",
+        (unsigned long long)g_frame.load(),(unsigned long long)nx::nvn::temporal_frames());
 }
 
 }  // namespace nx::ui

@@ -1,7 +1,14 @@
 # 360 camera runtime
 
-Enable `freecamera` in the Mod Manager and restart the game. The runtime currently
-recognizes the ACNH 3.0.3 camera implementation by instruction fingerprints.
+The camera now runs as a built-in native feature. Use Camera and 360 Camera in
+Settings; no camera ROMFS mod installation is required. See the
+[current feature guide](../games/acnh/features/camera/README.md) for settings,
+build inputs, migration and reload boundaries, and [NATIVE_FEATURES.md](NATIVE_FEATURES.md)
+for the internal extension contracts. The runtime recognizes ACNH 3.0.3 using
+instruction fingerprints.
+
+The investigations below are historical implementation notes. Earlier package
+installation instructions are superseded by the current feature guide.
 
 ## Controls
 

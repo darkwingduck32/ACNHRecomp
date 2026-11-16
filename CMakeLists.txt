@@ -175,6 +175,20 @@ endif()
 # Dear ImGui: the settings screen and the launcher. tools/setup_acnh.py downloads it into private/third_party/imgui.
 set(NX_IMGUI_DIR "${CMAKE_SOURCE_DIR}/private/third_party/imgui" CACHE PATH "Dear ImGui sources")
 
+include(runtime/src/features/features.cmake)
+if(NX_TESTS AND NOT ANDROID)
+    add_executable(features_test tests/features_test.cpp runtime/src/features/embedded_resources.cpp)
+    target_link_libraries(features_test PRIVATE nx_feature_core nx_resource_data)
+    add_test(NAME native_features COMMAND features_test)
+    add_executable(resource_delta_test tests/resource_delta_test.cpp)
+    target_link_libraries(resource_delta_test PRIVATE nx_resource_data)
+    add_test(NAME resource_delta COMMAND resource_delta_test)
+    if(EXISTS "${NX_NATIVE_ASSET_GAME}/mods/freecamera/romfs")
+        add_executable(native_resources_test tests/native_resources_test.cpp runtime/src/features/embedded_resources.cpp)
+        target_link_libraries(native_resources_test PRIVATE nx_feature_core nx_resource_data nx_embedded_resources)
+        add_test(NAME native_resources COMMAND native_resources_test "${NX_NATIVE_ASSET_GAME}" "${CMAKE_BINARY_DIR}/native-resource-test-cache")
+    endif()
+endif()
 add_library(nx_save_storage STATIC runtime/src/save_storage.cpp runtime/src/save_profiles.cpp)
 target_include_directories(nx_save_storage PUBLIC ${CMAKE_SOURCE_DIR}/runtime/src)
 
@@ -270,6 +284,11 @@ endforeach()
 include(runtime/src/features/camera/camera.cmake)
 
 set(NX_RUNTIME_SOURCES
+    runtime/src/nvn/nvn_extensions.cpp
+    runtime/src/features/runtime.cpp
+    runtime/src/features/builtins.cpp
+    runtime/src/features/tool_durability/native.cpp
+    runtime/src/features/embedded_resources.cpp
     runtime/src/game_folder.cpp
     runtime/src/main.cpp
     runtime/src/sampler.cpp
@@ -611,7 +630,7 @@ else()
     target_sources(${NX_GAME} PRIVATE runtime/src/ui/ui_stub.cpp)
 endif()
 target_sources(${NX_GAME} PRIVATE runtime/src/saves.cpp)
-target_link_libraries(${NX_GAME} PRIVATE nx_save_storage nx_camera nx_mod_manager)
+target_link_libraries(${NX_GAME} PRIVATE nx_save_storage nx_camera nx_mod_manager nx_feature_core nx_embedded_resources nx_feature_capabilities nx_resource_data)
 
 # Mbed TLS (Apache-2.0): the game's nn::ssl connections (NEX, the island services) and the signed account id_token
 # for Nextendo Online (docs/NEXTENDO.md). Fetched as a release archive on the first configure.

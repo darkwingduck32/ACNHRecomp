@@ -147,6 +147,41 @@ int main(int argc, char **argv) {
     put(game / "game.ini", "build_id = 00000000000000000000000000000000\n");
     check(!mod_package::validate(pack, data, nullptr, &error),
           "unsupported game accepted");
+    // Settings use a config snapshot, preserving native mods and unrelated settings.
+    put(game / "game.ini", "build_id = FF1D1C05670DB6021C85B624A710B963\n");
+    put(game / "mods/freecamera/romfs/test", "legacy camera");
+    check(mod_manager::feature_availability(data, "freecamera") == mod_manager::FeatureAvailability::Unavailable,
+          "Incomplete legacy layout must not be offered as a complete feature");
+    put(game / "mods/camera303/romfs/Pack/StaticParam.pack", "legacy camera parameters");
+    put(game / "mods/camera303/terrain_scale.txt", "2\n");
+    put(game / "mods/tool_durability/romfs/test", "legacy tools");
+    std::string configured;
+    auto old_config = get(game / "config.ini");
+    check(mod_manager::configure_feature(data, "freecamera", true, " ptbr, speedfix60,camera303,other,other ",
+                                         configured, &error),
+          error);
+    check(configured == "freecamera,camera303,ptbr,speedfix60,other",
+          "Legacy camera settings must retain the companion parameters and native mods");
+    check(get(game / "config.ini") == old_config, "Config snapshot helper unexpectedly wrote the file");
+    check(mod_manager::configure_feature(data, "freecamera", false, configured + ",camera303", configured, &error),
+          error);
+    check(configured == "ptbr,speedfix60,other", "Master off must disable both legacy and packaged camera data");
+    check(mod_manager::configure_feature(data, "tool_durability", true, configured, configured, &error), error);
+    check(configured == "tool_durability,ptbr,speedfix60,other", "Tool durability must remain independent");
+    check(!mod_manager::configure_feature(data, "speedfix60", false, configured, configured, &error),
+          "Feature controls must not manage native mods");
+    put(game/"mods/freecamera/manifest.json",manifest("freecamera","legacy camera"));
+    check(mod_manager::feature_availability(data,"freecamera")==mod_manager::FeatureAvailability::Unavailable,
+          "A data-only manifest must not impersonate the camera runtime capability");
+    check(!mod_manager::configure_feature(data,"freecamera",true,configured,configured,&error),"Incompatible feature enabled from settings");
+    fs::remove_all(game / "mods/freecamera");
+    check(mod_manager::feature_availability(data, "freecamera") == mod_manager::FeatureAvailability::Missing,
+          "Missing package not reported");
+    check(!mod_manager::configure_feature(data, "freecamera", true, configured, configured, &error),
+          "Missing feature enabled");
+    check(mod_manager::configure_feature(data, "freecamera", false, "freecamera,ptbr,speedfix60", configured, &error) &&
+              configured == "ptbr,speedfix60",
+          "Missing packages must still be disableable");
     // Parameter patches must preserve independent changes, and fail without
     // partial edits on conflict.
     std::string archive = "SARC" + std::string(60, 'x'), original = archive;
@@ -195,10 +230,38 @@ int main(int argc, char **argv) {
       // native archive.
       check(mod_manager::import_mod(data, argv[1], &id, nullptr, &error),
             error);
+      check(mod_manager::configure_feature(data, "freecamera", true, "camera303,ptbr,speedfix60,other",
+                                           configured, &error) && configured == "freecamera,ptbr,speedfix60,other",
+            "Manifest camera settings must replace the legacy companion while preserving native mods");
       auto source = get(argv[2]), before = source;
       std::ifstream profile(game /
                             "mods/freecamera/profiles/parameter_edits.txt");
       check(camera::apply_parameters(source, profile, error), error);
+      const auto camera_default = source;
+      for (int degrees : {20, 31, 60, 80}) {
+        source = camera_default;
+        check(camera::apply_lens(source, degrees, error), error);
+        std::set<size_t> lens_bytes;
+        for (const auto &field : camera303::outdoor_lenses) {
+          float actual;
+          std::memcpy(&actual, source.data() + field.offset, 4);
+          check(actual == degrees, "Native outdoor lens did not receive the preference");
+          for (size_t i = field.offset; i < field.offset + 4; ++i) lens_bytes.insert(i);
+        }
+        for (size_t i = 0; i < source.size(); ++i)
+          if (!lens_bytes.count(i))
+            check(source[i] == camera_default[i], "Lens preference changed indoor/UI or unrelated mod data");
+        const auto once = source;
+        check(camera::apply_lens(source, degrees, error) && source == once, "Native lens adaptation is not idempotent");
+      }
+      source = camera_default;
+      const float conflict_fov = 99;
+      std::memcpy(source.data() + camera303::outdoor_lenses[13].offset, &conflict_fov, 4);
+      const auto lens_conflict = source;
+      check(!camera::apply_lens(source, 60, error) && source == lens_conflict,
+            "A late native lens conflict must refuse the whole edit set");
+      source = camera_default;
+      check(camera::apply_lens(source, 60, error), error);
       auto stock = get(argv[3]);
       for (size_t i = 0; i < before.size(); ++i)
         if (before[i] != stock[i])

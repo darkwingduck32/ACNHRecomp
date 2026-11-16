@@ -37,6 +37,7 @@ struct Entry {
 // clang-format off
 
 const Entry kEn[] = {
+#include "features/camera/text_en.inc"
     {"controls.touch_layout", "On-screen layout"},
     {"controls.touch_layout.desc", "Drag the buttons to where your thumbs want them. The face buttons and the d-pad move together."},
     {"controls.touch_layout.edit", "Edit"},

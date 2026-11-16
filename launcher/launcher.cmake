@@ -39,7 +39,7 @@ foreach(t acnhrecomp_launcher nx_save_storage nx_mod_manager)
         set_target_properties(${t} PROPERTIES COMPILE_OPTIONS "${opts}")
     endif()
 endforeach()
-target_link_libraries(acnhrecomp_launcher PRIVATE SDL3::SDL3 Threads::Threads nx_save_storage nx_mod_manager)
+target_link_libraries(acnhrecomp_launcher PRIVATE SDL3::SDL3 Threads::Threads nx_save_storage nx_mod_manager nx_feature_capabilities)
 if(WIN32)
     target_link_libraries(acnhrecomp_launcher PRIVATE ole32 shell32 uuid ws2_32 bcrypt)  # desktop + Nextendo PKCE
 endif()

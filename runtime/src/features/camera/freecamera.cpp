@@ -1,4 +1,7 @@
-#include "package.h"
+#include "features/module_hooks.h"
+#include "freecamera_sky.h"
+#include "native.h"
+#include "preferences.h"
 #include "version_303.h"
 #include "freecamera.h"
 #include "freecamera_math.h"
@@ -9,6 +12,7 @@
 #include "config.h"
 #include "kernel.h"
 #include "platform.h"
+#include "ui/ui.h"
 #include <nx/game.h>
 #include <nx/runtime.h>
 #include <algorithm>
@@ -23,6 +27,7 @@
 namespace nx {
 namespace {
 std::mutex lock;
+const freecamera::Preferences &preferences();
 freecamera::Orbit orbit;
 freecamera::Controls controls;
 Fn original_lookat = nullptr;
@@ -35,6 +40,7 @@ thread_local uint64_t direct_lookat_camera = 0;
 thread_local std::array<float,9> direct_lookat_source{};
 std::atomic<uint64_t> field_frame{~uint64_t(0)};
 std::atomic<bool> field_enabled{false};
+std::atomic<bool> field_view_enabled{false};
 std::atomic<float> zoom_depth_offset{0};
 std::atomic<float> view_ray[3]{{0},{-1},{0}};
 // The look-at call sites are shared with interiors. Only the island's
@@ -76,12 +82,14 @@ bool perspective_bounds(float reach, freecamera::Bounds& bounds) {
 }
 void projection_update(CPU& cpu) {
     const uint64_t object=cpu.x[0], caller=cpu.x[30]-kModuleBase;
-    original_projection(cpu); // includes the existing aspect-ratio/jitter hook
-    if (caller==camera303::offset_376d214 || caller==camera303::offset_376d224) return; // minimap
+    original_projection(cpu); // includes aspect and temporal jitter hooks
+    if (caller == camera303::offset_376d214 || caller == camera303::offset_376d224)
+        return;
     const VmInfo vm=vm_query(object);
-    if (!(vm.perm&1) || object<vm.addr || vm.size<0xbc || object-vm.addr>vm.size-0xbc) return;
-    const float far=ld<float>(object+0x9c), fov=ld<float>(object+0xa0);
-    if (!freecamera::outdoor_projection(ld<float>(object+0x98),far,fov)) return;
+    if (!(vm.perm & 1) || object < vm.addr || vm.size < 0xbc || object - vm.addr > vm.size - 0xbc)
+        return;
+    if (!freecamera::outdoor_projection(ld<float>(object + 0x98), ld<float>(object + 0x9c), ld<float>(object + 0xa0)))
+        return;
     std::lock_guard guard(lock);
     const uint64_t now=g_frame.load(std::memory_order_relaxed);
     if (projections.size()>32) projections.clear();
@@ -105,7 +113,7 @@ void foreground_refresh(CPU& cpu) {
         const char* e=std::getenv("NX_FREECAMERA_FOREGROUND_REFRESH");
         return !e || std::strcmp(e,"0")!=0;
     }();
-    if (!requested || !freecamera_field_active()) return;
+    if (!requested || !camera_view_active()) return;
     std::lock_guard guard(lock);
     if (!visibility_revision) return;
     if (foreground_revision.size()>16) foreground_revision.clear();
@@ -123,8 +131,21 @@ void foreground_refresh(CPU& cpu) {
 NX_HOOK(camera303::offset_10d660c, foreground_refresh);
 struct Terrain { std::array<int32_t, 4> base, last; };
 std::unordered_map<uint64_t, Terrain> terrain;
-bool enabled() { return camera_package_enabled(); }
+bool enabled() { return camera_enabled(); }
 
+const freecamera::Preferences &preferences() {
+    // Install runs before input starts; later reads hold the camera lock.
+    static freecamera::Preferences p;
+    static uint64_t generation = ~uint64_t(0);
+    const uint64_t current = config_generation();
+    if (generation == current) return p;
+    p = freecamera::preferences(
+        config_get_int("camera.fov_degrees", 31), config_get_int("camera.reset_zoom_pct", 100),
+        config_get_int("camera.orbit_speed_pct", 100), config_get_int("camera.zoom_speed_pct", 100),
+        config_get_bool("camera.invert_vertical", false));
+    generation = current;
+    return p;
+}
 float axis(int32_t v) {
     float x = std::clamp(float(v) / plat::kStickMax, -1.0f, 1.0f);
     return std::fabs(x) < 0.15f ? 0 : std::copysign((std::fabs(x) - 0.15f) / 0.85f, x);
@@ -200,7 +221,6 @@ void terrain_update(CPU& cpu) {
     const VmInfo vm = vm_query(object);
     if (!(vm.perm & 2) || object < vm.addr || vm.size < 0x1a40 || object-vm.addr > vm.size-0x1a40) return;
     std::lock_guard guard(lock);
-    if (!enabled()) return;
     auto* lo = reinterpret_cast<int32_t*>(object+0x1a28);
     auto* hi = reinterpret_cast<int32_t*>(object+0x1a38);
     std::array<int32_t, 4> current{lo[0], lo[1], hi[0], hi[1]};
@@ -260,13 +280,13 @@ void terrain_update(CPU& cpu) {
 // This precedes both the CPU instance array and GPU buffer allocations.
 // Increasing only the live capacity would write beyond those buffers.
 void terrain_instance_capacity(CPU& cpu) {
-    if (!enabled() || cpu.x[8]!=10000) return;
+    if (cpu.x[8]!=10000 || std::strcmp(game::kInfo.id,"acnh")) return;
     cpu.x[8]=40000;
     log("freecamera: terrain instance capacity 10000 -> 40000 before allocation");
 }
 NX_HOOK(camera303::offset_1462bb8, terrain_instance_capacity);
 void land_bounds_update(CPU& cpu) {
-    if (!freecamera_field_active()) return;
+    if (!camera_view_active()) return;
     const uint64_t object=cpu.x[19];
     const VmInfo vm=vm_query(object);
     if ((vm.perm&3)!=3 || object<vm.addr || vm.size<0xf8 || object-vm.addr>vm.size-0xf8) return;
@@ -308,7 +328,7 @@ void water_bounds_update(CPU& cpu) {
         const char* value=std::getenv("NX_FREECAMERA_WATER_BOUNDS");
         return !value || std::strcmp(value,"0")!=0;
     }();
-    if (!requested || !freecamera_field_active()) return;
+    if (!requested || !camera_view_active()) return;
     // Diagnostic paired comparison; normal play always uses the view footprint.
     static const bool ab=std::getenv("NX_FREECAMERA_WATER_AB")!=nullptr;
     if (ab && (g_frame.load(std::memory_order_relaxed)/600)%2==0) return;
@@ -388,13 +408,14 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
     if (entry + 16 > module->text_size) return;
     const uint32_t words[] = {camera303::instruction_2d470801, camera303::instruction_2d480c00, camera303::instruction_1e232020, camera303::instruction_2d491404};
     if (std::memcmp(reinterpret_cast<void*>(module->base + entry), words, sizeof words)) return;
-    freecamera_fruit_install(module, enabled());
-    freecamera_fog_install(enabled());
-    freecamera_ao_install(module, enabled());
+    orbit.zoom = preferences().reset_zoom;
+    freecamera_fruit_install(module, camera_models_active());
+    // Install validated adapters once; live state gates their execution.
+    freecamera_fog_install(true);
+    freecamera_ao_install(module, true);
     for (size_t i = 0; i < module->func_count; i++) {
         if (functions[i].offset != entry) continue;
-        original_lookat = functions[i].fn;
-        functions[i].fn = lookat_scoped;
+        if (!features::wrap_function({functions,module->func_count}, entry, lookat_scoped, original_lookat)) break;
         log("freecamera: scoped camera matrix update installed (3.0.3)");
         if (const char* initial = std::getenv("NX_FREECAMERA_YAW")) {
             char* end = nullptr;
@@ -425,18 +446,15 @@ void freecamera_install(const ModuleInfo* module, FuncEntry* functions) {
     for (size_t i = 0; i < module->func_count; i++) {
         if (functions[i].offset == camera303::offset_37e5968 && ld<uint32_t>(module->base+camera303::offset_37e5968)==camera303::instruction_bd409800 &&
             ld<uint32_t>(module->base+camera303::offset_37e596c)==camera303::instruction_1e2c1003) {
-            original_projection=functions[i].fn;
-            functions[i].fn=projection_update;
+            features::wrap_function({functions,module->func_count}, camera303::offset_37e5968, projection_update, original_projection);
             log("freecamera: perspective visibility projection capture installed");
         }
         if (functions[i].offset == camera303::offset_60cba4 && ld<uint32_t>(module->base+camera303::offset_60cba4) == camera303::instruction_91009000 && ld<uint32_t>(module->base+camera303::offset_60cba8) == camera303::instruction_d65f03c0) {
-            original_float_storage = functions[i].fn;
-            functions[i].fn = float_storage;
+            features::wrap_function({functions,module->func_count}, camera303::offset_60cba4, float_storage, original_float_storage);
             log("freecamera: yaw-aware foreground/furniture bounds installed");
         }
         if (functions[i].offset == camera303::offset_14681fc && ld<uint32_t>(module->base+camera303::offset_14681fc) == camera303::instruction_d10383ff && ld<uint32_t>(module->base+camera303::offset_14688b8) == camera303::instruction_b91a3e69) {
-            original_terrain = functions[i].fn;
-            functions[i].fn = terrain_update;
+            features::wrap_function({functions,module->func_count}, camera303::offset_14681fc, terrain_update, original_terrain);
             log("freecamera: yaw-aware terrain footprint installed");
         }
     }
@@ -447,6 +465,17 @@ void freecamera_ui_input() {
 bool freecamera_field_active() {
     const uint64_t seen=field_frame.load(std::memory_order_relaxed), now=g_frame.load(std::memory_order_relaxed);
     return terrain_active() && field_enabled.load(std::memory_order_relaxed) && seen!=~uint64_t(0) && now>=seen && now-seen<=2;
+}
+bool camera_view_active() {
+    const uint64_t seen=field_frame.load(std::memory_order_relaxed), now=g_frame.load(std::memory_order_relaxed);
+    return terrain_active() && field_view_enabled.load(std::memory_order_relaxed) && seen!=~uint64_t(0) && now>=seen && now-seen<=2;
+}
+bool freecamera_world_projection(float near_plane, float far_plane, float fov) {
+    return camera_view_active() && freecamera::outdoor_projection(near_plane, far_plane, fov);
+}
+bool camera_sky_active() {
+    return freecamera::sky_correction_required(camera_view_active(), camera_enabled(),
+                                              camera_lens_degrees(), freecamera_zoom_depth_offset());
 }
 float freecamera_zoom_depth_offset() {
     return zoom_depth_offset.load(std::memory_order_relaxed);
@@ -469,14 +498,26 @@ void freecamera_input(plat::PadState& p) {
     const bool reset = (p.buttons & kFreeCameraReset) != 0;
     const bool stick_button = (p.buttons & kStickR) != 0;
     p.buttons &= ~(kFreeCameraZoom | kFreeCameraReset);
-    if (!on) { orbit = {}; controls.cancel(); return; }
+    const auto trace_input = [&](bool active) {
+        static const bool trace = std::getenv("NX_FREECAMERA_TRACE") != nullptr;
+        static uint64_t next = 0;
+        const uint64_t frame = g_frame.load(std::memory_order_relaxed);
+        if (trace && frame >= next) {
+            next = frame + 30;
+            log("freecamera: input frame %llu enabled %d active %d yaw %.5f pitch %.5f zoom %.5f",
+                (unsigned long long)frame, int(on), int(active), double(orbit.yaw), double(orbit.pitch), double(orbit.zoom));
+        }
+    };
+    if (!on) { orbit = {}; orbit.zoom = preferences().reset_zoom; controls.cancel(); trace_input(false); return; }
     const uint64_t seen = field_frame.load(std::memory_order_relaxed);
     const uint64_t now_frame = g_frame.load(std::memory_order_relaxed);
     const uint64_t ui_seen = ui_frame.load(std::memory_order_relaxed);
     const bool ui_active = ui_seen != ~uint64_t(0) && now_frame >= ui_seen && now_frame-ui_seen <= 2;
     const bool active = terrain_active() && seen != ~uint64_t(0) && now_frame >= seen && now_frame-seen <= 2 &&
-                        !ui_active && !plat::keyboard_typing();
-    controls.update(orbit, active, reset, zoom_key, stick_button, axis(p.rx), axis(p.ry), dt);
+                        !ui_active && !ui::ui_visible() && !plat::keyboard_typing();
+    controls.update(orbit, active, reset, zoom_key, stick_button, axis(p.rx), axis(p.ry), dt, preferences().reset_zoom,
+                    preferences().orbit_speed, preferences().zoom_speed, preferences().invert_vertical);
+    trace_input(active);
     if (active) {
         float x, y;
         freecamera::movement(orbit.yaw, float(p.lx), float(p.ly), x, y);
@@ -501,8 +542,9 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
         if ((vm.perm&3)!=3 || cam<vm.addr || vm.size<0x5c || cam-vm.addr>vm.size-0x5c) return;
     } else if (cam < kHeapBase || cam + 0x5c > kHeapBase + heap_size()) return;
     std::lock_guard guard(lock);
-    const bool on = enabled() && terrain_active();
-    field_enabled.store(on,std::memory_order_relaxed);
+    const bool on = terrain_active();
+    field_view_enabled.store(on,std::memory_order_relaxed);
+    field_enabled.store(enabled() && on,std::memory_order_relaxed);
     if (space==freecamera::CameraSpace::world) {
         field_x = ld<float>(cam+0x44);
         field_z = ld<float>(cam+0x4c);
@@ -553,8 +595,8 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
 }
 
 namespace nx {
-bool camera_background_depth(const std::string& hash) {
-    return freecamera_field_active() && (hash==camera303::shader_fce7966c1f0b7193 ||
+bool camera_background_depth(std::string_view hash) {
+    return camera_sky_active() && (hash==camera303::shader_fce7966c1f0b7193 ||
         hash==camera303::shader_3ebba4ffae3ffdd3 || hash==camera303::shader_0f62b0e3657eeab0 || hash==camera303::shader_cabdc233d975169b);
 }
 }

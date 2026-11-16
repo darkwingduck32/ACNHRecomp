@@ -66,16 +66,21 @@ struct Orbit {
 struct Controls {
     bool pressed = false, dragged = false;
     void cancel() { pressed = dragged = false; }
-    void update(Orbit& orbit, bool active, bool reset, bool zoom_key,
-                bool stick_button, float x, float y, float dt) {
+    void update(Orbit &orbit, bool active, bool reset, bool zoom_key, bool stick_button, float x, float y, float dt,
+                float reset_zoom = 1, float orbit_speed = 1, float zoom_speed = 1, bool invert_vertical = false) {
         if (!active) { cancel(); return; }
         if (stick_button && !pressed) dragged = false;
         if (stick_button && (x != 0 || y != 0)) dragged = true;
         const bool click = pressed && !stick_button && !dragged;
         pressed = stick_button;
-        if (reset || click) { orbit = {}; return; }
+        if (reset || click) {
+            orbit = {};
+            orbit.zoom = std::clamp(reset_zoom, .25f, 3.f);
+            return;
+        }
         const bool zoom = zoom_key || stick_button;
-        orbit.advance(x, zoom ? 0 : y, zoom ? -y : 0, dt);
+        orbit.advance(x * orbit_speed, zoom ? 0 : y * orbit_speed * (invert_vertical ? -1.f : 1.f),
+                      zoom ? -y * zoom_speed : 0, dt);
     }
 };
 }

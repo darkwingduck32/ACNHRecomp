@@ -1,4 +1,5 @@
 #include "features/camera/freecamera_math.h"
+#include "features/camera/preferences.h"
 #include "features/camera/freecamera_fruit_layout.h"
 #include "features/camera/freecamera_visibility.h"
 #include "features/camera/freecamera_fog.h"
@@ -14,6 +15,57 @@ static void check(bool ok, const char* message) {
 }
 int main() {
     using namespace nx::freecamera;
+    check(!sky_correction_required(false,true,60,100), "Rooms and UI must retain native sky behavior");
+    check(!sky_correction_required(true,false,31,0), "Unmodified camera with orbit disabled retains native sky");
+    check(sky_correction_required(true,true,31,0), "Orbit requires sky correction");
+    check(sky_correction_required(true,false,60,0), "Custom FOV requires sky correction with orbit disabled");
+    check(sky_correction_required(true,false,31,100) && sky_correction_required(true,false,31,-100),
+          "Both zoom directions require sky correction with orbit disabled");
+    for (auto resource : {"Model/PltTreeOak.Nin_NX_NVN.zs", "Model/CloudVR.Nin_NX_NVN.zs",
+                          "Model/FldOutS00.Nin_NX_NVN.zs", "System/Resource/ResourceSizeTable.srsizetable"}) {
+        check(!resource_override_allowed(true, false, resource), "Original-model mode must bypass camera models and their size table");
+        check(resource_override_allowed(true, true, resource), "Replacement-model mode must retain camera resources");
+        check(resource_override_allowed(false, false, resource), "Camera model choices must not filter other mods");
+    }
+    check(resource_override_allowed(true, false, "Pack/StaticParam.pack") &&
+          resource_override_allowed(false, false, "Pack/StaticParam.pack"),
+          "Model replacement must not remove camera parameters or native SpeedFix data");
+    {
+        const auto custom = preferences(60, 175, 200, 50, true);
+        check(std::fabs(custom.fov - pi / 3) < .000001f && custom.reset_zoom == 1.75f,
+              "Configured FOV/zoom must use degrees and percent");
+        const auto bounded = preferences(999, -99, 999, -99, false);
+        check(std::fabs(bounded.fov - 80 * pi / 180) < .000001f && bounded.reset_zoom == .25f &&
+                  bounded.orbit_speed == 3 && bounded.zoom_speed == .25f,
+              "Configuration outside UI ranges must be bounded");
+        Orbit orbit{1, .4f, 2};
+        Controls controls;
+        controls.update(orbit, true, true, false, false, 0, 0, .02f, custom.reset_zoom);
+        check(orbit.yaw == 0 && orbit.pitch == 0 && orbit.zoom == 1.75f,
+              "Keyboard reset must use the configured distance and recenter");
+        controls.update(orbit, true, false, false, true, 0, 0, .02f, custom.reset_zoom);
+        controls.update(orbit, true, false, false, false, 0, 0, .02f, custom.reset_zoom);
+        check(orbit.zoom == 1.75f, "R3 click reset must use the same configured distance");
+        Orbit normal, fast, inverted;
+        Controls a, b, c;
+        a.update(normal, true, false, false, false, 1, 1, .02f);
+        b.update(fast, true, false, false, false, 1, 1, .02f, 1, 2, 1);
+        c.update(inverted, true, false, false, false, 1, 1, .02f, 1, 1, 1, true);
+        check(std::fabs(fast.yaw - 2 * normal.yaw) < .000001f && std::fabs(fast.pitch - 2 * normal.pitch) < .000001f,
+              "Orbit sensitivity must scale both axes");
+        check(inverted.pitch == -normal.pitch && inverted.yaw == normal.yaw,
+              "Vertical inversion must not invert horizontal orbit");
+        Orbit zoom, zoom_inverted;
+        Controls d, e;
+        d.update(zoom, true, false, true, false, 0, 1, .02f, 1, 1, .5f);
+        e.update(zoom_inverted, true, false, true, false, 0, 1, .02f, 1, 1, .5f, true);
+        check(zoom.zoom == zoom_inverted.zoom && zoom.zoom < 1,
+              "Vertical orbit inversion must not change zoom direction");
+        auto before = orbit;
+        controls.update(orbit, false, true, false, false, 1, 1, .02f, 1);
+        check(orbit.zoom == before.zoom && orbit.yaw == before.yaw,
+              "UI/interior gating must suppress resets and input");
+    }
     {
         const float direction[]{-.0597f,.3177f,-.9463f};
         for (float elevation : {.05f,.15f,.3f,.53f,.707f}) {
@@ -150,6 +202,9 @@ int main() {
           "Both field/drum matrix branches must receive the orbit in their own coordinate spaces");
     check(camera_space(0x376d224)==CameraSpace::other,"Minimap camera must remain outside orbit scope");
     check(outdoor_projection(2.557646f,100000,.541052f),"The live camera303 31-degree field projection must be recognized");
+    for (float degrees : {20.f, 31.f, 60.f, 80.f, 83.f})
+        check(outdoor_projection(2.557646f,100000,degrees*pi/180),
+              "Outdoor projection selection must support every configured lens and native title adjustment");
     check(!outdoor_projection(7605.31f,9525.31f,.087266f) && !outdoor_projection(1,10000,.698132f),
           "Minimap and UI projections must not set outdoor visibility");
     const float ground_eye[]{0,100,100}, ground_target[]{0,0,0};
@@ -170,19 +225,21 @@ int main() {
     // Independently project ground/canopy sample points into camera space at
     // multiple yaws, elevations and zooms; every on-screen sample inside the
     // configured distance budget must be inside the broad-phase rectangle.
-    for (int yaw=0;yaw<360;yaw+=30) for (float elevation:{.1f,.6f,1.4f}) for (float radius:{60.f,180.f,360.f}) {
+    for (int yaw=0;yaw<360;yaw+=30) for (float elevation:{.1f,.6f,1.4f}) for (float radius:{60.f,180.f,450.f})
+    for (float degrees:{20.f,31.f,80.f,83.f}) for (float aspect:{4.f/3,16.f/9,32.f/9}) {
         const float a=yaw*pi/180, h=radius*std::cos(elevation);
+        const float tangent=std::tan(degrees*pi/360);
         const float eye[]{h*std::sin(a),radius*std::sin(elevation),h*std::cos(a)};
         Bounds bound;
-        check(view_bounds(eye,ground_target,.2f,1.8f,0,0,300,-48,72,20,bound),"Swept footprint must be valid");
-        for (int x=-300;x<=300;x+=20) for(int z=-300;z<=300;z+=20) for(float y:{-48.f,0.f,72.f}) {
+        check(view_bounds(eye,ground_target,tangent,aspect,0,0,690,-48,72,20,bound),"Swept footprint must be valid");
+        for (int x=-690;x<=690;x+=46) for(int z=-690;z<=690;z+=46) for(float y:{-48.f,0.f,72.f}) {
             const float dx=x-eye[0],dy=y-eye[1],dz=z-eye[2];
             const float depth=-(dx*eye[0]+dy*eye[1]+dz*eye[2])/radius;
             const float sx=std::cos(a)*dx-std::sin(a)*dz;
             const float sy=-std::sin(elevation)*(std::sin(a)*dx+std::cos(a)*dz)+std::cos(elevation)*dy;
-            if (depth>=1 && depth<=radius+300 && std::fabs(sx)<=depth*.36f && std::fabs(sy)<=depth*.2f)
+            if (depth>=1 && depth<=radius+690 && std::fabs(sx)<=depth*tangent*aspect && std::fabs(sy)<=depth*tangent)
                 check(x>=-bound.left-.01f && x<=bound.right+.01f && z>=-bound.far-.01f && z<=bound.near+.01f,
-                      "Visibility must contain every projected sample across yaw, pitch, zoom and height");
+                      "Visibility must contain every projected sample across yaw, pitch, zoom, FOV, aspect and height");
         }
     }
     // Default/title camera303 pose from the live trace. No user orbit is

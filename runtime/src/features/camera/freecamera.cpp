@@ -30,6 +30,7 @@ std::mutex lock;
 const freecamera::Preferences &preferences();
 freecamera::Orbit orbit;
 freecamera::Controls controls;
+freecamera::Orbit::PitchLimits pitch_limits;
 Fn original_lookat = nullptr;
 Fn original_float_storage = nullptr, original_terrain = nullptr;
 Fn original_projection = nullptr;
@@ -516,7 +517,7 @@ void freecamera_input(plat::PadState& p) {
     const bool active = terrain_active() && seen != ~uint64_t(0) && now_frame >= seen && now_frame-seen <= 2 &&
                         !ui_active && !ui::ui_visible() && !plat::keyboard_typing();
     controls.update(orbit, active, reset, zoom_key, stick_button, axis(p.rx), axis(p.ry), dt, preferences().reset_zoom,
-                    preferences().orbit_speed, preferences().zoom_speed, preferences().invert_vertical);
+                    preferences().orbit_speed, preferences().zoom_speed, preferences().invert_vertical,pitch_limits);
     trace_input(active);
     if (active) {
         float x, y;
@@ -553,6 +554,11 @@ void freecamera_lookat(uint64_t cam, uint64_t caller) {
     std::memcpy(pos, reinterpret_cast<void*>(cam + 0x38), sizeof pos);
     std::memcpy(at, reinterpret_cast<void*>(cam + 0x44), sizeof at);
     for (int i = 0; i < 3; i++) if (!std::isfinite(pos[i]) || !std::isfinite(at[i])) return;
+    if(on && space==freecamera::CameraSpace::world && freecamera::Orbit::view_pitch_limits(pos,at,pitch_limits)) {
+        // Keep input state within the same visible range as the native view.
+        // Excess stick input at a pole must never accumulate behind the clamp.
+        orbit.pitch=std::clamp(orbit.pitch,pitch_limits.min,pitch_limits.max);
+    }
     float result[3];
     std::memcpy(result,pos,sizeof result);
     // Both direct and dispatched world cameras feed terrain selection. Record

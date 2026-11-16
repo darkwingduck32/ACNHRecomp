@@ -40,10 +40,21 @@ inline void movement(float yaw, float x, float y, float& result_x, float& result
 }
 struct Orbit {
     float yaw = 0, pitch = 0, zoom = 1;
-    void advance(float horizontal, float vertical, float distance, float dt) {
+    struct PitchLimits { float min=-pi/2, max=pi/2; };
+    static constexpr float min_elevation=.05f, max_elevation=1.48f;
+    static bool view_pitch_limits(const float pos[3], const float at[3], PitchLimits& limits) {
+        for(int i=0;i<3;++i) if(!std::isfinite(pos[i]) || !std::isfinite(at[i])) return false;
+        const float x=pos[0]-at[0], y=pos[1]-at[1], z=pos[2]-at[2];
+        const float radius=std::sqrt(x*x+y*y+z*z);
+        if(!(radius>1 && radius<10000)) return false;
+        const float elevation=std::asin(std::clamp(y/radius,-1.f,1.f));
+        limits={min_elevation-elevation,max_elevation-elevation};
+        return true;
+    }
+    void advance(float horizontal, float vertical, float distance, float dt, PitchLimits limits={-pi/2,pi/2}) {
         dt = std::clamp(dt, 0.0f, 0.05f);
         yaw = std::remainder(yaw + horizontal * dt * 1.8f, 2 * pi);
-        pitch = std::clamp(pitch + vertical * dt, -pi / 2, pi / 2);
+        pitch = std::clamp(pitch + vertical * dt, limits.min, limits.max);
         zoom = std::clamp(zoom * std::exp(distance * dt), 0.25f, 3.0f);
     }
     bool identity() const { return yaw == 0 && pitch == 0 && zoom == 1; }
@@ -53,7 +64,7 @@ struct Orbit {
         float radius = std::sqrt(x*x + y*y + z*z);
         if (!(radius > 1 && radius < 10000)) return false;
         float azimuth = std::atan2(x, z) + yaw;
-        float elevation = std::clamp(std::asin(std::clamp(y / radius, -1.0f, 1.0f)) + pitch, 0.05f, 1.48f);
+        float elevation = std::clamp(std::asin(std::clamp(y / radius, -1.0f, 1.0f)) + pitch, min_elevation, max_elevation);
         float horizontal = radius * zoom * std::cos(elevation);
         result[0] = at[0] + horizontal * std::sin(azimuth);
         result[1] = at[1] + radius * zoom * std::sin(elevation);
@@ -67,7 +78,8 @@ struct Controls {
     bool pressed = false, dragged = false;
     void cancel() { pressed = dragged = false; }
     void update(Orbit &orbit, bool active, bool reset, bool zoom_key, bool stick_button, float x, float y, float dt,
-                float reset_zoom = 1, float orbit_speed = 1, float zoom_speed = 1, bool invert_vertical = false) {
+                float reset_zoom = 1, float orbit_speed = 1, float zoom_speed = 1, bool invert_vertical = false,
+                Orbit::PitchLimits pitch_limits={-pi/2,pi/2}) {
         if (!active) { cancel(); return; }
         if (stick_button && !pressed) dragged = false;
         if (stick_button && (x != 0 || y != 0)) dragged = true;
@@ -80,7 +92,7 @@ struct Controls {
         }
         const bool zoom = zoom_key || stick_button;
         orbit.advance(x * orbit_speed, zoom ? 0 : y * orbit_speed * (invert_vertical ? -1.f : 1.f),
-                      zoom ? -y * zoom_speed : 0, dt);
+                      zoom ? -y * zoom_speed : 0, dt,pitch_limits);
     }
 };
 }

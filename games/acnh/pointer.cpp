@@ -263,8 +263,30 @@ uint64_t g_page_turner = 0x49fc8f0;
 
 void button_input(CPU& c) {
     uint64_t h = c.x[0];
-    if (!h || (c.x[3] & 1) || !ld<uint8_t>(h + 0xbc)) return;
+    if (!h) return;
     uint64_t owner = ld<uint64_t>(h + 0x18 + 8);
+    const bool message=owner && ld<uint64_t>(owner)==kModuleBase+g_page_turner;
+    // The layout invokes this handler throughout a visible message page,
+    // including typewriter animation and blocked opening/closing frames.
+    // The +0xbc enable flag only means that a page-turn button is ready.
+    // Observe page ownership before those guards so orbit stays fixed for
+    // the entire exchange. Hidden pages stop receiving input updates.
+    if (message) features::game_ui_input();
+    static const bool camera_trace=std::getenv("NX_FREECAMERA_TRACE")!=nullptr;
+    if (camera_trace && message) {
+        static int previous=-1;
+        static uint64_t next_trace=0;
+        const bool waiting=ld<uint8_t>(h+0xbc)!=0,blocked=(c.x[3]&1)!=0;
+        const int state=int(waiting)*2+int(blocked);
+        const auto frame=g_frame.load();
+        if(state!=previous || frame>=next_trace) {
+            next_trace=frame+15;
+            previous=state;
+            log("acnh: message input frame %llu waiting %d blocked %d",
+                (unsigned long long)frame,int(waiting),int(blocked));
+        }
+    }
+    if ((c.x[3] & 1) || !ld<uint8_t>(h + 0xbc)) return;
     if (tracing() && owner && ld<uint64_t>(owner)) {  // which classes own the buttons that are on (porting the turner)
         static std::atomic<uint64_t> seen[32];
         uint64_t vt = ld<uint64_t>(owner);
@@ -276,8 +298,7 @@ void button_input(CPU& c) {
         }
         if (!known) log("acnh: a button handler is on, owner class %s", describe(vt).c_str());
     }
-    if (!owner || ld<uint64_t>(owner) != kModuleBase + g_page_turner) return;
-    features::game_ui_input();
+    if (!message) return;
     uint64_t f = g_frame.load();
     if (!g_click.pending) {
         uint32_t x, y;

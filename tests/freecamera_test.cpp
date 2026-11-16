@@ -292,6 +292,31 @@ int main() {
     check(fruit_variant("rom:/Model/PltTreeOakAnim.Nin_NX_NVN.zs")==-1,"Animation loads must not reset seasonal attachments");
     check(fruit_variant("rom:/Model/IdrObjTreeOak00.Nin_NX_NVN.zs")==-1,"Museum models must not reset island attachments");
     Controls controls;
+    {
+        const float eye[]={0,100,100},target[]={0,0,0};
+        Orbit::PitchLimits limits;
+        check(Orbit::view_pitch_limits(eye,target,limits),"Native camera supplies pitch limits");
+        for(bool inverted:{false,true}) {
+            Controls input;Orbit camera;
+            auto tilt=[&](float vertical) {
+                input.update(camera,true,false,false,false,0,vertical,.02f,1,1,1,inverted,limits);
+            };
+            const float direction=inverted?-1.f:1.f;
+            for(int i=0;i<400;++i) tilt(direction);
+            check(camera.pitch==limits.max,"Holding at the ground-facing pole must not accumulate hidden pitch");
+            float before[3],after[3];
+            check(camera.apply(eye,target,before),"Ground-facing camera matrix is valid");
+            const float high=camera.pitch;tilt(-direction);
+            check(camera.apply(eye,target,after) && after[1]<before[1],"Visible camera leaves the ground-facing pole on the first reversed sample");
+            check(camera.pitch<high,"Reversing at the ground-facing pole must respond on the first input sample");
+            for(int i=0;i<400;++i) tilt(-direction);
+            check(camera.pitch==limits.min,"Holding at the horizon must not accumulate hidden pitch");
+            check(camera.apply(eye,target,before),"Horizon camera matrix is valid");
+            const float low=camera.pitch;tilt(direction);
+            check(camera.apply(eye,target,after) && after[1]>before[1],"Visible camera leaves the horizon on the first reversed sample");
+            check(camera.pitch>low,"Reversing at the horizon must respond on the first input sample");
+        }
+    }
     Orbit controlled;
     controls.update(controlled,true,false,false,false,1,.5f,.02f);
     check(controlled.yaw>0 && controlled.pitch>0,"Outdoor camera must orbit immediately without a toggle");

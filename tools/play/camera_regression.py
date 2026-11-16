@@ -5,6 +5,9 @@ NX_FREECAMERA_TRACE=1. SDR frame dumps are required for visual evidence.
 title: run at the title screen, without boot input queued.
 controls: run after entering normal outdoor gameplay, with no menu open.
 inactive: check that right-stick input leaves the camera unchanged indoors/off.
+pitch-limits: hold each visible pitch limit and verify an immediate reversal.
+dialogue: exercise typing, waiting, choices and return to outdoor control through
+the native save dialogue; selects Keep playing and never saves/quits.
 Reports contain assertions AND captures requiring human review; a successful
 script alone does not establish that culling, models or lighting look correct.
 """
@@ -65,6 +68,7 @@ def wait_ready(root, timeout=90):
 
 def run(root, phase, enabled=True, scale=2, samples=4, reset_zoom=1, fov=31, inverted=False):
     root = Path(root).resolve()
+    inverted_initial=inverted
     result = dict(phase=phase, assertions=[], captures=[], visual_review='required', passed=False)
     def check(condition, label):
         if not condition: raise AssertionError(label)
@@ -115,6 +119,51 @@ def run(root, phase, enabled=True, scale=2, samples=4, reset_zoom=1, fov=31, inv
             assert_pose(before, after)
             check(True, 'Right-stick input and recenter do not alter inactive camera')
             capture('gated')
+        elif phase == 'pitch-limits':
+            for inverted in (False,True):
+                live.configure(str(root),'camera.invert_vertical',int(inverted))
+                send('press StickR')
+                down='RDown' if inverted else 'RUp'
+                up='RUp' if inverted else 'RDown'
+                high=send(f'hold {down} 240')
+                check(high['active'],'Outdoor camera is active at pitch limit')
+                capture('inverted-high' if inverted else 'high')
+                reversed_high=send(f'hold {up} 8')
+                check(reversed_high['pitch']<high['pitch']-.02,'Ground-facing pitch reverses within eight input frames')
+                capture('inverted-high-reverse' if inverted else 'high-reverse')
+                low=send(f'hold {up} 300')
+                capture('inverted-low' if inverted else 'low')
+                reversed_low=send(f'hold {down} 8')
+                check(reversed_low['pitch']>low['pitch']+.02,'Horizon-facing pitch reverses within eight input frames')
+                capture('inverted-low-reverse' if inverted else 'low-reverse')
+            live.configure(str(root),'camera.invert_vertical',int(inverted_initial))
+            send('press StickR')
+        elif phase == 'dialogue':
+            send('press StickR; hold RRight 20')
+            pose=state(root)
+            check(pose['active'],'Dialogue test starts with outdoor controls')
+            start=live.frame(str(root))
+            # Give the native page time to open before applying stick input.
+            # This keeps the test about text animation, not transition latency.
+            send('press Minus; hold RRight 120; hold StickR 30; at 140; hold RUp 30; wait 60')
+            assert_pose(pose,state(root))
+            check(not state(root)['active'],'Message owns input during typing and page wait')
+            log=read_log(root)
+            message=re.findall(r'acnh: message input frame (\d+) waiting ([01]) blocked ([01])',log)
+            samples=[(int(f),int(wait),int(blocked)) for f,wait,blocked in message if int(f)>=start]
+            check(any(not wait and not blocked for _,wait,blocked in samples),'Typed-text phase was observed before the page-turn button enabled')
+            check(any(wait and not blocked for _,wait,blocked in samples),'Completed-page wait phase was observed')
+            capture('page-wait')
+            send('press A; hold RLeft 60; wait 45')
+            assert_pose(pose,state(root))
+            capture('choice')
+            # The save confirmation's second item is Keep playing.
+            send('press Down; press A; wait 180')
+            check(state(root)['active'],'Outdoor input resumes after the dialogue closes')
+            after=send('hold RRight 12')
+            check(after['yaw']>pose['yaw']+.02,'Orbit responds after dialogue closes')
+            capture('resumed')
+            send('press StickR')
         else:
             initial = send('press StickR')
             check(initial['active'], 'Outdoor camera is active')
@@ -167,7 +216,7 @@ def run(root, phase, enabled=True, scale=2, samples=4, reset_zoom=1, fov=31, inv
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root')
-    parser.add_argument('phase', choices=('title', 'controls', 'inactive'))
+    parser.add_argument('phase', choices=('title', 'controls', 'inactive','pitch-limits','dialogue'))
     parser.add_argument('--disabled', action='store_true')
     parser.add_argument('--scale', type=int, default=2)
     parser.add_argument('--samples', type=int, default=4)

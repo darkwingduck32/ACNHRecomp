@@ -20,12 +20,15 @@ editing mode to enter or exit.
 - Click and release R3 without moving the stick to recenter.
 - On keyboard, hold F6 while using I/K to zoom; F7 recenters.
 - The D-pad, L3, shoulders, triggers, and action buttons retain their game bindings.
+- Pitch stops at the visible limits and responds immediately when input reverses.
 
 The camera retains its orientation when leaving outdoor play. Active layout
 cursors, dialogue page handlers, and text entry suspend camera input and movement
-rotation; the regular game input then passes through. Installed-build harness
+rotation, including while dialogue text is typing; the regular game input then
+passes through. Installed-build harness
 checks cover outdoor orbit, inventory, settled tent interiors, native indoor
-camera rotation, the phone UI and return outdoors. These checks do not yet prove
+camera rotation, the phone UI, save-dialogue typing, page waits and choices, and
+return outdoors. These checks do not yet prove
 every overlay, dialogue interaction or cutscene is covered.
 
 ## Visibility work in progress

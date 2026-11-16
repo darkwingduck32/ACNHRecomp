@@ -42,6 +42,7 @@
 #include "touch_layout.h"
 #include "game_clock.h"
 #include "platform.h"
+#include "project_links.h"
 #include "saves.h"
 #include "ui/amiibo_importer.h"
 #include "ui/background_scan.h"
@@ -1573,7 +1574,7 @@ void report_section() {
     }
     ImGui::SameLine();
 #if !defined(__ANDROID__)
-    if (button(tr("report.github"))) SDL_OpenURL("https://github.com/Nycolazs/ACNHRecomp/issues/new");
+    if (button(tr("report.github"))) SDL_OpenURL(nx::project::new_issue);
 #endif
 }
 

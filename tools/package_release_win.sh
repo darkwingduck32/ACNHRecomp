@@ -72,6 +72,10 @@ done
 mkdir -p "$R/licenses"
 cp private/third_party/ffx/LICENSE.md "$R/licenses/FidelityFX-LICENSE.md"
 cp private/third_party/dlss/LICENSE.txt "$R/licenses/DLSS-LICENSE.txt"
+cp "$SDL/LICENSE.txt" "$R/licenses/SDL3-LICENSE.txt"
+for dep in libvpx libvorbis libogg; do
+    cp "$MOVIE/share/$dep/copyright" "$R/licenses/$dep-LICENSE.txt"
+done
 # The Visual C++ runtime the executables import (app-local: no installer needed).
 CRT=$(ls -d "$(cygpath -u "$VCToolsRedistDir")"/x64/Microsoft.VC*.CRT | head -1)
 cp "$CRT"/vcruntime140*.dll "$CRT"/msvcp140*.dll "$R/"  # msvcp140_1 too (the player's <memory_resource>)

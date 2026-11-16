@@ -38,6 +38,7 @@ extern char** environ;
 #endif
 
 #include "launcher.h"
+#include "project_links.h"
 
 namespace launcher {
 
@@ -263,7 +264,7 @@ void update_check_start() {
         std::string json;
         if (run_ok({"curl", "-sSfL", "--connect-timeout", "10", "--max-time", "20", "-H",
                     "Accept: application/vnd.github+json", "-A", "ACNHRecomp-launcher", "-o", s8(out),
-                    "https://api.github.com/repos/Nycolazs/ACNHRecomp/releases/latest"}))
+                    nx::project::release_api}))
             json = read_all(out);
         fs::remove(out, ec);
         std::string tag = json_string(json, "tag_name"), url = json_string(json, "html_url");
@@ -275,8 +276,8 @@ void update_check_start() {
         g_update.done = true;
         g_update.available = newer;
         g_update.version = tag;
-        g_update.url = url.rfind("https://github.com/Nycolazs/ACNHRecomp/", 0) == 0
-                           ? url : "https://github.com/Nycolazs/ACNHRecomp/releases/latest";
+        g_update.url = url.rfind(nx::project::repository_prefix, 0) == 0
+                           ? url : nx::project::latest_release;
     }).detach();
 }
 

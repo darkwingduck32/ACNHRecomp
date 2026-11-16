@@ -119,6 +119,16 @@ open ACNHRecomp.app
 CMD
 chmod +x "$R/Start ACNHRecomp.command"
 tools/release_readme.sh "$R" macos "$VER" "$BUILD"
+for dep in sdl3 vulkan-loader molten-vk libvpx libvorbis libogg; do
+    prefix=$(brew --prefix "$dep")
+    found=0
+    for notice in "$prefix"/LICENSE* "$prefix"/COPYING*; do
+        [ -f "$notice" ] || continue
+        cp "$notice" "$R/licenses/$dep-$(basename "$notice")"
+        found=1
+    done
+    [ "$found" = 1 ] || { echo "$dep: bundled library licence not found"; exit 1; }
+done
 (cd "$OUT" && ditto -c -k --sequesterRsrc --keepParent ACNHRecomp "../$(basename "$OUT").zip")
 rm -rf "${OUT:?}"
 ls -la "$OUT.zip"

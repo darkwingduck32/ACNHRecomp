@@ -138,6 +138,29 @@ The worker-grid checkpoint routes `0x11fca98`, `0x11fcac0` and
 will identify the callback and enqueue effects of one complete
 `0x146a660` invocation. See the [verification ledger](ledger.md#terrain-worker-grid-sampling).
 
+Both read-only culler calls now have a repeatable Windows fixture.
+Two muted tree runs with identical input schedules each captured
+192 calls per body during field loading. At `0x146a8ac`, the
+`0x63e274` capture uses the context from X25, a point at SP+8,
+and radius S0 loaded from SP+0x14. At `0x146ab38`, the
+`0x14e9d34` capture uses the derived context, point at SP+8 and
+vector at SP+0x18. All captured results were W0=0 and W0=1
+respectively. The first-192 capture budgets were exhausted
+before the action windows.
+
+Private typed candidates matched two original AArch64 executions
+per case for 1,012 portable controls and 768 captured inputs,
+including exact S0 bits and zero external writes. The portable
+controls reached both boolean outcomes for both functions.
+The predicates and atomic worker paths remain generated in gameplay.
+The next group can start at these two observed calls.
+
+The private runs are `worker-cull-original1` and
+`worker-cull-original2` under `coverage-runs`. Both use the same
+one-shard culler trace library. The second run reused the read-only
+Vulkan cache setup. The local differential command is
+`python -m private.heading.worker_cull_predicates --live <console logs>`.
+
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.
 

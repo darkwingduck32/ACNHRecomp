@@ -150,3 +150,13 @@ lookup still returns the runtime stage name. The continuation resolver
 `0x11e4578` and cleanup `0x2540184` are the next pair. A live provider
 query at (78, 138) resolved to (78, 137), which reaches both functions
 through the continuation branch.
+
+## Composed gameplay verification
+
+The original and both C++ routes matched every captured neighborhood
+and final decision in the whole-tile and half-tile fixtures. See
+`shovelpathwhole1` and `shovelpathhalf1` in the ledger. Five decisions in
+the first fixture accepted the interaction. Six decisions in the
+second rejected it. Generated calls at the query boundary still
+supply stage state, provider binding and ownership, and descriptor
+metadata on deeper branches.

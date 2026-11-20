@@ -642,3 +642,29 @@ $c = "$r/tree-shake-default-shovelstage2"
 & private/venv/Scripts/python -m private.heading.compare_leaf shovel_stage --live "$o/nx.log" "$c/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
 ```
+
+### Composed shovel field-query checkpoint
+
+The `shovelpathwhole1` and `shovelpathhalf1` series each used one muted
+original, one explicit C++, and one default gameplay run. The original
+runs select the generated routes for the promoted shovel field-query
+functions. The setup, saves, and existing fractional placement hook
+are shared by all runs.
+
+All five whole-tile and six half-tile decisions matched across their
+three routes, including every 36-record neighborhood, occupancy mask,
+selected record, final action code, flags and boolean result. The
+whole-tile runs included returned action codes 0, 1 and 8 with true
+results. The half-tile runs returned action code 9 with a false result.
+The comparison includes every captured tile.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+foreach ($fixture in 'whole', 'half') {
+    $o = "$r/tree-shake-original-shovelpath${fixture}1"
+    foreach ($route in 'cpp', 'default') {
+        $c = "$r/tree-shake-$route-shovelpath${fixture}1"
+        & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log"
+    }
+}
+```

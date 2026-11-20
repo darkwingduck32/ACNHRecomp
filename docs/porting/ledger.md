@@ -2000,3 +2000,44 @@ The rectangle caller `0x1288630` remains generated. Inside the
 main shovel step path, the next group follows surface-height
 queries from the collision probes. Traversal fallback `0x15f10f0`
 still needs a gameplay hit.
+
+### Surface height inside the collision probes
+
+Both collision probes now use the existing typed surface-height
+chain on the shovel step route. The height difference probe calls
+the dispatcher at `0x15e11d0` and the stage item probe calls it at
+`0x15ec7b4`. Set `NX_ACNH_SHOVEL_COLLISION_HEIGHT=original` to
+select the generated height chain at both sites.
+
+| Entry | Independent AArch64 cases | Focal calls per gameplay route |
+| --- | ---: | ---: |
+| `0x15e026c` | 768 | 888 |
+| `0x83b024` | 128 | 888 |
+| `0x83a950` | 128 | 888 |
+| `0x241e98c` | 30 | 1776 |
+| `0x60cba4` | 3 | 2664 |
+| `0x862700` | 672 | 1776 |
+| `0x22688e4` | 180 | 1776 |
+
+The original and opt-in collisionheight1 and default
+collisionheight2 runs matched all 10,656 height-chain calls at
+survey tile (40,69). Of the 888 dispatcher calls, 720 came from
+the height difference probe and 168 from the stage item probe.
+Frame timing varied outside the focal survey. The opt-in and
+default routes matched the four whole-original classdeep2
+surveys, neighborhoods, and final decisions. All 14 Release
+CTests and 14 Python profile and replay checks passed. The seven
+bodies retain their earlier entries. The Batch 3 count is 75 and
+the discovery queue contains 100 candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-collisionheight1"
+$c = "$r/tree-shake-default-collisionheight2"
+& private/venv/Scripts/python -m tests.acnh_shovel_height_chain_live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The collision probes still reach the generated stage-specific
+height and stage field lookup calls at `0x15e12bc` and
+`0x15ec8b4`. The next group follows those calls and their
+observed record and sampler dependencies.

@@ -287,7 +287,7 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
         wrap_function(functions, 0x849898, category_mask_adapter, original_category_mask);
 
     mode = std::getenv("NX_ACNH_FIELD_CASE_KEY");
-    use_cpp_field_case_key = mode && std::string_view(mode) == "cpp";
+    use_cpp_field_case_key = !mode || std::string_view(mode) == "cpp";
     trace_field_case_key = std::getenv("NX_ACNH_FIELD_CASE_KEY_TRACE") != nullptr;
     if (use_cpp_field_case_key || trace_field_case_key)
         wrap_function(functions, 0x1140fd0, field_case_key_adapter, original_field_case_key);

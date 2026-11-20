@@ -1,4 +1,4 @@
-"""Compare action-bit, half-tile, and vector-multiply leaves independently."""
+"""Replay action bits, half-tile lookup, vector multiply and tile category masks."""
 import argparse
 import collections
 import hashlib
@@ -61,7 +61,7 @@ def inputs():
 
     for x, z, count, records, categories, mask in itertools.product(
         (-1, 0, 1, 2), (-1, 0, 1, 2), (0, 1, 4), (0, 0x2a000),
-        ((0, 31, 32, 72), (73, 255, 255, 255)), (0, 1 << 31, 1 << 32, 1 << 72),
+        ((0, 31, 32, 72), (73, 255, 255, 255)), (0, 1, 1 << 31, 1 << 32, 1 << 72, 1 << 73),
     ):
         owner, query, mask_address, grid = 0x27000, 0x28000, 0x29000, 0x2b000
         fields = bytearray(0x58)
@@ -73,7 +73,8 @@ def inputs():
             mask_address: mask.to_bytes(12, "little"), grid: bytes(fields),
         }
         if records:
-            data[records] = (bytes(0x30) + bytes(categories)) * 4
+            rows = (categories, (32, 73, 255, 255), (0, 72, 255, 255), (31, 73, 255, 255))
+            data[records] = b"".join(bytes(0x30) + bytes(row) for row in rows)
         yield 3, owner, query, mask_address, data
 
 

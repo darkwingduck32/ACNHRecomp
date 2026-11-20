@@ -29,10 +29,10 @@ Count a row after independent whole-function comparison, a matching gameplay run
 that hits the replacement, passing relevant regressions, and a replay through
 the promoted default. Keep the original selectable.
 
-## Active batch 2
+## Batch 2
 
-This batch targets ten verified ports on the same 3.0.3 build, starting
-with the [candidate queue](next-candidates.md). Verified so far, 8.
+This batch verified ten ports on the same 3.0.3 build. The
+[candidate queue](next-candidates.md) records the original selection.
 
 | Main entry | Provisional function | Stage | Next action |
 | --- | --- | --- | --- |
@@ -46,8 +46,8 @@ with the [candidate queue](next-candidates.md). Verified so far, 8.
 | `0x24642a8` | Set or clear an action-mask bit | Live scenario blocked | Retry when a player or NPC state reaches a known caller. |
 | `0x1281c54` | Look up a half-tile record | Verified | The category-mask trial also exercised the promoted shovel lookup. |
 | `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Live scenario blocked | Retry when a scene reaches the matrix multiply at `main+0x3dafc64`. |
-| `0x849898` | Test a tile's category bytes against a bit mask | Default validation | Repeat the field callers through the promoted default. |
-| `0x1140fd0` | Pack four field category codes into a key | Live trial | Compare both routes at the field lookup caller. |
+| `0x849898` | Test a tile's category bytes against a bit mask | Verified | The field-key trial also exercised the promoted category mask. |
+| `0x1140fd0` | Pack four field category codes into a key | Verified | The final shovel trial exercised the default with no route overrides. |
 
 The action-mask no-op candidate failed case 0. The C++ implementation
 matched all 228 fixtures against two fresh Unicorn runs, including the
@@ -155,9 +155,7 @@ The opt-in path is `NX_ACNH_HALF_TILE_RECORD=cpp`.
 ```
 
 The tree-shake and shovel probes did not reach the action-bit writer or
-matrix multiply. The original behavior remains active for those entries.
-The next discovery probe includes nearby field predicates and both
-outstanding call sites.
+matrix multiply. Both entries retain their original routes.
 
 The paired shovel trial in `tree-shake-{original,cpp}-halve2/nx.log`
 captured 24 calls on each route. The 503 total cases matched two original
@@ -195,20 +193,30 @@ mapping at `main+0x40749e0` and packs the mapped values into W0.
 Other inputs return zero. The no-op failed case 1. The replacement
 matched 2,592 synthetic cases against two Unicorn runs, covering valid
 and invalid codes, high argument bits and alternate mappings.
-Use `NX_ACNH_FIELD_CASE_KEY=cpp` for the live trial.
+The opt-in run in `tree-shake-{original,cpp}-casekey1/nx.log` captured
+12 calls on each route. All 2,616 cases matched against two Unicorn
+runs. Use `NX_ACNH_FIELD_CASE_KEY=original` to restore the stock path.
 
 ```powershell
 & private/venv/Scripts/python -m private.heading.compare_leaf field_case_key
 ```
 
-The category-mask opt-in and half-tile default comparison used
-`tree-shake-{original,cpp}-catmask1/nx.log`. The category calls matched all
-792 cases. The half-tile results again matched all 503 cases, with
-`NX_ACNH_HALF_TILE_RECORD` unset in the C++ process. The category mask's
-default remains under replay. Set `NX_ACNH_TILE_CATEGORY_MASK=original`
-to select the stock implementation.
+### Final gameplay comparison
+
+The final muted shovel trial used `batch2_final_generated.dll`.
+`tree-shake-default-batch2final/nx.log` has SHA-256
+`5f349c0a5cad55e04cc24dfb3734915e9d7aede25139ff0325ba97561ac37a4f`.
+It captured 24 half-tile calls, 12 category-mask calls, and 12 field-key
+calls, all through their default routes. Two Unicorn runs agreed for all
+503, 1,176 and 2,616 replay cases respectively. The original and opt-in
+field-key captures matched with equal input frequencies. In the capped
+default trace the repeats were distributed differently. Each of its
+12 outputs matched an observed original call with the same input and an
+independent replay of its exact captured state. The Release player passed
+all 13 CTest tests and the replay and profile suites passed all nine tests.
 
 ```powershell
 $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
-& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-half-tile "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-cpp-catmask1/nx.log" --live-category-mask "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-cpp-catmask1/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_case_key --live-default "$r/tree-shake-original-casekey1/nx.log" "$r/tree-shake-default-batch2final/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-half-tile "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-default-batch2final/nx.log" --live-category-mask "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-default-batch2final/nx.log"
 ```

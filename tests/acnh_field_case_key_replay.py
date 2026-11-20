@@ -50,7 +50,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
-    parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    routes = parser.add_mutually_exclusive_group()
+    routes.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    routes.add_argument("--live-default", nargs=2, type=Path, metavar=("ORIGINAL", "DEFAULT"),
+                        help="allow different frequencies for the same call states in a capped trace")
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
@@ -59,11 +62,17 @@ def main():
         parser.error("unexpected function boundary")
     code = bytes(module.image[ENTRY:ENTRY + SIZE])
     cases = list(fixtures())
-    if args.live:
-        original_states, original = live_cases(args.live[0], "original")
-        candidate_states, candidate = live_cases(args.live[1], "cpp")
-        if original_states != candidate_states:
+    live = args.live or args.live_default
+    if live:
+        original_states, original = live_cases(live[0], "original")
+        candidate_states, candidate = live_cases(live[1], "cpp")
+        if args.live and original_states != candidate_states:
             raise SystemExit("live field key callers, inputs or results differ")
+        if args.live_default:
+            if len(original) != len(candidate) or candidate_states.keys() - original_states.keys():
+                raise SystemExit("default field key had missing calls or an unmatched caller, input or result")
+            # The first 12 calls can include different repeats across runs.
+            # Every captured default state has a matching original call and is replayed below.
         cases.extend(original)
         cases.extend(candidate)
     payload = "".join(" ".join(map(str, (base, *regs, *table))) + "\n" for base, regs, table, _ in cases)

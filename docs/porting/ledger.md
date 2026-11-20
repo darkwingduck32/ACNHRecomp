@@ -2668,7 +2668,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 26.
+two promoted material queries. Verified so far, 27.
 
 The next implementation group is selected using [gameplay coverage](gameplay-coverage.md)
 across shovel, tree shaking, and movement.
@@ -3077,7 +3077,7 @@ absent owner and early and late ring hits. Six synthetic compositions ran
 both original bodies twice and checked W0 and raw S0, including signed
 zero center hits and full ring sweeps.
 
-All five sites still execute generated clearance and generated flag
+All five sites executed generated clearance and generated flag
 queries. The next implementation group can pair the typed clearance
 predicate with the existing terrain flag summary at its center and rim
 calls. Gate the adapters by the five observed links, keep the generated
@@ -3090,4 +3090,46 @@ $r = 'private/heading/coverage-runs'
 & private/venv/Scripts/python -B -m private.heading.replay_clearance_capture `
     "$r/tree-shake-default-terrain-clearance-movement1/console.log" `
     "$r/tree-shake-default-terrain-clearance-shovel1/console.log"
+```
+
+### Terrain clearance and flag queries
+
+The five observed calls to `0x15eb1a0` now use the typed clearance
+query. It reads the center and up to eight rim positions, with the
+existing `0x874bc8` flag-summary logic shared by both paths. The
+adapter returns W0 and raw S0. Other callers and nonfinite inputs
+use the generated body. Set `NX_ACNH_TERRAIN_CLEARANCE=original`
+to select the generated clearance and flag queries for all callers.
+
+The composed C++ query matched two executions of both original
+AArch64 bodies per case on 150 portable controls and 60 Windows-derived
+cases. The derived cases reconstructed grid cells from observed flag
+bytes and used recorded point bits and trig rows. The replay compared
+W0, raw S0, ordered half-tile coordinates and zero external writes.
+The 1,118-case bookkeeping regression passed, including the 168
+direct summary cases with ordered and aliased stores.
+
+The original, opt-in and default movement runs used the same recorded
+input schedule and guest DLL. They reached all five scoped sites and
+the required center-hit and ring-miss outcomes. The runtime compared
+W0, raw S0 and the final flag byte with the original on the same
+sampled input, with 93, 91 and 91 matches respectively. Query counts
+in these logs come from the typed prediction. The composed AArch64
+replay supplies the ordered original callback evidence. Sample
+multiplicities and classes varied between runs. The first default
+run matched all 84 sampled inputs, with one selector-0 center-hit
+class missing. A repeat of the movement fixture reached that class.
+
+All 14 Release CTests and 14 profile and replay checks passed. Clearance
+adds one verified body. The flag summary retains its earlier entry.
+Batch 4 has 27 verified functions and 100 discovery candidates.
+
+```powershell
+$r = 'private/heading/coverage-runs'
+& private/venv/Scripts/python -B -m tests.acnh_terrain_clearance_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main private/heading/acnh_terrain_clearance_candidate.exe
+& private/venv/Scripts/python -B -m tests.acnh_terrain_clearance_live `
+    "$r/tree-shake-default-terrain-clearance-gate-original3/nx.log" `
+    "$r/tree-shake-default-terrain-clearance-gate-cpp3/nx.log" `
+    "$r/tree-shake-default-terrain-clearance-gate-default4/nx.log"
 ```

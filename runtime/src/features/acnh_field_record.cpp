@@ -34,6 +34,7 @@
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
+#include "../../../games/acnh/terrain_clearance.h"
 #include "../../../games/acnh/terrain_cull_predicates.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
@@ -1763,6 +1764,68 @@ bool is_shovel_height_child_frame(uint64_t frame, uint64_t expected_resume) {
     const auto height_frame = ld<uint64_t>(frame);
     return height_frame && is_shovel_height_call(ld<uint64_t>(height_frame + 8))
         && is_shovel_target_frame(ld<uint64_t>(height_frame));
+}
+
+constexpr std::array<uint64_t, 5> terrain_clearance_returns{
+    0x1161d68, 0x1161d7c, 0x15f4ae0, 0x15f4af4, 0x15f59e0,
+};
+Fn original_terrain_clearance = nullptr;
+bool use_cpp_terrain_clearance = false;
+bool trace_terrain_clearance = false;
+
+void terrain_clearance_adapter(CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    const auto site = std::find(terrain_clearance_returns.begin(), terrain_clearance_returns.end(), resume);
+    const auto point = cpu.x[0];
+    const auto selector = uint32_t(cpu.x[1]);
+    const float radius = cpu.v[0].f32[0];
+    const auto sp = cpu.x[31];
+    if (site == terrain_clearance_returns.end() || selector > 1 || !point || !sp || (sp & 15)
+        || !std::isfinite(radius) || !std::isfinite(ld<float>(point)) || !std::isfinite(ld<float>(point + 8))) {
+        original_terrain_clearance(cpu);
+        return;
+    }
+
+    const GuestMemory memory;
+    uint8_t last_summary = 0;
+    unsigned queries = 0;
+    const auto read_flags = [&](acnh::TerrainGrid grid, acnh::HalfTile tile) {
+        const auto summary = acnh::terrain_flag_bits(grid, tile, memory, [](uint8_t) {});
+        if (trace_terrain_clearance) {
+            last_summary = summary;
+            ++queries;
+        }
+        return summary;
+    };
+    const auto result = acnh::terrain_clearance(main_base, {point}, radius, selector, memory, read_flags);
+    const auto raw_scalar = std::bit_cast<uint32_t>(result.scalar);
+    bool sample = false;
+    if (trace_terrain_clearance) {
+        static std::atomic<unsigned> samples[terrain_clearance_returns.size()][4]{};
+        const auto n = samples[site - terrain_clearance_returns.begin()][selector * 2 + result.blocked]
+            .fetch_add(1, std::memory_order_relaxed) + 1;
+        sample = n <= 4 || std::has_single_bit(n);
+    }
+    if (!use_cpp_terrain_clearance || sample) {
+        CPU reference = cpu;
+        original_terrain_clearance(reference);
+        if (!use_cpp_terrain_clearance) cpu = reference;
+        if (sample) {
+            // The original flag query only writes its local summary byte.
+            const bool match = reference.x[0] == uint64_t(result.blocked)
+                && reference.v[0].u32[0] == raw_scalar
+                && (!queries || ld<uint8_t>(sp - 0x88) == last_summary);
+            log("acnh terrain clearance %s call=%llx selector=%u radius=%x w0=%u s0=%x queries=%u summary=%x same_input=%s",
+                use_cpp_terrain_clearance ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+                selector, std::bit_cast<uint32_t>(radius), unsigned(result.blocked), raw_scalar,
+                queries, unsigned(last_summary), match ? "match" : "mismatch");
+        }
+    }
+    if (use_cpp_terrain_clearance) {
+        cpu.x[0] = result.blocked;
+        cpu.v[0] = {};
+        cpu.v[0].u32[0] = raw_scalar;
+    }
 }
 
 Fn original_worker_cull_volume = nullptr;
@@ -5938,6 +6001,11 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT");
     use_cpp_shovel_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
+    mode = std::getenv("NX_ACNH_TERRAIN_CLEARANCE");
+    use_cpp_terrain_clearance = !mode || std::string_view(mode) == "cpp";
+    trace_terrain_clearance = std::getenv("NX_ACNH_TERRAIN_CLEARANCE_TRACE") != nullptr;
+    if (use_cpp_terrain_clearance || trace_terrain_clearance)
+        wrap_function(entries, 0x15eb1a0, terrain_clearance_adapter, original_terrain_clearance);
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

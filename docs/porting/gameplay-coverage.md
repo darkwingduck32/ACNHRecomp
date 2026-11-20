@@ -169,7 +169,10 @@ misses during both the movement and shovel action windows. The capture
 preserves the point and radius bits, selector, heading step and trig rows,
 ordered half-tile arguments, and terrain flag results. Samples are capped
 per caller, selector, and result and establish call-site coverage.
-See the [original capture and replay](ledger.md#terrain-clearance-original-capture).
+The five observed sites now use typed clearance and flag queries.
+The dispatch at other sites, rendering, worker claim and publication
+remain generated. The sampled gameplay gates establish the execution
+of the typed path. See the [verification ledger](ledger.md#terrain-clearance-and-flag-queries).
 
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.

@@ -66,15 +66,12 @@ FieldBounds field_layer_bounds(uint64_t base, FieldLayerRef layer, const Memory&
 
 struct TerrainFlagSummary { uint64_t address; };
 
-template<class Memory>
-void terrain_flag_summary(TerrainGrid grid, HalfTileRef tile, TerrainFlagSummary output, Memory& memory) {
-    const auto target = output.address + 8;
-    memory.template write<uint8_t>(target, 0);
-    const auto x = memory.template read<int32_t>(tile.address + 8);
-    const auto z = memory.template read<int32_t>(tile.address + 12);
-    if (x < 0 || z < 0) return;
+template<class Memory, class WriteFlag>
+uint8_t terrain_flag_bits(TerrainGrid grid, HalfTile tile, const Memory& memory, const WriteFlag& write_flag) {
+    const auto [x, z] = tile;
+    if (x < 0 || z < 0) return 0;
     const auto width = memory.template read<uint32_t>(grid.address + 0x38);
-    if (uint32_t(x) >= width || uint32_t(z) >= memory.template read<uint32_t>(grid.address + 0x3c)) return;
+    if (uint32_t(x) >= width || uint32_t(z) >= memory.template read<uint32_t>(grid.address + 0x3c)) return 0;
     const uint32_t index = width * uint32_t(z) + uint32_t(x);
     const auto flags = memory.template read<uint64_t>(grid.address + 0x70);
     const uint64_t cell = index < memory.template read<uint32_t>(grid.address + 0x68)
@@ -85,8 +82,19 @@ void terrain_flag_summary(TerrainGrid grid, HalfTileRef tile, TerrainFlagSummary
         if (!(memory.template read<uint32_t>(cell) & (1u << (8 + i)))) continue;
         if (i == 4 && (memory.template read<uint32_t>(cell) & 0x40)) continue;
         result |= bits[i];
-        memory.template write<uint8_t>(target, result);
+        write_flag(result);
     }
+    return result;
+}
+
+template<class Memory>
+void terrain_flag_summary(TerrainGrid grid, HalfTileRef tile, TerrainFlagSummary output, Memory& memory) {
+    const auto target = output.address + 8;
+    const auto write_flag = [&](uint8_t flag) { memory.template write<uint8_t>(target, flag); };
+    write_flag(0);
+    const HalfTile coordinate{memory.template read<int32_t>(tile.address + 8),
+                              memory.template read<int32_t>(tile.address + 12)};
+    terrain_flag_bits(grid, coordinate, memory, write_flag);
 }
 
 struct HalfTileWorkQueue { uint64_t address; };

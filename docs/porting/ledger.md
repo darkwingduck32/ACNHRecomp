@@ -2312,3 +2312,47 @@ uses its generated 16-sector mode with separate output and
 block-flag pointers. The outer traversal parent also still
 uses generated surface and stage heights directly. Follow
 those outer height calls next.
+
+### Direct heights inside outer shovel traversal
+
+The generated traversal parent calls the typed surface-height
+chain at `0x15f11d0`, `0x15f1bcc`, `0x15f1e3c`, `0x15f20d0`,
+and `0x15f20e8`. Calls at `0x15f1cb8` and `0x15f1f28` use typed
+stage height. The scope requires the traversal's shovel-step
+caller and accepts only the direct parent frame. Set
+`NX_ACNH_SHOVEL_TRAVERSAL_HEIGHT=original` to select the generated
+height functions for these sites.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x15e026c` | 768 | 45 |
+| `0x83b024` | 128 | 45 |
+| `0x83a950` | 128 | 45 |
+| `0x241e98c` | 30 | 90 |
+| `0x60cba4` | 3 | 135 |
+| `0x862700` | 672 | 90 |
+| `0x22688e4` | 180 | 90 |
+| `0x15e06d0` | 124 | 18 |
+
+Stage-height calls carried S0=15.0 from the preceding surface
+query into the original body and returned 15.0 on all 18 calls.
+The original and opt-in `traversalheight1` runs and default
+`traversalheight2` run matched 558 ordered calls across all
+seven direct call sites and their traced descendants. The three
+routes matched nine traversal results, ten surveys, ten
+neighborhoods, and 12 final decisions. All 14 Release CTests
+and 14 profile and replay checks passed. These eight bodies
+retain their earlier entries. The ledger remains at 77 verified
+functions with 100 in the discovery queue.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-traversalheight1"
+$c = "$r/tree-shake-default-traversalheight2"
+& private/venv/Scripts/python -m tests.acnh_shovel_traversal_height_live "$o/nx.log" "$c/nx.log"
+```
+
+The generated stage-height base and field-item resolver remain
+on this caller path, as do recursive traversal and the 16-sector
+sweep collision callback. The collision callback is the next
+unported dependency under the typed sweep.

@@ -240,6 +240,10 @@ fallback `0x15f10f0` reaches the C++ peak sampler, both C++
 segment sweep modes, and their height chains in the side-strip
 fixture. Both sweeps use the C++ stage-name, hash, and filter
 functions and the typed destination record and bounds queries.
-The traversal parent, recursive traversal, and the sweep's
-16-sector collision callback still use generated code. See the
-[sweep record verification](ledger.md#destination-records-inside-traversal-sweeps).
+The outer traversal also calls typed C++ for five observed
+surface sites and two stage-height sites. The traversal parent,
+recursive traversal, the stage base and item resolver on that
+outer path, and the sweep's 16-sector collision callback still
+use generated code.
+
+[Traversal height verification](ledger.md#direct-heights-inside-outer-shovel-traversal)

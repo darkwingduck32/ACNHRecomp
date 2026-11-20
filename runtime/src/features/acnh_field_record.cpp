@@ -962,7 +962,7 @@ bool use_cpp_sampler_terrain = false;
 
 enum class ShovelHeightScope {
     unrelated, target, classifier, intermediate, stage_base = 5, obstacle, cast, collision_probe, collision_stage,
-    traversal_peak, traversal_sweep, traversal_parent, sweep_probe, traversal_stage,
+    traversal_peak, traversal_sweep, traversal_parent, sweep_probe, traversal_stage, traversal_leg,
 };
 
 bool use_cpp_shovel_cast_height = false;
@@ -1147,6 +1147,8 @@ bool use_cpp_shovel_traversal_sweep = false;
 bool trace_shovel_traversal_sweep = false;
 bool use_cpp_shovel_traversal_height = false;
 bool trace_shovel_traversal_height = false;
+bool use_cpp_shovel_traversal_legs = false;
+bool trace_shovel_traversal_legs = false;
 
 bool is_shovel_traversal_sweep_resume(uint64_t resume) {
     return resume == 0x15f2144 || resume == 0x15f2160;
@@ -1162,6 +1164,15 @@ bool is_shovel_traversal_frame(uint64_t frame) {
     const auto step = ld<uint64_t>(frame);
     return step && ld<uint64_t>(step + 8) == main_base + 0x15f4190
         && is_shovel_point_classifier_frame(ld<uint64_t>(step));
+}
+
+bool is_shovel_traversal_leg_resume(uint64_t resume) {
+    return resume == 0x15f1ddc || resume == 0x15f1e28;
+}
+
+bool is_shovel_traversal_leg_frame(uint64_t frame) {
+    return frame && is_shovel_traversal_leg_resume(ld<uint64_t>(frame + 8) - main_base)
+        && is_shovel_traversal_frame(ld<uint64_t>(frame));
 }
 
 std::array<uint32_t, 3> shovel_xyz_bits(uint64_t point) {
@@ -1185,6 +1196,7 @@ bool use_cpp_height_scope(ShovelHeightScope scope) {
     if (scope == ShovelHeightScope::traversal_parent) return use_cpp_shovel_traversal_height;
     if (scope == ShovelHeightScope::sweep_probe) return use_cpp_shovel_sweep_probe;
     if (scope == ShovelHeightScope::traversal_stage) return use_cpp_shovel_traversal_stage;
+    if (scope == ShovelHeightScope::traversal_leg) return use_cpp_shovel_traversal_legs;
     return use_cpp_shovel_height_chain;
 }
 
@@ -1197,6 +1209,7 @@ bool trace_height_scope(ShovelHeightScope scope) {
     if (scope == ShovelHeightScope::traversal_parent) return trace_shovel_traversal_height;
     if (scope == ShovelHeightScope::sweep_probe) return trace_shovel_sweep_probe;
     if (scope == ShovelHeightScope::traversal_stage) return trace_shovel_traversal_stage;
+    if (scope == ShovelHeightScope::traversal_leg) return trace_shovel_traversal_legs;
     return trace_shovel_height_chain;
 }
 
@@ -1324,13 +1337,17 @@ struct ShovelTraversalPeakServices : HeightGuestFrame {
 };
 
 void shovel_traversal_peak_adapter(CPU& cpu) {
-    if (cpu.x[30] != main_base + 0x15f11e4 || !is_shovel_traversal_frame(cpu.x[29])) {
+    const bool parent_resume = cpu.x[30] == main_base + 0x15f11e4;
+    const bool leg = parent_resume && is_shovel_traversal_leg_frame(cpu.x[29]);
+    if (!parent_resume || (!leg && !is_shovel_traversal_frame(cpu.x[29]))) {
         original_shovel_traversal_peak(cpu);
         return;
     }
     const auto point = cpu.x[0];
-    const auto before = trace_shovel_traversal_peak ? shovel_xyz_bits(point) : std::array<uint32_t, 3>{};
-    if (use_cpp_shovel_traversal_peak) {
+    const bool trace = leg ? trace_shovel_traversal_legs : trace_shovel_traversal_peak;
+    const bool native = use_cpp_shovel_traversal_peak && (!leg || use_cpp_shovel_traversal_legs);
+    const auto before = trace ? shovel_xyz_bits(point) : std::array<uint32_t, 3>{};
+    if (native) {
         GuestMemory memory;
         ShovelTraversalPeakServices services{cpu};
         const auto result = acnh::shovel_traversal_peak({point}, memory, services);
@@ -1340,9 +1357,9 @@ void shovel_traversal_peak_adapter(CPU& cpu) {
     } else {
         original_shovel_traversal_peak(cpu);
     }
-    if (trace_shovel_traversal_peak)
-        log("acnh shovel traversal peak %s entry=15f27e0 call=15f11e0 input=%x,%x,%x out=%x,%x,%x",
-            use_cpp_shovel_traversal_peak ? "cpp" : "original", before[0], before[1], before[2],
+    if (trace)
+        log("acnh shovel traversal %s %s entry=15f27e0 call=15f11e0 input=%x,%x,%x out=%x,%x,%x",
+            leg ? "leg peak" : "peak", native ? "cpp" : "original", before[0], before[1], before[2],
             cpu.v[0].u32[0], cpu.v[1].u32[0], cpu.v[2].u32[0]);
 }
 
@@ -1440,9 +1457,12 @@ bool trace_shovel_traversal = false;
 
 void shovel_traversal_adapter(CPU& cpu) {
     const auto frame = cpu.x[29];
-    if (cpu.x[30] != main_base + 0x15f10c0 || !frame
-        || ld<uint64_t>(frame + 8) != main_base + 0x15f4190
-        || !is_shovel_point_classifier_frame(ld<uint64_t>(frame))) {
+    const auto resume = cpu.x[30] - main_base;
+    const bool leg = is_shovel_traversal_leg_resume(resume) && is_shovel_traversal_frame(frame);
+    const bool direct = resume == 0x15f10c0 && frame
+        && ld<uint64_t>(frame + 8) == main_base + 0x15f4190
+        && is_shovel_point_classifier_frame(ld<uint64_t>(frame));
+    if (!leg && !direct) {
         original_shovel_traversal(cpu);
         return;
     }
@@ -1450,11 +1470,12 @@ void shovel_traversal_adapter(CPU& cpu) {
     const auto finite_position = [&](uint64_t point) {
         return std::isfinite(ld<float>(point)) && std::isfinite(ld<float>(point + 8));
     };
-    const bool native = use_cpp_shovel_traversal
+    const bool native = (leg ? use_cpp_shovel_traversal_legs : use_cpp_shovel_traversal)
         && finite_position(query.descriptor) && finite_position(query.descriptor + 12);
+    const bool trace = leg ? trace_shovel_traversal_legs : trace_shovel_traversal;
     std::array<uint8_t, 32> descriptor{};
     std::array<uint32_t, 3> initial{};
-    if (trace_shovel_traversal) {
+    if (trace) {
         std::memcpy(descriptor.data(), reinterpret_cast<const void*>(query.descriptor), descriptor.size());
         if (query.output) initial = shovel_xyz_bits(query.output);
     }
@@ -1465,10 +1486,11 @@ void shovel_traversal_adapter(CPU& cpu) {
     } else {
         original_shovel_traversal(cpu);
     }
-    if (trace_shovel_traversal) {
+    if (trace) {
         const auto final = query.output ? shovel_xyz_bits(query.output) : std::array<uint32_t, 3>{};
-        log("acnh shovel traversal parent %s entry=15f10f0 call=15f10bc descriptor=%s writable=%u initial=%x,%x,%x final=%x,%x,%x out=%x",
-            native ? "cpp" : "original", cache_hex(descriptor).c_str(), unsigned(query.output != 0),
+        log("acnh shovel traversal %s %s entry=15f10f0 call=%llx descriptor=%s writable=%u initial=%x,%x,%x final=%x,%x,%x out=%x",
+            leg ? "leg" : "parent", native ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+            cache_hex(descriptor).c_str(), unsigned(query.output != 0),
             initial[0], initial[1], initial[2], final[0], final[1], final[2], unsigned(cpu.x[0]));
     }
 }
@@ -2595,11 +2617,14 @@ ShovelHeightScope shovel_surface_scope(uint64_t resume, uint64_t frame) {
     if (resume == 0x15e11d4 && is_shovel_sweep_probe_frame(frame)) return ShovelHeightScope::sweep_probe;
     if ((resume == 0x15e11d4 || resume == 0x15ec7b8) && is_shovel_collision_probe_frame(frame))
         return ShovelHeightScope::collision_probe;
+    if (resume == 0x15f11d4 && is_shovel_traversal_leg_frame(frame)) return ShovelHeightScope::traversal_leg;
     if (std::find(traversal_peak_height_resumes.begin(), traversal_peak_height_resumes.end(), resume)
             != traversal_peak_height_resumes.end()
-        && frame && ld<uint64_t>(frame + 8) == main_base + 0x15f11e4
-        && is_shovel_traversal_frame(ld<uint64_t>(frame)))
-        return ShovelHeightScope::traversal_peak;
+        && frame && ld<uint64_t>(frame + 8) == main_base + 0x15f11e4) {
+        const auto parent = ld<uint64_t>(frame);
+        if (is_shovel_traversal_leg_frame(parent)) return ShovelHeightScope::traversal_leg;
+        if (is_shovel_traversal_frame(parent)) return ShovelHeightScope::traversal_peak;
+    }
     if ((resume == 0x15f248c || resume == 0x15f2520) && acnh_shovel_sweep_frame(frame))
         return ShovelHeightScope::traversal_sweep;
     if ((resume == 0x15e9d6c || resume == 0x15e9fa0) && frame
@@ -5145,10 +5170,14 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_shovel_collision_stage = !mode || std::string_view(mode) == "cpp";
     trace_shovel_collision_stage = std::getenv("NX_ACNH_SHOVEL_COLLISION_STAGE_TRACE") != nullptr;
 
+    mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_LEGS");
+    use_cpp_shovel_traversal_legs = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_traversal_legs = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_LEGS_TRACE") != nullptr;
+
     mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL");
     use_cpp_shovel_traversal = !mode || std::string_view(mode) == "cpp";
     trace_shovel_traversal = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_TRACE") != nullptr;
-    if (use_cpp_shovel_traversal || trace_shovel_traversal)
+    if (use_cpp_shovel_traversal || trace_shovel_traversal || use_cpp_shovel_traversal_legs || trace_shovel_traversal_legs)
         wrap_function(entries, 0x15f10f0, shovel_traversal_adapter, original_shovel_traversal);
 
     mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_HEIGHT");
@@ -5164,7 +5193,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_PEAK");
     use_cpp_shovel_traversal_peak = !mode || std::string_view(mode) == "cpp";
     trace_shovel_traversal_peak = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_PEAK_TRACE") != nullptr;
-    if (use_cpp_shovel_traversal_peak || trace_shovel_traversal_peak)
+    if (use_cpp_shovel_traversal_peak || trace_shovel_traversal_peak || trace_shovel_traversal_legs)
         wrap_function(entries, 0x15f27e0, shovel_traversal_peak_adapter, original_shovel_traversal_peak);
 
     mode = std::getenv("NX_ACNH_SHOVEL_SWEEP_PROBE");
@@ -5207,7 +5236,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT");
     use_cpp_shovel_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
-    if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_stage)
+    if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_stage || trace_shovel_traversal_legs)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
 
     mode = std::getenv("NX_ACNH_SHOVEL_SWEEP_RECORD");
@@ -5291,7 +5320,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE");
     use_cpp_shovel_height_parameter_type = !mode || std::string_view(mode) == "cpp";
     trace_shovel_height_parameter_type = std::getenv("NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE_TRACE") != nullptr;
-    if (use_cpp_shovel_height_parameter_type || trace_shovel_height_parameter_type || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe)
+    if (use_cpp_shovel_height_parameter_type || trace_shovel_height_parameter_type || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_legs)
         wrap_function(entries, 0x22688e4, shovel_height_parameter_type_adapter, original_shovel_height_parameter_type);
 
     trace_shovel_height = std::getenv("NX_ACNH_SHOVEL_HEIGHT_TRACE") != nullptr;
@@ -5301,7 +5330,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     for (size_t i = 0; i < height_adapters.size(); ++i) {
         const char* setting = std::getenv(shovel_height_switches[i]);
         use_cpp_shovel_height[i] = !setting || std::string_view(setting) == "cpp";
-        if (use_cpp_shovel_height[i] || trace_shovel_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_stage || (i == 0 && trace_shovel_point_height))
+        if (use_cpp_shovel_height[i] || trace_shovel_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_stage || trace_shovel_traversal_legs || (i == 0 && trace_shovel_point_height))
             wrap_function(entries, shovel_height_entries[i], height_adapters[i], original_shovel_height[i]);
     }
 

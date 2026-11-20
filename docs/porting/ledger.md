@@ -2664,9 +2664,41 @@ The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
 two promoted material queries. Verified so far, 0.
 
-Implementation continues on the typed shovel traversal path. The next
-group covers the two recursive calls already observed at `0x15f1dd8`
-and `0x15f1e24`, their peak sampler, and the reached height dependencies.
-These reused bodies retain their Batch 3 entries. The traversal rectangle
-predicate has independent replay evidence and still needs a gameplay
-fixture that reaches its caller.
+Implementation continues on the typed shovel traversal path.
+
+### First-axis shovel traversal legs
+
+The recursive calls at `0x15f1dd8` and `0x15f1e24` now use the same
+typed coordinator as the outer traversal. The runtime verifies their
+outer traversal, step, and classifier ancestry. Their initial peak
+and height queries use the same scoped C++ route. Set
+`NX_ACNH_SHOVEL_TRAVERSAL_LEGS=original` to restore the original legs
+and their height subtree independently of the outer coordinator.
+
+The traversal replay matched 152 portable cases and 18 gameplay
+calls against two original AArch64 executions per case. The peak
+and all seven height bodies also passed their independent replay
+suites. The first original run reached all nine bodies, but its
+generated outer call bypassed the runtime leg-entry trace. The
+retry kept the outer coordinator typed across the three routes
+and captured all leg inputs, outputs, and returns.
+
+Original `traversalleg2`, opt-in `traversalleg1`, and default
+`traversalleg3` matched 2,412 ordered calls across the nine bodies,
+including both legs, 18 peak calculations, and 198 height dispatches.
+They also matched nine outer traversal results, 342 sweep casts, ten
+surveys, ten neighborhoods, and 12 final decisions. All 14 Release
+CTests and 14 profile and replay checks passed. The functions
+retain their Batch 3 entries. Batch 4 still has 100 discovery candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-traversalleg2"
+$c = "$r/tree-shake-default-traversalleg3"
+& private/venv/Scripts/python -m tests.acnh_shovel_traversal_leg_live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_traversal --capture-legs "$o/console.log"
+```
+
+The live original legs reached 144 rectangle checks at 16 caller sites.
+Those checks go next. The alternate recursion axis and stage-name and
+rule calls outside the verified scopes remain generated.

@@ -248,11 +248,14 @@ probes use the C++ surface chain. Their stage heights and the
 outer traversal's stage calls use typed base and grid sampling,
 item resolution, and bounds and provider lookup. The direct
 traversal fallback coordinates the height, rectangle, and sweep
-decisions in C++. Recursive traversal, rectangle checks, and
-stage-name and filter callbacks still use generated code.
+decisions in C++. The two observed first-axis recursive calls
+also use the typed coordinator, peak sampler, and height chain.
+The alternate recursion axis, rectangle checks, and stage-name
+and filter callbacks outside verified scopes still use generated code.
 
 [Traversal height verification](ledger.md#direct-heights-inside-outer-shovel-traversal)
 [Sweep collision verification](ledger.md#sixteen-sector-sweep-collision)
 [Sweep probe verification](ledger.md#height-probes-inside-the-sixteen-sector-sweep)
 [Traversal stage verification](ledger.md#shared-stage-subtree-under-shovel-traversal)
 [Direct traversal verification](ledger.md#direct-shovel-traversal-fallback)
+[First-axis recursion verification](ledger.md#first-axis-shovel-traversal-legs)

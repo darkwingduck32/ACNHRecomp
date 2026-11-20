@@ -95,8 +95,9 @@ def synthetic():
                    vectors={0x15f1fe4: (404., 18., 682.), 0x15f202c: (405., 19., 681.)})
 
 
-def captured_cases(path):
+def captured_cases(path, resumes=(0x15f10c0,)):
     cases = {}
+    observed = set()
     for line in path.read_text(errors="replace").splitlines():
         if not line.startswith("HEIGHT_"):
             continue
@@ -106,8 +107,9 @@ def captured_cases(path):
             continue
         if op == "HEIGHT_BEGIN":
             base, resume, stack, request, output, *_ = (int(item, 16) for item in raw)
-            if base == BASE and resume == 0x15f10c0:
+            if base == BASE and resume in resumes:
                 cases[identity] = Capture(ENTRY, base, stack, (request, output)), Fixtures()
+                observed.add(resume)
             continue
         if identity not in cases:
             continue
@@ -139,11 +141,11 @@ def captured_cases(path):
         elif op == "HEIGHT_END":
             fixture.expected_return = data[0] & 1
 
-    if not cases:
-        raise ValueError("no direct traversal captures")
+    if missing := set(resumes) - observed:
+        raise ValueError(f"missing traversal captures at {[hex(resume) for resume in sorted(missing)]}")
     for identity, (cap, fixture) in cases.items():
         if not fixture.observed_order or fixture.expected_return is None or (cap.regs[1] and fixture.expected_output is None):
-            raise ValueError(f"incomplete direct traversal capture {identity:x}")
+            raise ValueError(f"incomplete traversal capture {identity:x}")
         yield cap, fixture
 
 
@@ -248,6 +250,7 @@ def main():
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--capture", type=Path, help="Replay completed direct calls from local gameplay")
+    parser.add_argument("--capture-legs", type=Path, help="Replay the two recursive calls from local gameplay")
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     args = parser.parse_args()
     if args.live and live_cases(args.live[0], "original") != live_cases(args.live[1], "cpp"):
@@ -269,6 +272,8 @@ def main():
     cases = [(fixture.capture(), fixture) for fixture in synthetic()]
     if args.capture:
         cases.extend(captured_cases(args.capture))
+    if args.capture_legs:
+        cases.extend(captured_cases(args.capture_legs, (0x15f1ddc, 0x15f1e28)))
     for capture, fixture in cases:
         replies, values = reference(body, declarations, capture, fixture)
         if reference(body, declarations, capture, fixture) != (replies, values):

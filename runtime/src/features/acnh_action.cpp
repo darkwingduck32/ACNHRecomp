@@ -57,7 +57,7 @@ void install_action_mask(const ModuleInfo& module, FuncEntry* entries) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
     const char* mode = std::getenv("NX_ACNH_ACTION_MASK");
-    use_cpp = mode && std::string_view(mode) == "cpp";
+    use_cpp = !mode || std::string_view(mode) == "cpp";
     trace_mask = std::getenv("NX_ACNH_ACTION_MASK_TRACE") != nullptr;
     if (!use_cpp && !trace_mask) return;
     main_base = module.base;

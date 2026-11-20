@@ -32,11 +32,11 @@ the promoted default. Keep the original selectable.
 ## Active batch 2
 
 This batch targets ten verified ports on the same 3.0.3 build, starting
-with the [candidate queue](next-candidates.md). Verified so far, 0.
+with the [candidate queue](next-candidates.md). Verified so far, 1.
 
 | Main entry | Provisional function | Stage | Next action |
 | --- | --- | --- | --- |
-| `0x24699b8` | Initialize working action bits once | Offline comparison | Compare traced original and opt-in C++ on the pinned tree-shake and walk scenario. |
+| `0x24699b8` | Initialize working action bits once | Verified | Original, opt-in, and default route validated in the notes below. |
 | `0x1218220` | Read a tile record's bit flag | Queued | Replay primary, secondary and fallback record paths. |
 | `0x1146470` | Resolve a column using a 25-slot cache | Queued | Reuse the field-column helper and compare exact cache writes. |
 | `0x113d890` | Test a bit in a cached record column | Queued | Capture slot 22 paths and validate signed index arithmetic. |
@@ -50,10 +50,26 @@ with the [candidate queue](next-candidates.md). Verified so far, 0.
 The action-mask no-op candidate failed case 0. The C++ implementation
 matched all 228 fixtures against two fresh Unicorn runs, including the
 ordered 8-byte copy, 4-byte bit clear and one-byte initialization write.
-Only `NX_ACNH_ACTION_MASK=cpp` selects the candidate while validation
-is underway. Set `NX_ACNH_ACTION_MASK_TRACE=1` to capture the object
+C++ is the default on the validated build. Set `NX_ACNH_ACTION_MASK_TRACE=1` to capture the object
 fields around each call.
 
 ```powershell
 & private/venv/Scripts/python -m private.heading.compare_leaf action_mask
 ```
+
+The original and opt-in routes matched the one observed call from
+`main+0x2373540`. The default route hit the C++ initializer on the same
+call in `tree-shake-original-tile1/nx.log`, which selects the original
+route for the tile query only. Each comparison matched two Unicorn
+executions for all 229 cases. The isolated Windows Release player passed
+all 13 CTest tests. The live scenario covered initialization. Synthetic
+cases also cover a set bit 30 and already-initialized objects.
+
+Run from this worktree to repeat the comparison against the local captures.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+& private/venv/Scripts/python -m private.heading.compare_leaf action_mask --live "$r/tree-shake-original-mask1/nx.log" "$r/tree-shake-original-tile1/nx.log"
+```
+
+Use `NX_ACNH_ACTION_MASK=original` for the stock path.

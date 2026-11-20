@@ -23,6 +23,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 3db4b60 # Move a position toward its target
 # dispatch 8807cc # Resolve a field table row
 # dispatch 8823a0 # Resolve a field table column
+# dispatch 15e0e30 # Test a field flag around a position
 21f7618  # shovel 3x3 field survey complete, before classifying the selected tile
 23e0808  # tree shake preparation, after masking the selected trunk coordinates
 23e0f50  # tree shake, before dispatching the visual event rectangle

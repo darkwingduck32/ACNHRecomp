@@ -1,4 +1,5 @@
 #include "../../../games/acnh/field_column.h"
+#include "../../../games/acnh/field_flag.h"
 #include "../../../games/acnh/field_record.h"
 
 #include "features/camera/version_303.h"
@@ -8,6 +9,8 @@
 #include "platform.h"
 
 #include <array>
+#include <atomic>
+#include <bit>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -21,6 +24,7 @@ namespace {
 
 constexpr uint64_t row_entry = 0x8807cc;
 constexpr uint64_t column_entry = 0x8823a0;
+constexpr uint64_t field_flag_entry = 0x15e0e30;
 constexpr uint64_t column_cache_offset = 0x4bfab80;
 using ColumnCache = std::array<uint8_t, 60>;
 Fn original_field_record = nullptr;
@@ -30,6 +34,10 @@ bool trace_field_record = false;
 Fn original_field_column = nullptr;
 bool use_cpp_column = false;
 bool trace_field_column = false;
+Fn original_field_flag = nullptr;
+bool use_cpp_field_flag = false;
+bool trace_field_flag = false;
+std::atomic<unsigned> field_flag_traces{0};
 
 struct GuestMemory {
     std::string* trace = nullptr;
@@ -161,6 +169,30 @@ void field_column_adapter(CPU& cpu) {
     }
 }
 
+void field_flag_adapter(CPU& cpu) {
+    const bool trace = trace_field_flag && field_flag_traces.fetch_add(1, std::memory_order_relaxed) < 128;
+    if (!use_cpp_field_flag && !trace) {
+        original_field_flag(cpu);
+        return;
+    }
+
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint64_t position = cpu.x[0];
+    const float radius = cpu.v[0].f32[0];
+    const uint32_t flags = static_cast<uint32_t>(cpu.x[1]);
+    std::string reads;
+    const bool found = acnh::field_flag(main_base, position, radius, flags, GuestMemory{trace ? &reads : nullptr});
+    if (use_cpp_field_flag) cpu.x[0] = found;
+    else original_field_flag(cpu);
+
+    if (trace) {
+        log("acnh field flag %s caller=%llx base=%llx position=%llx s0=%08x flags=%x w0=%llx reads=%s",
+            use_cpp_field_flag ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(position),
+            std::bit_cast<uint32_t>(radius), flags, static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
+    }
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -179,6 +211,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if ((use_cpp_column || trace_field_column) && column_cache_offset >= module.data &&
         column_cache_offset + ColumnCache{}.size() <= data_end)
         wrap_function(entries, column_entry, field_column_adapter, original_field_column);
+
+    mode = std::getenv("NX_ACNH_FIELD_FLAG");
+    use_cpp_field_flag = mode && std::string_view(mode) == "cpp";
+    trace_field_flag = std::getenv("NX_ACNH_FIELD_FLAG_TRACE") != nullptr;
+    if (use_cpp_field_flag || trace_field_flag)
+        wrap_function(entries, field_flag_entry, field_flag_adapter, original_field_flag);
 }
 
 }  // namespace

@@ -65,6 +65,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 195033c # Resolve a neighborhood field cell through the shovel query boundary
 # dispatch 127c524 # Initialize the shovel survey item block
 # dispatch 127cab0 # Gather the shovel survey records
+# dispatch 87bf30 # Validate the alternate terrain rectangle
 # dispatch 880630 # Read the first alternate terrain material property
 # dispatch 881090 # Read the second alternate terrain material property
 # dispatch 877130 # Test the shovel terrain for a complete tile

@@ -20,6 +20,7 @@
 #include "../../../games/acnh/shovel_marker.h"
 #include "../../../games/acnh/shovel_collision.h"
 #include "../../../games/acnh/shovel_mixed_cast.h"
+#include "../../../games/acnh/shovel_alternate_terrain.h"
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
@@ -150,6 +151,18 @@ void indexed_record_adapter(CPU& cpu) {
 }
 
 Fn original_half_tile_layer_flag = nullptr;
+bool use_cpp_shovel_alternate_terrain = false;
+bool trace_shovel_alternate_terrain = false;
+
+bool is_shovel_alternate_terrain_frame(uint64_t frame) {
+    return frame && ld<uint64_t>(frame + 8) == main_base + 0x1288bd4;
+}
+
+bool is_shovel_alternate_level_frame(uint64_t frame) {
+    return frame && ld<uint64_t>(frame + 8) == main_base + 0x87bf8c
+        && is_shovel_alternate_terrain_frame(ld<uint64_t>(frame));
+}
+
 bool use_cpp_half_tile_layer_flag = false;
 bool trace_half_tile_layer_flag = false;
 std::atomic<unsigned> layer_flag_samples[3]{};
@@ -162,7 +175,10 @@ void half_tile_layer_flag_adapter(CPU& cpu) {
     const size_t sample = parent == 0x21f778c ? 2 : terrain_caller ? 1 : 0;
     const bool trace = trace_half_tile_layer_flag && (terrain_caller || caller == 0x87c04c) &&
         layer_flag_samples[sample].fetch_add(1, std::memory_order_relaxed) < 12;
-    if (!use_cpp_half_tile_layer_flag && !trace) {
+    const bool alternate = caller == 0x87c04c && is_shovel_alternate_terrain_frame(cpu.x[29]);
+    const bool native = use_cpp_half_tile_layer_flag && (!alternate || use_cpp_shovel_alternate_terrain);
+    const bool trace_alternate = alternate && trace_shovel_alternate_terrain;
+    if (!native && !trace && !trace_alternate) {
         original_half_tile_layer_flag(cpu);
         return;
     }
@@ -171,18 +187,23 @@ void half_tile_layer_flag_adapter(CPU& cpu) {
     const acnh::FieldLayer layer{static_cast<uint32_t>(cpu.x[1])};
     std::string reads;
     const GuestMemory memory{trace ? &reads : nullptr};
-    const acnh::FieldQueries fields{main_base, memory};
-    const auto grid = fields.grid_for(layer);
-    bool found = false;
-    if (grid) {
-        const acnh::HalfTile tile{memory.read<int32_t>(query + 8), memory.read<int32_t>(query + 12)};
-        found = fields.record_flag(fields.record_at(grid, tile));
+    if (native || trace) {
+        const acnh::FieldQueries fields{main_base, memory};
+        const auto grid = fields.grid_for(layer);
+        bool found = false;
+        if (grid) {
+            const acnh::HalfTile tile{memory.read<int32_t>(query + 8), memory.read<int32_t>(query + 12)};
+            found = fields.record_flag(fields.record_at(grid, tile));
+        }
+        if (native) cpu.x[0] = found;
     }
-    if (use_cpp_half_tile_layer_flag) cpu.x[0] = found;
-    else original_half_tile_layer_flag(cpu);
+    if (!native) original_half_tile_layer_flag(cpu);
+    if (trace_alternate)
+        log("acnh shovel alternate terrain %s entry=1285fe0 call=87c048 pos=%d,%d layer=%x out=%x",
+            native ? "cpp" : "original", ld<int32_t>(query + 8), ld<int32_t>(query + 12), layer.index, unsigned(cpu.x[0]));
     if (trace)
         log("acnh half tile layer %s caller=%llx base=%llx query=%llx layer=%x out=%llx reads=%s parent=%llx",
-            use_cpp_half_tile_layer_flag ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            native ? "cpp" : "original", static_cast<unsigned long long>(caller),
             static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(query), layer.index,
             static_cast<unsigned long long>(cpu.x[0]), reads.c_str(), static_cast<unsigned long long>(parent));
 }
@@ -685,21 +706,28 @@ void terrain_sample_adapter(CPU& cpu) {
     }
     const uint64_t frame = cpu.x[29];
     const uint64_t helper_caller = caller == 0x872114 ? 0x877258 : 0x877330;
-    if (ld<uint64_t>(frame + 8) != main_base + helper_caller ||
-        ld<uint64_t>(ld<uint64_t>(frame) + 8) != main_base + shovel_terrain_caller) {
+    const bool alternate = caller == 0x872114 && is_shovel_alternate_level_frame(frame);
+    if (!alternate && (ld<uint64_t>(frame + 8) != main_base + helper_caller ||
+        ld<uint64_t>(ld<uint64_t>(frame) + 8) != main_base + shovel_terrain_caller)) {
         original_terrain_sample(cpu);
         return;
     }
 
     const acnh::HalfTile tile{ld<int32_t>(cpu.x[1] + 8), ld<int32_t>(cpu.x[1] + 12)};
     const acnh::TerrainSample output{cpu.x[2]};
-    if (use_cpp_terrain_sample) {
+    const bool native = use_cpp_terrain_sample && (!alternate || use_cpp_shovel_alternate_terrain);
+    if (native) {
         GuestMemory memory;
         acnh::sample_terrain({cpu.x[0]}, tile, output, memory);
     } else {
         original_terrain_sample(cpu);
     }
-    if (trace_terrain_dispatch &&
+    if (alternate && trace_shovel_alternate_terrain) {
+        std::array<uint8_t, 0x34> record;
+        for (size_t i = 0; i < record.size(); ++i) record[i] = ld<uint8_t>(output.address + i);
+        log("acnh shovel alternate terrain %s entry=862530 call=872110 pos=%d,%d out=%s",
+            native ? "cpp" : "original", tile.x, tile.z, cache_hex(record).c_str());
+    } else if (!alternate && trace_terrain_dispatch &&
         terrain_sample_counts[caller == 0x872114].fetch_add(1, std::memory_order_relaxed) < 16) {
         std::array<uint8_t, 0x34> record;
         for (size_t i = 0; i < record.size(); ++i) record[i] = ld<uint8_t>(output.address + i);
@@ -2781,9 +2809,64 @@ struct TerrainHelperServices {
     }
 };
 
+struct ShovelAlternateTerrainServices : HeightGuestFrame {
+    explicit ShovelAlternateTerrainServices(const CPU& caller) : HeightGuestFrame(caller, 0x90, 0x30) {}
+
+    bool level(acnh::TerrainGrid grid, acnh::AlternateTerrainQuery query) const {
+        return (invoke_child(main_base + 0x871f80, 0x87bf8c, {grid.address, query.rectangle, 0}).x[0] & 1) != 0;
+    }
+
+    bool layer_flag(acnh::HalfTile tile, uint32_t layer) const {
+        const auto point = cpu.x[31] + 0x18;
+        st<uint64_t>(point, ld<uint64_t>(main_base + 0x4ab2010) + 0x10);
+        st<int32_t>(point + 8, tile.x);
+        st<int32_t>(point + 12, tile.z);
+        return (invoke_child(main_base + 0x1285fe0, 0x87c04c, {point, layer}).x[0] & 1) != 0;
+    }
+
+    bool property(uint64_t entry, uint64_t resume, uint32_t kind) const {
+        const auto table = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab46c8));
+        return (invoke_child(main_base + entry, resume, {table, kind}).x[0] & 1) != 0;
+    }
+
+    bool rejected(uint32_t kind, unsigned corner) const {
+        constexpr std::array resumes{0x87c0c0u, 0x87c100u, 0x87c140u, 0x87c180u};
+        return property(0x880630, resumes[corner], kind);
+    }
+
+    bool requirement(uint32_t kind, unsigned corner) const {
+        constexpr std::array resumes{0x87c0f0u, 0x87c130u, 0x87c170u, 0x87c1b0u};
+        return property(0x881090, resumes[corner], kind);
+    }
+};
+
+Fn original_shovel_alternate_terrain = nullptr;
+
+void shovel_alternate_terrain_adapter(CPU& cpu) {
+    if (cpu.x[30] != main_base + 0x1288bd4) {
+        original_shovel_alternate_terrain(cpu);
+        return;
+    }
+    const acnh::AlternateTerrainQuery query{cpu.x[0]};
+    if (use_cpp_shovel_alternate_terrain) {
+        ShovelAlternateTerrainServices services{cpu};
+        cpu.x[0] = acnh::shovel_alternate_terrain(main_base, query, GuestMemory{}, services);
+    } else {
+        original_shovel_alternate_terrain(cpu);
+    }
+    if (trace_shovel_alternate_terrain)
+        log("acnh shovel alternate terrain %s entry=87bf30 call=1288bd0 rect=%d,%d,%d,%d out=%x",
+            use_cpp_shovel_alternate_terrain ? "cpp" : "original",
+            ld<int32_t>(query.rectangle + 0x10), ld<int32_t>(query.rectangle + 0x14),
+            ld<int32_t>(query.rectangle + 0x20), ld<int32_t>(query.rectangle + 0x24),
+            unsigned(cpu.x[0]));
+}
+
+
 void terrain_level_adapter(CPU& cpu) {
-    if (cpu.x[30] != main_base + 0x877258 ||
-        ld<uint64_t>(cpu.x[29] + 8) != main_base + shovel_terrain_caller) {
+    const bool alternate = cpu.x[30] == main_base + 0x87bf8c && is_shovel_alternate_terrain_frame(cpu.x[29]);
+    if (!alternate && (cpu.x[30] != main_base + 0x877258 ||
+        ld<uint64_t>(cpu.x[29] + 8) != main_base + shovel_terrain_caller)) {
         original_terrain_level(cpu);
         return;
     }
@@ -2791,7 +2874,8 @@ void terrain_level_adapter(CPU& cpu) {
     const acnh::TerrainRect area{{ld<int32_t>(cpu.x[1] + 0x10), ld<int32_t>(cpu.x[1] + 0x14)},
                                 {ld<int32_t>(cpu.x[1] + 0x20), ld<int32_t>(cpu.x[1] + 0x24)}};
     const auto mode = cpu.x[2] & 1 ? acnh::TerrainHeightMode::base_only : acnh::TerrainHeightMode::composed;
-    if (use_cpp_terrain_level) {
+    const bool native = use_cpp_terrain_level && (!alternate || use_cpp_shovel_alternate_terrain);
+    if (native) {
         GuestMemory memory;
         TerrainHelperServices services{cpu, 0xc0, 0x60};
         cpu.x[0] = acnh::terrain_is_level({cpu.x[0]}, area, mode, memory, services);
@@ -2799,7 +2883,10 @@ void terrain_level_adapter(CPU& cpu) {
         original_terrain_level(cpu);
     }
 
-    if (trace_terrain_helpers && terrain_level_samples.fetch_add(1, std::memory_order_relaxed) < 8)
+    if (alternate && trace_shovel_alternate_terrain) {
+        log("acnh shovel alternate terrain %s entry=871f80 call=87bf88 rect=%d,%d,%d,%d out=%x",
+            native ? "cpp" : "original", area.min.x, area.min.z, area.max.x, area.max.z, unsigned(cpu.x[0]));
+    } else if (!alternate && trace_terrain_helpers && terrain_level_samples.fetch_add(1, std::memory_order_relaxed) < 8)
         log("acnh shovel terrain helper level %s area=%d,%d,%d,%d mode=%u out=%u",
             use_cpp_terrain_level ? "cpp" : "original", area.min.x, area.min.z, area.max.x, area.max.z,
             unsigned(mode), unsigned(cpu.x[0] & 1));
@@ -4205,10 +4292,16 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_indexed_record || trace_indexed_record)
         wrap_function(entries, 0x240f090, indexed_record_adapter, original_indexed_record);
 
+    mode = std::getenv("NX_ACNH_SHOVEL_ALTERNATE_TERRAIN");
+    use_cpp_shovel_alternate_terrain = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_alternate_terrain = std::getenv("NX_ACNH_SHOVEL_ALTERNATE_TERRAIN_TRACE") != nullptr;
+    if (use_cpp_shovel_alternate_terrain || trace_shovel_alternate_terrain)
+        wrap_function(entries, 0x87bf30, shovel_alternate_terrain_adapter, original_shovel_alternate_terrain);
+
     mode = std::getenv("NX_ACNH_HALF_TILE_LAYER_FLAG");
     use_cpp_half_tile_layer_flag = !mode || std::string_view(mode) == "cpp";
     trace_half_tile_layer_flag = std::getenv("NX_ACNH_HALF_TILE_LAYER_FLAG_TRACE") != nullptr;
-    if (use_cpp_half_tile_layer_flag || trace_half_tile_layer_flag)
+    if (use_cpp_half_tile_layer_flag || trace_half_tile_layer_flag || trace_shovel_alternate_terrain)
         wrap_function(entries, 0x1285fe0, half_tile_layer_flag_adapter, original_half_tile_layer_flag);
 
     mode = std::getenv("NX_ACNH_FIELD_COLUMN");
@@ -4265,13 +4358,13 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x87a980, shovel_primary_terrain_fallback_adapter, original_shovel_primary_terrain_fallback);
     if (use_cpp_shovel_cast_height || trace_shovel_cast_height)
         wrap_function(entries, 0x87aa70, shovel_cast_secondary_adapter, original_shovel_cast_secondary);
-    if (use_cpp_terrain_sample || trace_terrain_dispatch || trace_shovel_marker)
+    if (use_cpp_terrain_sample || trace_terrain_dispatch || trace_shovel_marker || trace_shovel_alternate_terrain)
         wrap_function(entries, 0x862530, terrain_sample_adapter, original_terrain_sample);
 
     trace_terrain_helpers = std::getenv("NX_ACNH_SHOVEL_TERRAIN_HELPERS_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_LEVEL");
     use_cpp_terrain_level = !mode || std::string_view(mode) == "cpp";
-    if (use_cpp_terrain_level || trace_terrain_helpers)
+    if (use_cpp_terrain_level || trace_terrain_helpers || trace_shovel_alternate_terrain)
         wrap_function(entries, 0x871f80, terrain_level_adapter, original_terrain_level);
     mode = std::getenv("NX_ACNH_SHOVEL_HEIGHT_CHAIN");
     use_cpp_shovel_height_chain = !mode || std::string_view(mode) == "cpp";

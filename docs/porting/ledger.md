@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 74.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 75.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -1957,3 +1957,46 @@ $c = "$r/tree-shake-default-terrainpair4"
 The default run captured 12 calls into the generated alternate
 terrain rectangle check `0x87bf30` at `0x1288bd0`. The next
 group follows that rectangle check and its level and layer tests.
+
+### Alternate terrain rectangle check
+
+The rectangle check `0x87bf30` now defaults to C++ from
+`0x1288bd0`. The typed query runs the rectangle level check once
+and then visits tiles in row order. It checks each tile's flags and
+layer before reading the four materials and running their cached
+predicates. Owner mode 1 selects layer 50 and other modes select
+layer 1. Set `NX_ACNH_SHOVEL_ALTERNATE_TERRAIN=original` for the
+generated rectangle check and level, layer, and sampler calls in
+that scope. The material pair retains its own route switch.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x87bf30` | 158 | 570 |
+| `0x871f80` | 224 | 570 |
+| `0x1285fe0` | 122 | 2324 |
+| `0x862530` | 328 | 2324 |
+| `0x880630` | 585 | 9296 |
+| `0x881090` | 585 | 9296 |
+
+The 158 rectangle replays include 12 gameplay captures and compare
+the complete ordered child arguments against two original runs.
+The original and opt-in altterrain1 runs and the default altterrain2
+run matched the scoped calls and all eight whole-fixture outcomes.
+Each material requirement consumed the preceding rejection's
+cache state. All 14 Release CTests and 14 Python profile and
+replay tests passed. The parent adds one ledger entry. The five
+reused bodies retain their earlier entries, and the discovery
+queue contains 100 candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-altterrain1"
+$c = "$r/tree-shake-default-altterrain2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_alternate_terrain --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_pair --live "$o/nx.log" "$c/nx.log"
+```
+
+The rectangle caller `0x1288630` remains generated. Inside the
+main shovel step path, the next group follows surface-height
+queries from the collision probes. Traversal fallback `0x15f10f0`
+still needs a gameplay hit.

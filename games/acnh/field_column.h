@@ -28,17 +28,19 @@ bool cache_field_offset(uint64_t row, uint32_t back, uint32_t hash, uint64_t slo
 template<uint32_t SlotCount, class Memory>
 uint64_t cached_column(uint64_t row, uint32_t column, uint32_t hash,
                        uint64_t ready, uint64_t slots, Memory& memory) {
-    static_assert(SlotCount == 14 || SlotCount == 25);
+    static_assert(SlotCount == 14 || SlotCount == 25 || SlotCount == 31);
     if (!memory.template read<uint8_t>(ready)) {
         constexpr uint64_t unresolved = UINT64_MAX;
         constexpr uint64_t last = 4ull * (SlotCount & ~uint32_t{3});
         memory.template write<uint64_t>(slots, unresolved);
         memory.template write<uint64_t>(slots + 8, unresolved);
         memory.template write<uint8_t>(ready, 1);
-        if constexpr (SlotCount == 14)
+        if constexpr (SlotCount % 4 >= 2)
             memory.template write<uint64_t>(slots + last, unresolved);
-        else
+        if constexpr (SlotCount % 4 == 1)
             memory.template write<uint32_t>(slots + last, UINT32_MAX);
+        if constexpr (SlotCount % 4 == 3)
+            memory.template write<uint32_t>(slots + last + 8, UINT32_MAX);
         for (uint64_t offset = 16; offset < last; offset += 8)
             memory.template write<uint64_t>(slots + offset, unresolved);
     }

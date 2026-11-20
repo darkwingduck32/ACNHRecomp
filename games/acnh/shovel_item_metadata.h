@@ -1,6 +1,8 @@
 #pragma once
 
 #include "shovel_item_queries.h"
+#include "field_column.h"
+#include "field_record.h"
 
 namespace nx::acnh {
 
@@ -29,6 +31,58 @@ uint16_t metadata_enum(CatalogEntry row, MetadataEnumTable table, const Memory& 
     const uint64_t values = memory.template read<uint64_t>(table.address + 8);
     const auto value = memory.template read<uint16_t>(values + 2ll * std::bit_cast<int32_t>(index));
     return value <= table.maximum ? value : 0;
+}
+
+template<class Memory, class Services>
+uint32_t shovel_alternate_kind(uint64_t base, ItemDescriptor descriptor, const Memory& memory,
+                               Services& services) {
+    const CatalogEntry row{memory.template read<uint64_t>(descriptor.address + 0x10)};
+    if (!row.address) return 0;
+
+    const auto type = metadata_enum(
+        row, {memory.template read<uint64_t>(base + 0x4ac00c8), 0xbc}, memory);
+    if (type == 0xb1) {
+        const auto item = memory.template read<uint32_t>(descriptor.address + 0xc);
+        if (!(item & 0xf800)) {
+            const auto slot = memory.template read<uint64_t>(base + 0x4ab46f0);
+            const auto owner = memory.template read<uint64_t>(slot);
+            const auto bits = memory.template read<uint8_t>(owner + 0xe99e0 + ((item >> 3) & 0x1fff));
+            if ((bits >> (item & 7)) & 1) return 0x3a;
+        }
+    }
+    if (type == 1 || (type == 0 && metadata_enum(row, {base + 0x5227298, 1}, memory) == 1))
+        return 0x13;
+    if (type == 2) return 0x12;
+    const auto kind = metadata_enum(row, {base + 0x5226f68, 0xd9}, memory);
+    if (kind == 0x17 && services.has_special_kind(descriptor)) return 0x18;
+    return kind;
+}
+
+template<class Memory>
+bool shovel_metadata_enabled(uint64_t base, ItemDescriptor descriptor, Memory& memory) {
+    const uint64_t row = memory.template read<uint64_t>(descriptor.address + 0x10);
+    if (!row) return false;
+
+    const uint64_t type_slot = base + 0x4ac00c8;
+    const auto type = metadata_enum(
+        {row}, {memory.template read<uint64_t>(type_slot), 0xbc}, memory);
+    const uint64_t db = memory.template read<uint64_t>(base + 0x522a778);
+    const uint64_t category = field_record(db, type, memory);
+    if (!category || !memory.template read<uint32_t>(category)) return false;
+
+    const uint64_t ready = memory.template read<uint64_t>(base + 0x4abfeb0);
+    const uint64_t slots = memory.template read<uint64_t>(base + 0x4abfeb8);
+    const uint64_t column = cached_column<31>(category, 11, 0x90bc0855, ready, slots, memory);
+    if (!column || !memory.template read<uint8_t>(column)) return false;
+
+    const uint64_t updated_row = memory.template read<uint64_t>(descriptor.address + 0x10);
+    const auto updated_type = updated_row ? metadata_enum(
+        {updated_row}, {memory.template read<uint64_t>(type_slot), 0xbc}, memory) : 0xbc;
+    const uint64_t updated_category = field_record(db, updated_type, memory);
+    const uint64_t updated_column = updated_category + (column - category);
+    return !updated_category || !memory.template read<uint32_t>(updated_category) ||
+           !updated_column || !memory.template read<uint8_t>(updated_column) ||
+           !(memory.template read<uint8_t>(descriptor.address + 0xa) & 0x20);
 }
 
 template<class Memory, class Services>

@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 41.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 43.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -1004,3 +1004,50 @@ metadata call sites. These remain generated. The kind query can call
 `0x19f4c7c` on its special-kind branch. The guest synchronization
 imports, deeper item category checks, and quadrant terrain fallbacks
 remain at the boundary. Discovery still contains 100 candidates.
+
+### Descriptor kind and predicate
+
+Both queries default to handwritten C++ under the shovel neighborhood
+metadata classifier. Their generated bodies remain selectable
+individually.
+
+| Entry | Original route switch | Independent AArch64 cases | Calls per route at (40, 69) |
+| --- | --- | ---: | ---: |
+| `0x19f93e8` | `NX_ACNH_SHOVEL_ALTERNATE_KIND=original` | 270 | 5 |
+| `0x19e59b0` | `NX_ACNH_SHOVEL_METADATA_PREDICATE=original` | 1920 | 11 |
+
+The alternate kind replay compared the special-kind callback arguments
+and result handling. The predicate replay checked both the return value
+and ordered cache writes across packed and indexed tables and cold and
+warm caches. The composed host test exercises both handwritten queries
+and verifies the resolved cache entry. All 14 Release CTest and 14 replay
+and profile tests passed. The existing 14-slot and 25-slot cache replays
+also passed.
+
+Original and opt-in `metadataleaves1` and default `metadataleaves2`
+matched each query's item record, row presence, caller and result at
+(40, 69). The fossil
+returned kind `0x2b` and predicate false. The roses returned kind
+`0xb9` and predicate true. All four focal surveys, neighborhoods and
+final decisions matched, including the default against the original
+whole-path `classdeep2` capture. Gameplay ran one muted instance at a
+time.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-metadataleaves1"
+$c = "$r/tree-shake-default-metadataleaves2"
+foreach ($variant in '--alternate', '--predicate') {
+    & private/venv/Scripts/python -m private.heading.compare_leaf shovel_item_metadata $variant --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69 --require-row-item 0x0b77
+}
+$o = "$r/tree-shake-original-classdeep2"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The generated special-kind callback `0x19f4c7c` stays at the boundary.
+The roses and fossil did not enter that branch. The next remaining
+generated calls in trace order are `0x87a980` and `0x87aa70`, from the
+quadrant material helper. Both consult the same stage and terrain state.
+The second also reaches queued field-record predicate `0x1285040` at
+`0x87aae4`. Keep it with the terrain fallback group and use gameplay
+to determine whether their deeper material lookups are reached.

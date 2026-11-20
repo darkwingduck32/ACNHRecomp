@@ -19,6 +19,8 @@ constexpr uint64_t output = 0x21300, descriptor = 0x21400, provider = 0x22000;
 constexpr uint64_t provider_data = 0x23000, records = 0x30000;
 constexpr uint64_t catalog_slot = 0x24000, owner = 0x25000, catalog = 0x26000, rows = 0x27000;
 constexpr uint64_t header = 0x28000, detail = header + 0x14;
+constexpr uint64_t metadata_categories = 0x28100, metadata_db = 0x28200;
+constexpr uint64_t metadata_cache_flag = 0x28400, metadata_cache = 0x28410;
 constexpr uint64_t empty = 0xfffe;
 constexpr uint64_t placed_item = 0x162a;
 constexpr int32_t first_tile = 4, center_tile = 5;
@@ -95,11 +97,16 @@ struct Services {
         memory.write<uint64_t>(descriptor + 0x10, row);
         return shovel_metadata_kind(base, {descriptor}, memory, *this) == 0;
     }
-    uint32_t alternate_kind(ItemDescriptor) { return 0; }
-    bool metadata_enabled(ItemDescriptor, size_t path) {
-        require(path == 2, "unexpected metadata predicate path");
+    uint32_t alternate_kind(ItemDescriptor value) {
+        const auto kind = shovel_alternate_kind(base, value, memory, *this);
+        require(kind == 0x13, "unexpected alternate metadata kind");
+        return kind;
+    }
+    bool has_special_kind(ItemDescriptor) { throw std::runtime_error("unexpected special metadata kind"); }
+    bool metadata_enabled(ItemDescriptor value, size_t path) {
+        require(path == 0 || path == 2, "unexpected metadata predicate path");
         ++predicate_calls;
-        return true;
+        return shovel_metadata_enabled(base, value, memory);
     }
     CatalogEntry extended_row(ItemDescriptor) { throw std::runtime_error("unexpected extended row"); }
     bool single_tile_extent(uint64_t) { throw std::runtime_error("unexpected extent fallback"); }
@@ -186,7 +193,21 @@ void check_neighborhood(uint16_t metadata_kind) {
     memory.write<uint32_t>(header + 4, 32);
     memory.write<uint16_t>(header + 8, 1);
     memory.write<uint8_t>(header + 10, 0);
+    memory.write<uint32_t>(header + 0xc, 0x90bc0855);
+    memory.write<uint32_t>(header + 0x10, 4);
     memory.write<uint32_t>(detail, detail - header);
+    memory.write<uint8_t>(detail + 4, 1);
+    memory.write<uint64_t>(base + 0x4ac00c8, metadata_categories);
+    memory.write<uint32_t>(metadata_categories, 1);
+    memory.write<uint64_t>(metadata_categories + 8, 0x28110);
+    memory.write<uint16_t>(0x28110, 1);
+    memory.write<uint64_t>(base + 0x522a778, metadata_db);
+    memory.write<uint32_t>(metadata_db + 0x1b0, 1);
+    memory.write<uint64_t>(metadata_db + 0x1b8, rows);
+    memory.write<int32_t>(metadata_db + 0x1c0, 2);
+    memory.write<uint64_t>(base + 0x4abfeb0, metadata_cache_flag);
+    memory.write<uint64_t>(base + 0x4abfeb8, metadata_cache);
+    memory.write<uint8_t>(metadata_cache_flag, 0);
     memory.write<uint32_t>(base + 0x5226ec0, 1);
     memory.write<uint64_t>(base + 0x5226ec8, 0x24700);
     memory.write<uint16_t>(0x24700, 0);
@@ -205,7 +226,9 @@ void check_neighborhood(uint16_t metadata_kind) {
     gather_shovel_neighborhood(base, {scratch}, memory, services);
 
     require(services.stage == 0x678 && services.reads == 36, "gather did not visit the complete neighborhood");
-    require(services.classifications == 1 && services.predicate_calls == 1, "deeper item classification did not run");
+    require(services.classifications == 1 && services.predicate_calls == 2, "deeper item classification did not run");
+    require(memory.read<uint8_t>(metadata_cache_flag) == 1 && memory.read<uint32_t>(metadata_cache + 0x2c) == 4,
+            "metadata predicate did not resolve its cached column");
     for (unsigned index = 0; index < 36; ++index) {
         const uint64_t expected = index == 16 || index == 19 ? placed_item : empty;
         require(memory.read<uint64_t>(scratch + 0x30 + 8ull * index) == expected,

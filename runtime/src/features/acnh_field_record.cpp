@@ -1578,6 +1578,37 @@ bool use_cpp_shovel_metadata = false;
 bool trace_shovel_metadata = false;
 std::atomic<unsigned> shovel_metadata_samples{0};
 
+bool use_cpp_shovel_alternate_kind = false;
+bool use_cpp_shovel_metadata_predicate = false;
+bool trace_shovel_metadata_leaves = false;
+
+struct ShovelAlternateKindCallbacks {
+    const CPU& caller;
+
+    bool has_special_kind(acnh::ItemDescriptor descriptor) const {
+        CPU nested = caller;
+        nested.x[31] -= 0x20;
+        nested.x[0] = descriptor.address;
+        nested.x[30] = main_base + 0x19f9764;
+        st<uint64_t>(nested.x[31] + 0x10, caller.x[29]);
+        st<uint64_t>(nested.x[31] + 0x18, main_base + 0x19ee428);
+        nested.x[29] = nested.x[31] + 0x10;
+        trace_shovel_dependency(0x19f4c7c, 0x19f9764);
+        call(nested, main_base + 0x19f4c7c);
+        return (nested.x[0] & 1) != 0;
+    }
+};
+
+void log_shovel_metadata_leaf(uint64_t entry, uint64_t resume, bool native,
+                              acnh::ItemDescriptor descriptor, uint32_t result) {
+    if (!trace_shovel_metadata_leaves) return;
+    log("acnh shovel metadata leaf %s entry=%llx call=%llx item=%llx row=%u out=%x",
+        native ? "cpp" : "original", static_cast<unsigned long long>(entry),
+        static_cast<unsigned long long>(resume - 4),
+        static_cast<unsigned long long>(ld<uint64_t>(descriptor.address + 8)),
+        unsigned(ld<uint64_t>(descriptor.address + 0x10) != 0), result);
+}
+
 struct ShovelMetadataServices {
     CPU cpu;
 
@@ -1602,12 +1633,24 @@ struct ShovelMetadataServices {
     }
 
     uint32_t alternate_kind(acnh::ItemDescriptor descriptor) const {
-        return static_cast<uint32_t>(invoke(0x19f93e8, 0x19ee428, descriptor.address));
+        constexpr uint64_t entry = 0x19f93e8, resume = 0x19ee428;
+        ShovelAlternateKindCallbacks callbacks{cpu};
+        const auto result = use_cpp_shovel_alternate_kind
+            ? acnh::shovel_alternate_kind(main_base, descriptor, GuestMemory{}, callbacks)
+            : static_cast<uint32_t>(invoke(entry, resume, descriptor.address));
+        log_shovel_metadata_leaf(entry, resume, use_cpp_shovel_alternate_kind, descriptor, result);
+        return result;
     }
 
     bool metadata_enabled(acnh::ItemDescriptor descriptor, size_t path) const {
         constexpr std::array resumes{0x19ee444, 0x19ee450, 0x19ee470};
-        return (invoke(0x19e59b0, resumes[path], descriptor.address) & 1) != 0;
+        constexpr uint64_t entry = 0x19e59b0;
+        GuestMemory memory;
+        const auto result = use_cpp_shovel_metadata_predicate
+            ? acnh::shovel_metadata_enabled(main_base, descriptor, memory)
+            : (invoke(entry, resumes[path], descriptor.address) & 1) != 0;
+        log_shovel_metadata_leaf(entry, resumes[path], use_cpp_shovel_metadata_predicate, descriptor, result);
+        return result;
     }
 
     acnh::CatalogEntry extended_row(acnh::ItemDescriptor descriptor) const {
@@ -2201,6 +2244,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x267d4ac, empty_item_init_adapter, original_empty_item_init);
         wrap_function(entries, 0x267f248, empty_item_finalize_adapter, original_empty_item_finalize);
     }
+
+    mode = std::getenv("NX_ACNH_SHOVEL_ALTERNATE_KIND");
+    use_cpp_shovel_alternate_kind = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_SHOVEL_METADATA_PREDICATE");
+    use_cpp_shovel_metadata_predicate = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_metadata_leaves = std::getenv("NX_ACNH_SHOVEL_METADATA_LEAF_TRACE") != nullptr;
 
     mode = std::getenv("NX_ACNH_SHOVEL_METADATA");
     use_cpp_shovel_metadata = !mode || std::string_view(mode) == "cpp";

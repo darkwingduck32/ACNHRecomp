@@ -157,8 +157,8 @@ and final decision in the whole-tile and half-tile fixtures. See
 `shovelpathwhole1` and `shovelpathhalf1` in the ledger. Five decisions in
 the first fixture accepted the interaction. Six decisions in the
 second rejected it. The typed queries read live stage and provider
-state through the boundary. Generated calls still handle synchronization primitives and deeper
-descriptor metadata.
+state through the boundary. Generated calls still handle synchronization
+primitives and branches of descriptor metadata.
 
 ## Remaining generated dependencies
 
@@ -171,13 +171,14 @@ disabled. Record selection `0x37567d0`, release `0x37568c0`, and
 counter initialization `0x37e2e80` now default to C++ on this path.
 The thread, lock, and wake imports remain at the guest boundary.
 
-The next observed group starts with the alternate descriptor kind
-query `0x19f93e8`, followed by the descriptor predicate `0x19e59b0`.
-The scoped trace reached both from the native metadata classifier
-before reaching the terrain fallbacks.
+The alternate descriptor kind query `0x19f93e8` and the descriptor
+predicate `0x19e59b0` default to C++ under the shovel neighborhood
+metadata classifier. The alternate query retains the generated
+special-kind callback `0x19f4c7c`.
 
 The generated boundary also retains the quadrant fallbacks
-`0x87a980` and `0x87aa70`, deeper item descriptor and category calls,
+`0x87a980` and `0x87aa70`, the next observed group, along with
+deeper item descriptor and category calls,
 the extent helper `0x253fe7c`, and the alternate terrain flow
 `0x8773f0` / `0x880a10`. The auxiliary item lookup `0x1a03610`
 remains original. The alternate terrain and auxiliary cases need a
@@ -191,9 +192,11 @@ gather, bounds checking, provider reads, catalog lookup, selected-item
 classification, and terrain queries. The in-memory fixture includes a
 continuation cell with an occupied anchor. It checks all 36 resolved
 records, the stage key, and the occupancy bit for both metadata
-outcomes. It also checks selected-item suitability, material rejection,
-and blocking by a half-tile layer flag. Generated callbacks are
-supplied by the host fixture at the same typed boundary.
+outcomes. The gather runs the handwritten descriptor queries and
+checks that the predicate resolves its cached column. The test also
+checks selected-item suitability, material rejection, and blocking
+by a half-tile layer flag. The host fixture supplies responses for
+the remaining callbacks at the typed boundary.
 
 ```powershell
 & private/venv/Scripts/ctest.exe --test-dir H:/ACNH/ACNHRecomp/private/port-acnh-engine/player -R '^acnh_shovel_field_query$' --output-on-failure

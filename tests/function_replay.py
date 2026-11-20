@@ -5,7 +5,7 @@ from unicorn import (
     UC_ARCH_ARM64, UC_HOOK_CODE, UC_HOOK_MEM_INVALID, UC_HOOK_MEM_READ,
     UC_HOOK_MEM_WRITE, UC_MEM_WRITE, UC_MODE_ARM, Uc, UcError,
 )
-from unicorn.arm64_const import UC_ARM64_REG_LR, UC_ARM64_REG_PC, UC_ARM64_REG_SP
+from unicorn.arm64_const import UC_ARM64_REG_LR, UC_ARM64_REG_PC, UC_ARM64_REG_SP, UC_ARM64_REG_X0
 
 
 PAGE = 0x1000
@@ -21,7 +21,7 @@ class Result:
     memory: dict[int, bytes]
     written_bytes: frozenset[int]
     writes: tuple[tuple[int, int, int | None], ...]
-    calls: tuple[tuple[int, int], ...]
+    calls: tuple[tuple[int, int, int], ...]
 
 
 def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, callees=None):
@@ -91,7 +91,7 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, cal
                 stop(machine, f"unexpected call at {address:#x}")
                 return
             frames.append((target, address + size, machine.reg_read(UC_ARM64_REG_SP)))
-            calls.append((address, target))
+            calls.append((address, target, machine.reg_read(UC_ARM64_REG_X0)))
         elif word & 0xfffffc1f == 0xd63f0000:
             stop(machine, f"unexpected call at {address:#x}")
         elif word == 0xd65f03c0:

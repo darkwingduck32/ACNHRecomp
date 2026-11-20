@@ -62,3 +62,4 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 1a03610 # Find the auxiliary item selector index
 # dispatch 267d6c4 # Resolve a field record to an item ID
 # dispatch 194f798 # Check a half-tile against layer and channel bounds
+# dispatch 195033c # Resolve a neighborhood field cell through the shovel query boundary

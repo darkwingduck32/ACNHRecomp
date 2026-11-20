@@ -448,6 +448,8 @@ def main():
                     raise SystemExit(f"live case {i} differs from Unicorn")
             elif expected[0] != observed:
                 raise SystemExit(f"live case {i} differs from Unicorn")
+        if mode == 9:
+            expected += tuple(x0 for _, _, x0 in want.calls)
         got = tuple(map(int, actual[i].split()))
         if got != expected:
             failures.setdefault(mode, f"entry {entry:#x}, case {i}: expected {expected[:13]}, got {got[:13]}")

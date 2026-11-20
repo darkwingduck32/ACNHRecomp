@@ -44,7 +44,7 @@ class FunctionReplayTest(unittest.TestCase):
         result = function_replay.run(0x10000, code, {UC_ARM64_REG_X0: 35},
                                      (UC_ARM64_REG_X0,), {}, callees={0x10004: (0x10100, callee)})
         self.assertEqual(result.registers[UC_ARM64_REG_X0], 42)
-        self.assertEqual(result.calls, ((0x10004, 0x10100),))
+        self.assertEqual(result.calls, ((0x10004, 0x10100, 35),))
 
     def test_rejects_call_not_matching_declared_target(self):
         code = bytes.fromhex("fd7bbfa93f000094fd7bc1a8c0035fd6")

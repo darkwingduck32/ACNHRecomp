@@ -14,6 +14,10 @@ struct HalfTile {
     int32_t z;
 };
 
+struct HalfTileRef {
+    uint64_t address;
+};
+
 struct FieldLayer {
     uint32_t index;
 };
@@ -30,6 +34,20 @@ struct FieldBounds {
 struct FieldGrid {
     uint64_t address;
     explicit operator bool() const { return address != 0; }
+};
+
+struct FieldLayerRef {
+    uint64_t address;
+};
+
+struct FieldCellQuery {
+    FieldLayerRef layer;
+    FieldChannel channel;
+    HalfTileRef position;
+};
+
+struct FieldCellProvider {
+    uint64_t address;
 };
 
 struct FieldItem {
@@ -70,11 +88,14 @@ public:
         return {node + 0x38};
     }
 
-    bool contains(FieldBounds bounds, HalfTile tile) const {
-        return tile.x >= memory_.template read<int32_t>(bounds.address + 0x10) &&
-               tile.x <= memory_.template read<int32_t>(bounds.address + 0x20) &&
-               tile.z >= memory_.template read<int32_t>(bounds.address + 0x14) &&
-               tile.z <= memory_.template read<int32_t>(bounds.address + 0x24);
+    bool contains(FieldBounds bounds, HalfTileRef tile) const {
+        const int32_t min_x = memory_.template read<int32_t>(bounds.address + 0x10);
+        const int32_t x = memory_.template read<int32_t>(tile.address + 8);
+        if (x < min_x || x > memory_.template read<int32_t>(bounds.address + 0x20)) return false;
+
+        const int32_t min_z = memory_.template read<int32_t>(bounds.address + 0x14);
+        const int32_t z = memory_.template read<int32_t>(tile.address + 12);
+        return z >= min_z && z <= memory_.template read<int32_t>(bounds.address + 0x24);
     }
 
 
@@ -148,6 +169,31 @@ public:
                 return selector == 10 ? 0x306 : 0x1225;
         }
         return id;
+    }
+
+    template<class Services>
+    void read_cell(FieldCellQuery query, FieldItem output, HalfTileRef root, Services& services) const {
+        if (services.contains(query)) {
+            memory_.template write<uint64_t>(output.address, 0xfffe);
+            services.initialize(output);
+            const FieldLayer layer{memory_.template read<uint32_t>(query.layer.address + 8)};
+            const uint64_t owner_pointer = memory_.template read<uint64_t>(base_ + 0x4ab27a8);
+            const uint64_t node = layer_node(memory_.template read<uint64_t>(owner_pointer), layer);
+            const uint32_t slot = query.channel.index < 8 ? query.channel.index : 0;
+            const FieldCellProvider provider{memory_.template read<uint64_t>(node + 0xd0 + 16ull * slot)};
+            if (provider.address) {
+                const uint64_t item = services.read(provider, query.position, root);
+                memory_.template write<uint32_t>(output.address, static_cast<uint32_t>(item));
+                memory_.template write<uint32_t>(output.address + 4, static_cast<uint32_t>(item >> 32));
+                return;
+            }
+        }
+
+        const uint64_t empty = base_ + 0x5486008;
+        const auto lower = memory_.template read<uint32_t>(empty);
+        const auto upper = memory_.template read<uint32_t>(empty + 4);
+        memory_.template write<uint32_t>(output.address, lower);
+        memory_.template write<uint32_t>(output.address + 4, upper);
     }
 
     void initialize_survey(SurveyScratch scratch) const {

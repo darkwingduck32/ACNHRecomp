@@ -573,12 +573,16 @@ bool use_cpp_field_bounds = false;
 bool trace_field_bounds = false;
 std::atomic<unsigned> field_bounds_samples{0};
 
+bool shovel_cell_caller(uint64_t caller) {
+    return caller == 0x127cc88 || caller == 0x127cf88 ||
+           caller == 0x127cfd4 || caller == 0x127cffc;
+}
+
 void field_bounds_adapter(CPU& cpu) {
     const uint64_t caller = cpu.x[30] - main_base;
     const uint64_t parent = trace_field_bounds && caller == 0x1950370
         ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
-    const bool trace = (parent == 0x127cc88 || parent == 0x127cf88 ||
-        parent == 0x127cfd4 || parent == 0x127cffc) &&
+    const bool trace = shovel_cell_caller(parent) &&
         field_bounds_samples.fetch_add(1, std::memory_order_relaxed) < 32;
     if (!use_cpp_field_bounds && !trace) {
         original_field_bounds(cpu);
@@ -593,8 +597,7 @@ void field_bounds_adapter(CPU& cpu) {
     const acnh::FieldQueries fields{main_base, memory};
     const acnh::FieldLayer layer{memory.read<uint32_t>(layer_address + 8)};
     const auto bounds = fields.bounds_for(layer, channel);
-    const bool inside = bounds && fields.contains(bounds,
-        {memory.read<int32_t>(position + 8), memory.read<int32_t>(position + 12)});
+    const bool inside = bounds && fields.contains(bounds, {position});
     if (use_cpp_field_bounds) cpu.x[0] = inside;
     else original_field_bounds(cpu);
     if (trace)
@@ -603,6 +606,92 @@ void field_bounds_adapter(CPU& cpu) {
             static_cast<unsigned long long>(parent), static_cast<unsigned long long>(main_base),
             static_cast<unsigned long long>(layer_address), channel.index, static_cast<unsigned long long>(position),
             static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
+}
+
+struct FieldCellServices {
+    CPU cpu;
+
+    explicit FieldCellServices(const CPU& caller) : cpu(caller) {
+        cpu.x[31] -= 0x50;
+        const uint64_t frame = cpu.x[31] + 0x10;
+        st<uint64_t>(frame, caller.x[29]);
+        st<uint64_t>(frame + 8, caller.x[30]);
+        cpu.x[29] = frame;
+    }
+
+    bool contains(acnh::FieldCellQuery query) const {
+        CPU nested = cpu;
+        nested.x[0] = query.layer.address;
+        nested.x[1] = query.channel.index;
+        nested.x[2] = query.position.address;
+        nested.x[30] = main_base + 0x1950370;
+        call(nested, main_base + 0x194f798);
+        return (nested.x[0] & 1) != 0;
+    }
+
+    void initialize(acnh::FieldItem item) const {
+        CPU nested = cpu;
+        nested.x[0] = item.address;
+        nested.x[30] = main_base + 0x1950384;
+        call(nested, main_base + 0x267d4ac);
+    }
+
+    uint64_t read(acnh::FieldCellProvider provider, acnh::HalfTileRef point, acnh::HalfTileRef root) const {
+        CPU nested = cpu;
+        const uint64_t result = cpu.x[31] + 0x28;
+        nested.x[0] = provider.address;
+        nested.x[1] = point.address;
+        nested.x[2] = root.address;
+        nested.x[8] = result;
+        nested.x[30] = main_base + 0x1950414;
+        call(nested, main_base + 0x11e4f58);
+        return ld<uint64_t>(result);
+    }
+};
+
+Fn original_field_cell = nullptr;
+bool use_cpp_field_cell = false;
+bool trace_field_cell = false;
+std::atomic<unsigned> field_cell_samples{0};
+
+void field_cell_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    if (!shovel_cell_caller(caller)) {
+        original_field_cell(cpu);
+        return;
+    }
+
+    const acnh::FieldCellQuery query{{cpu.x[0]}, {static_cast<uint32_t>(cpu.x[1])}, {cpu.x[2]}};
+    const acnh::HalfTileRef root{cpu.x[3]};
+    const acnh::FieldItem item{cpu.x[8]};
+    const bool trace = trace_field_cell && field_cell_samples.fetch_add(1, std::memory_order_relaxed) < 32;
+    uint32_t layer = 0;
+    int32_t x = 0, z = 0, root_x = 0, root_z = 0;
+    if (trace) {
+        layer = ld<uint32_t>(query.layer.address + 8);
+        x = ld<int32_t>(query.position.address + 8);
+        z = ld<int32_t>(query.position.address + 12);
+        if (root.address) {
+            root_x = ld<int32_t>(root.address + 8);
+            root_z = ld<int32_t>(root.address + 12);
+        }
+    }
+
+    if (use_cpp_field_cell) {
+        GuestMemory memory;
+        FieldCellServices services{cpu};
+        acnh::FieldQueries{main_base, memory}.read_cell(query, item, root, services);
+    } else {
+        original_field_cell(cpu);
+    }
+
+    if (trace)
+        log("acnh shovel cell %s caller=%llx layer=%x channel=%x pos=%d,%d root_present=%u root=%d,%d resolved=%d,%d item=%llx",
+            use_cpp_field_cell ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            layer, query.channel.index, x, z, unsigned(root.address != 0), root_x, root_z,
+            root.address ? ld<int32_t>(root.address + 8) : 0,
+            root.address ? ld<int32_t>(root.address + 12) : 0,
+            ld<unsigned long long>(item.address));
 }
 
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
@@ -681,10 +770,16 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x267d6c4, field_item_id_adapter, original_field_item_id);
 
     mode = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS");
-    use_cpp_field_bounds = mode && std::string_view(mode) == "cpp";
+    use_cpp_field_bounds = !mode || std::string_view(mode) == "cpp";
     trace_field_bounds = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS_TRACE") != nullptr;
     if (use_cpp_field_bounds || trace_field_bounds)
         wrap_function(entries, 0x194f798, field_bounds_adapter, original_field_bounds);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_FIELD_CELL");
+    use_cpp_field_cell = mode && std::string_view(mode) == "cpp";
+    trace_field_cell = std::getenv("NX_ACNH_SHOVEL_FIELD_CELL_TRACE") != nullptr;
+    if (use_cpp_field_cell || trace_field_cell)
+        wrap_function(entries, 0x195033c, field_cell_adapter, original_field_cell);
 
     mode = std::getenv("NX_ACNH_RECORD_CATEGORY");
     use_cpp_categories = !mode || std::string_view(mode) == "cpp";

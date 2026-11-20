@@ -71,8 +71,8 @@ The field-cell lookup is the next common dependency. It checks layer
 and channel bounds through `0x194f798`, initializes an empty item through
 `0x267d4ac`, and invokes a provider through `0x11e4f58`. The provider uses
 virtual dispatch. The lookup returns the item into the caller's X8
-result buffer. Its X3 argument carries the resolved position. The typed
-bounds check has passed reference replay and is undergoing gameplay
-validation. The next implementation group will use the generated provider
-through the runtime boundary while moving the cell lookup's selection and
-result handling behind the typed interface.
+result buffer. Its X3 argument carries the resolved position. The typed bounds check is the verified default. The field-cell candidate
+moves provider selection and result handling behind the typed interface.
+The runtime boundary maintains the original routes and invokes the
+generated initializer and provider. The opt-in gameplay trial compares the
+result item and resolved position from all four gather call sites.

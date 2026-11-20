@@ -15,8 +15,7 @@ int main() {
         const nx::acnh::FieldQueries fields{base, memory};
         const nx::acnh::FieldLayer layer{memory.read<uint32_t>(layer_address + 8)};
         const auto bounds = fields.bounds_for(layer, {channel});
-        const bool inside = bounds && fields.contains(bounds,
-            {memory.read<int32_t>(position + 8), memory.read<int32_t>(position + 12)});
+        const bool inside = bounds && fields.contains(bounds, {position});
         std::cout << inside << '\n';
     }
     return std::cin.eof() ? 0 : 1;

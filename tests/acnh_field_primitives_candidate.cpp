@@ -49,10 +49,18 @@ int main() {
         }
         if (mode == 7) nx::acnh::FieldQueries{c, memory}.initialize_survey({a});
         if (mode == 8) result = nx::acnh::FieldQueries{c, memory}.auxiliary_item_index(static_cast<uint32_t>(a));
-        if (mode == 9) result = nx::acnh::FieldQueries{c, memory}.item_id({a});
+        std::vector<uint32_t> auxiliary_selectors;
+        if (mode == 9) {
+            const nx::acnh::FieldQueries fields{c, memory};
+            result = fields.item_id({a}, [&](uint32_t selector) {
+                auxiliary_selectors.push_back(selector);
+                return fields.auxiliary_item_index(selector);
+            });
+        }
         std::cout << result;
         for (const auto& [addr, size, value] : memory.writes)
             std::cout << ' ' << addr << ' ' << size << ' ' << value;
+        for (const auto selector : auxiliary_selectors) std::cout << ' ' << selector;
         std::cout << '\n';
     }
     return std::cin.eof() ? 0 : 1;

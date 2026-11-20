@@ -41,6 +41,18 @@ def fixtures():
         }
 
 
+    # The stock predicate does not read Z after X fails.
+    yield 0, {
+        BASE + 0x4ab27a8: struct.pack("<Q", OWNER_PTR),
+        OWNER_PTR: struct.pack("<Q", OWNER),
+        OWNER + 0x1f8: struct.pack("<Q", NODE),
+        NODE + 0x48: struct.pack("<i", 0),
+        NODE + 0x60: struct.pack("<Q", 0x25000),
+        LAYER + 8: struct.pack("<I", 0),
+        POSITION + 8: struct.pack("<i", -1),
+    }
+
+
 TRACE = re.compile(
     r"acnh shovel bounds (original|cpp) caller=([0-9a-f]+) parent=([0-9a-f]+) "
     r"base=([0-9a-f]+) layer=([0-9a-f]+) channel=([0-9a-f]+) position=([0-9a-f]+) "
@@ -58,9 +70,10 @@ def live_cases(path, expected_route):
         base, layer, channel, position, out = (int(value, 16) for value in (base, layer, channel, position, out))
         reads, memory = decode_reads(fields)
         pointers = {0: 0, layer: 1, position: 2}
+        coordinates = tuple(value for address, _, value in sorted(reads) if address in (position + 8, position + 12))
         normalized = tuple((width, pointers.setdefault(value, len(pointers)) if width == 8 else value)
-                           for _, width, value in reads)
-        states[(caller, parent, channel, out, normalized)] += 1
+                           for address, width, value in reads if address not in (position + 8, position + 12))
+        states[(caller, parent, channel, out, coordinates, normalized)] += 1
         cases.append((base, layer, channel, position, memory, out))
     if not cases:
         raise ValueError(f"{path}: no shovel bounds calls")

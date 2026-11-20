@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 4.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 5.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -382,3 +382,30 @@ The new layer-bounds candidate `main+0x194f798` is called by the generated
 field-cell lookup at `0x195036c`. Its 1,600 independent cases cover
 layer and channel fallback, unavailable layers, and inclusive signed
 bounds. Its opt-in trial is `tree-shake-{original,cpp}-shovelbounds1`.
+
+The layer-bounds check is verified through its original, opt-in and default
+routes. The captures are `tree-shake-{original,cpp}-shovelbounds1` and
+`tree-shake-default-shovelbounds2`. Each route captured 32 calls from the
+generated field-cell lookup under the gather. The default matched 1,665
+independent replay cases and all four focal survey outcomes. This includes
+the sparse case in which the original returns for out-of-range X before
+reading Z. Select its original route with
+`NX_ACNH_SHOVEL_FIELD_BOUNDS=original`.
+
+The item-ID replay now also checks the ordered selector argument of every
+declared auxiliary call against the typed callback. Runtime coverage of
+the original auxiliary fallback still needs a matching gameplay state.
+
+The `0x195033c` field-cell candidate has passed 1,280 independent cases.
+The pinned AArch64 body calls the real bounds predicate and deterministic
+stand-ins for the generated item initializer and provider. The replay
+compares dependency calls and ordered result writes, including 80
+provider calls with and without a resolved-position output. Its
+`NX_ACNH_SHOVEL_FIELD_CELL=cpp` route is scoped to the gather's four
+call sites. The paired `shovelcell1` trial uses the real generated
+initializer and provider in the disposable shovel scenario.
+
+```powershell
+& private/venv/Scripts/python -m private.heading.compare_leaf field_bounds
+& private/venv/Scripts/python -m private.heading.compare_leaf field_cell
+```

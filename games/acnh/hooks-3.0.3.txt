@@ -53,3 +53,4 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 5bd550 # Hash a terminated field key
 # dispatch 1281c54 # Look up a half-tile field record
 # dispatch 849898 # Test tile categories against a bit mask
+# dispatch 1140fd0 # Pack four field category codes into a key

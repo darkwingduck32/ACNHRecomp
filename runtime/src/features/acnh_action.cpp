@@ -224,6 +224,29 @@ void category_mask_adapter(CPU& cpu) {
         record_bytes.c_str(), mask_bytes.c_str());
 }
 
+Fn original_field_case_key = nullptr;
+bool use_cpp_field_case_key = false;
+bool trace_field_case_key = false;
+std::atomic<unsigned> field_case_key_samples{0};
+
+void field_case_key_adapter(CPU& cpu) {
+    const std::array<uint8_t, 4> codes{
+        static_cast<uint8_t>(cpu.x[0]), static_cast<uint8_t>(cpu.x[1]),
+        static_cast<uint8_t>(cpu.x[2]), static_cast<uint8_t>(cpu.x[3]),
+    };
+    const uint64_t caller = cpu.x[30] - main_base;
+    if (use_cpp_field_case_key) cpu.x[0] = acnh::field_case_key(main_base, codes, GuestMemory{});
+    else original_field_case_key(cpu);
+    if (trace_field_case_key && caller == 0x1141814 &&
+        field_case_key_samples.fetch_add(1, std::memory_order_relaxed) < 12) {
+        log("acnh field case key %s caller=%llx base=%llx args=%x,%x,%x,%x table=%s out=%llx",
+            use_cpp_field_case_key ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(main_base), unsigned(codes[0]), unsigned(codes[1]),
+            unsigned(codes[2]), unsigned(codes[3]), field_bytes(main_base + 0x40749e0, 3).c_str(),
+            static_cast<unsigned long long>(cpu.x[0]));
+    }
+}
+
 void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -262,6 +285,12 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     trace_category_mask = std::getenv("NX_ACNH_TILE_CATEGORY_MASK_TRACE") != nullptr;
     if (use_cpp_category_mask || trace_category_mask)
         wrap_function(functions, 0x849898, category_mask_adapter, original_category_mask);
+
+    mode = std::getenv("NX_ACNH_FIELD_CASE_KEY");
+    use_cpp_field_case_key = mode && std::string_view(mode) == "cpp";
+    trace_field_case_key = std::getenv("NX_ACNH_FIELD_CASE_KEY_TRACE") != nullptr;
+    if (use_cpp_field_case_key || trace_field_case_key)
+        wrap_function(functions, 0x1140fd0, field_case_key_adapter, original_field_case_key);
 }
 
 }  // namespace

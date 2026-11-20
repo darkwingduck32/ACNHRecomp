@@ -43,10 +43,11 @@ with the [candidate queue](next-candidates.md). Verified so far, 7.
 | `0x1632d80` | Initialize four inline string buffers and descriptors | Verified | The combined default trial matched 42 cases. |
 | `0x5bd550` | Hash a terminated byte string with a seed | Verified | The combined default trial matched 257 cases. |
 | `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Verified | The combined default trial matched 518 cases. |
-| `0x24642a8` | Set or clear an action-mask bit | Synthetic comparison | Find a player or NPC state that reaches a known caller. |
+| `0x24642a8` | Set or clear an action-mask bit | Live scenario blocked | Retry when a player or NPC state reaches a known caller. |
 | `0x1281c54` | Look up a half-tile record | Default validation | Repeat the shovel survey through the promoted default. |
-| `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Synthetic comparison | Find a scene that reaches the matrix multiply at `main+0x3dafc64`. |
+| `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Live scenario blocked | Retry when a scene reaches the matrix multiply at `main+0x3dafc64`. |
 | `0x849898` | Test a tile's category bytes against a bit mask | Live trial | Compare both routes at the island field callers. |
+| `0x1140fd0` | Pack four field category codes into a key | Live trial | Compare both routes at the field lookup caller. |
 
 The action-mask no-op candidate failed case 0. The C++ implementation
 matched all 228 fixtures against two fresh Unicorn runs, including the
@@ -177,3 +178,26 @@ each of `main+0x14c467c` and `main+0x14c46e4`. The probe SHA-256 is
 A constant-false port failed case 1066. The replacement matched all 768
 synthetic cases against fresh reference executions. The native route is
 opt-in via `NX_ACNH_TILE_CATEGORY_MASK=cpp`.
+
+### Four-code field key
+
+A broader shovel probe in `tree-shake-original-more1/console.log`
+covered 41 entries and recorded 12 calls to `main+0x1140fd0` from
+`main+0x1141810`. The trace SHA-256 is
+`3482eefe2937866a365f528050f49054ca0dcfb5666c6878486b66f995d93974`.
+Neither the action-bit writer nor matrix multiply appeared in that
+probe. Those two candidates retain their synthetic comparisons and
+original routes. The tile category mask and field key are their batch
+replacements.
+
+The field key's unwind size is `0x74`. It takes the low byte of each
+of X0 through X3. If every code is 0, 1 or 2, it reads a three-byte
+mapping at `main+0x40749e0` and packs the mapped values into W0.
+Other inputs return zero. The no-op failed case 1. The replacement
+matched 2,592 synthetic cases against two Unicorn runs, covering valid
+and invalid codes, high argument bits and alternate mappings.
+Use `NX_ACNH_FIELD_CASE_KEY=cpp` for the live trial.
+
+```powershell
+& private/venv/Scripts/python -m private.heading.compare_leaf field_case_key
+```

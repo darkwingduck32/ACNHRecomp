@@ -2,6 +2,7 @@
 
 #include "tile_record_flag.h"
 
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -83,6 +84,19 @@ bool tile_category_mask(uint64_t owner, uint64_t query, uint64_t mask, const Mem
                                (category % 32)) & 1)) return true;
     }
     return false;
+}
+
+template<class Memory>
+uint32_t field_case_key(uint64_t base, const std::array<uint8_t, 4>& codes, const Memory& memory) {
+    for (const auto code : codes) {
+        if (code > 2) return 0;
+    }
+    const uint64_t table = base + 0x40749e0;
+    const uint32_t c = memory.template read<uint8_t>(table + codes[2]);
+    const uint32_t d = memory.template read<uint8_t>(table + codes[3]);
+    const uint32_t b = memory.template read<uint8_t>(table + codes[1]);
+    const uint32_t a = memory.template read<uint8_t>(table + codes[0]);
+    return a | (b << 2) | (c << 4) | (d << 6);
 }
 
 }  // namespace nx::acnh

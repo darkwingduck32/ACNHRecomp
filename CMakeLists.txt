@@ -287,7 +287,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/nvn/nvn_extensions.cpp
     runtime/src/features/runtime.cpp
     runtime/src/features/builtins.cpp
-    runtime/src/features/acnh_heading.cpp
+    runtime/src/features/acnh_math.cpp
     runtime/src/features/tool_durability/native.cpp
     runtime/src/features/embedded_resources.cpp
     runtime/src/game_folder.cpp

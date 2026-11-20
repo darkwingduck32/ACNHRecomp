@@ -17,6 +17,7 @@
 #include "../../../games/acnh/shovel_stage_context.h"
 #include "../../../games/acnh/shovel_step.h"
 #include "../../../games/acnh/shovel_intermediate.h"
+#include "../../../games/acnh/shovel_marker.h"
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
@@ -627,7 +628,10 @@ void shovel_terrain_adapter(CPU& cpu) {
             use_cpp_shovel_terrain ? "cpp" : "original", tile.x, tile.z, unsigned(cpu.x[0] & 1));
 }
 
+bool try_shovel_marker_terrain_sample(CPU& cpu);
+
 void terrain_sample_adapter(CPU& cpu) {
+    if (try_shovel_marker_terrain_sample(cpu)) return;
     const uint64_t caller = cpu.x[30] - main_base;
     if (caller != 0x872114 && caller != 0x848ed4) {
         original_terrain_sample(cpu);
@@ -1738,12 +1742,15 @@ Fn original_shovel_intermediate = nullptr;
 bool use_cpp_shovel_intermediate = false;
 bool trace_shovel_intermediate = false;
 
+bool is_shovel_intermediate_call(uint64_t resume, uint64_t frame) {
+    return (resume == 0x15f0fe4 || resume == 0x15f1044 || resume == 0x15f10a8)
+        && frame && ld<uint64_t>(frame + 8) == main_base + 0x15f4190
+        && is_shovel_point_classifier_frame(ld<uint64_t>(frame));
+}
+
 void shovel_intermediate_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
-    const auto frame = cpu.x[29];
-    if ((resume != 0x15f0fe4 && resume != 0x15f1044 && resume != 0x15f10a8)
-        || !frame || ld<uint64_t>(frame + 8) != main_base + 0x15f4190
-        || !is_shovel_point_classifier_frame(ld<uint64_t>(frame))) {
+    if (!is_shovel_intermediate_call(resume, cpu.x[29])) {
         original_shovel_intermediate(cpu);
         return;
     }
@@ -1761,6 +1768,200 @@ void shovel_intermediate_adapter(CPU& cpu) {
         log("acnh shovel intermediate %s entry=15e9c80 call=%llx flags=%x radius=%x out=%x",
             use_cpp_shovel_intermediate ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
             flags, std::bit_cast<uint32_t>(query.radius), unsigned(cpu.x[0]));
+}
+
+
+constexpr std::array<uint64_t, 4> shovel_marker_entries{0x15ea0c8, 0x876320, 0x849ac8, 0x8493f8};
+constexpr std::array<uint64_t, 5> shovel_marker_direct_resumes{0x15ea1b4, 0x15ea294, 0x15ea39c, 0x15ea494, 0x15ea590};
+constexpr std::array<uint64_t, 4> shovel_marker_global_resumes{0x15ea628, 0x15ea6c0, 0x15ea760, 0x15ea828};
+constexpr std::array<uint64_t, 4> shovel_marker_primary_resumes{0x8494c0, 0x8494f8, 0x84952c, 0x849560};
+std::array<Fn, 4> original_shovel_marker{};
+Fn original_shovel_marker_primary = nullptr;
+bool use_cpp_shovel_marker = false;
+bool trace_shovel_marker = false;
+
+bool is_shovel_intermediate_frame(uint64_t frame) {
+    return frame && is_shovel_intermediate_call(ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame));
+}
+
+bool is_shovel_marker_extent_frame(uint64_t frame) {
+    return frame && ld<uint64_t>(frame + 8) == main_base + 0x15e9cd0
+        && is_shovel_intermediate_frame(ld<uint64_t>(frame));
+}
+
+bool is_shovel_marker_global_call(uint64_t resume, uint64_t frame) {
+    if (resume == 0x15f47e8) return is_shovel_point_classifier_frame(frame);
+    return std::find(shovel_marker_global_resumes.begin(), shovel_marker_global_resumes.end(), resume)
+            != shovel_marker_global_resumes.end()
+        && is_shovel_marker_extent_frame(frame);
+}
+
+bool is_shovel_marker_direct_call(uint64_t resume, uint64_t frame) {
+    if (resume == 0x15f4370) return is_shovel_point_classifier_frame(frame);
+    if (resume == 0x87639c)
+        return frame && is_shovel_marker_global_call(ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame));
+    return std::find(shovel_marker_direct_resumes.begin(), shovel_marker_direct_resumes.end(), resume)
+            != shovel_marker_direct_resumes.end()
+        && is_shovel_marker_extent_frame(frame);
+}
+
+bool is_shovel_marker_mask_frame(uint64_t frame) {
+    return frame && is_shovel_marker_direct_call(ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame));
+}
+
+bool is_shovel_marker_corners_frame(uint64_t frame) {
+    return frame && ld<uint64_t>(frame + 8) == main_base + 0x849afc
+        && is_shovel_marker_mask_frame(ld<uint64_t>(frame));
+}
+
+struct ShovelMarkerServices : HeightGuestFrame {
+    ShovelMarkerServices(const CPU& caller, size_t index)
+        : HeightGuestFrame(caller, frame_sizes[index], frame_offsets[index]) {}
+
+    static constexpr std::array<uint64_t, 4> frame_sizes{0x80, 0x20, 0x30, 0x90};
+    static constexpr std::array<uint64_t, 4> frame_offsets{0x40, 0x10, 0x10, 0x50};
+
+    uint64_t stack(size_t offset) const { return cpu.x[31] + offset; }
+
+    uint64_t put_tile(acnh::HalfTile tile, uint64_t type, uint64_t address) const {
+        st<uint64_t>(address, type);
+        st<int32_t>(address + 8, tile.x);
+        st<int32_t>(address + 12, tile.z);
+        return address;
+    }
+
+    uint64_t prepare_mask(uint64_t address) const {
+        st<uint64_t>(address, 1 << 8);
+        st<uint32_t>(address + 8, 0);
+        return address;
+    }
+
+    bool test_direct(acnh::TerrainOwner owner, acnh::HalfTile tile, uint64_t type, unsigned probe) const {
+        const auto descriptor = put_tile(tile, type, stack(probe == 0 ? 0x10 : 0));
+        const auto mask = prepare_mask(stack(probe == 0 ? 0 : 0x20));
+        return invoke_child(main_base + 0x849ac8, shovel_marker_direct_resumes[probe],
+                            {owner.address, descriptor, mask}).x[0] & 1;
+    }
+
+    bool test_global(acnh::HalfTile tile, uint64_t type, unsigned probe) const {
+        return invoke_child(main_base + 0x876320, shovel_marker_global_resumes[probe],
+                            {put_tile(tile, type, stack(0))}).x[0] & 1;
+    }
+
+    bool test(acnh::TerrainOwner owner, uint64_t descriptor) const {
+        return invoke_child(main_base + 0x849ac8, 0x87639c,
+                            {owner.address, descriptor, prepare_mask(stack(0))}).x[0] & 1;
+    }
+
+    acnh::TerrainQuadrants prepare_corners() const {
+        const acnh::TerrainQuadrants corners{{stack(0x28), stack(0xc), stack(8), stack(4)}};
+        for (const auto address : corners.output) st<uint32_t>(address, 0);
+        return corners;
+    }
+
+    bool sample_corners(acnh::TerrainOwner owner, uint64_t descriptor, acnh::TerrainQuadrants corners) const {
+        const auto& out = corners.output;
+        return invoke_child(main_base + 0x8493f8, 0x849afc,
+                            {owner.address, descriptor, out[0], out[1], out[2], out[3]}).x[0] & 1;
+    }
+
+    std::array<uint8_t, 4> sample_kinds(acnh::TerrainGrid grid, uint64_t descriptor) const {
+        invoke_child(main_base + 0x862530, 0x84945c, {grid.address, descriptor, stack(0xc)});
+        return {ld<uint8_t>(stack(0x3c)), ld<uint8_t>(stack(0x3d)),
+                ld<uint8_t>(stack(0x3e)), ld<uint8_t>(stack(0x3f))};
+    }
+
+    uint32_t primary_kind(acnh::TerrainWorldPoint& point, unsigned corner) const {
+        const auto vector = stack(0xc);
+        st<float>(vector, point.x);
+        st<float>(vector + 8, point.z);
+        const auto result = invoke_child(main_base + 0x87a980, shovel_marker_primary_resumes[corner], {vector});
+        point = {ld<float>(vector), ld<float>(vector + 8)};
+        return uint32_t(result.x[0]);
+    }
+};
+
+template<size_t Index>
+void shovel_marker_adapter(CPU& cpu) {
+    const auto frame = cpu.x[29];
+    const auto resume = cpu.x[30] - main_base;
+    bool scoped;
+    if constexpr (Index == 0) scoped = resume == 0x15e9cd0 && is_shovel_intermediate_frame(frame);
+    if constexpr (Index == 1) scoped = is_shovel_marker_global_call(resume, frame);
+    if constexpr (Index == 2) scoped = is_shovel_marker_direct_call(resume, frame);
+    if constexpr (Index == 3) scoped = resume == 0x849afc && is_shovel_marker_mask_frame(frame);
+    if (!scoped) {
+        original_shovel_marker[Index](cpu);
+        return;
+    }
+    const auto& x = cpu.x;
+    const auto a0 = x[0], a1 = x[1], a2 = x[2];
+    const acnh::TerrainQuadrants corners{{x[2], x[3], x[4], x[5]}};
+    const auto radius = cpu.v[0].f32[0];
+    if (use_cpp_shovel_marker) {
+        GuestMemory memory;
+        ShovelMarkerServices services{cpu, Index};
+        if constexpr (Index == 0) cpu.x[0] = acnh::shovel_marker_extent(main_base, {a0, radius}, memory, services);
+        if constexpr (Index == 1) cpu.x[0] = acnh::shovel_marker_global(main_base, a0, memory, services);
+        if constexpr (Index == 2) cpu.x[0] = acnh::shovel_marker_match(a0, a1, a2, memory, services);
+        if constexpr (Index == 3) cpu.x[0] = acnh::shovel_marker_corners(a0, a1, corners, memory, services);
+    } else {
+        original_shovel_marker[Index](cpu);
+    }
+
+    if (!trace_shovel_marker) return;
+    const char* route = use_cpp_shovel_marker ? "cpp" : "original";
+    const auto entry = static_cast<unsigned long long>(shovel_marker_entries[Index]);
+    const auto site = static_cast<unsigned long long>(resume - 4);
+    const auto result = unsigned(cpu.x[0]);
+    if constexpr (Index == 3) {
+        const auto& out = corners.output;
+        log("acnh shovel marker %s entry=%llx call=%llx kinds=%x,%x,%x,%x out=%x",
+            route, entry, site, ld<uint32_t>(out[0]), ld<uint32_t>(out[1]), ld<uint32_t>(out[2]), ld<uint32_t>(out[3]), result);
+    } else {
+        log("acnh shovel marker %s entry=%llx call=%llx out=%x", route, entry, site, result);
+    }
+}
+
+bool try_shovel_marker_terrain_sample(CPU& cpu) {
+    if (cpu.x[30] != main_base + 0x84945c || !is_shovel_marker_corners_frame(cpu.x[29])) return false;
+    const auto output = cpu.x[2];
+    const bool native = use_cpp_shovel_marker && use_cpp_terrain_sample;
+    if (native) {
+        GuestMemory memory;
+        acnh::sample_terrain({cpu.x[0]}, {ld<int32_t>(cpu.x[1] + 8), ld<int32_t>(cpu.x[1] + 12)}, {output}, memory);
+    } else {
+        original_terrain_sample(cpu);
+    }
+    if (trace_shovel_marker) {
+        std::array<uint8_t, 0x34> record;
+        for (size_t i = 0; i < record.size(); ++i) record[i] = ld<uint8_t>(output + i);
+        log("acnh shovel marker %s entry=862530 call=849458 out=%s",
+            native ? "cpp" : "original", cache_hex(record).c_str());
+    }
+    return true;
+}
+
+void shovel_marker_primary_adapter(CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    if (std::find(shovel_marker_primary_resumes.begin(), shovel_marker_primary_resumes.end(), resume)
+            == shovel_marker_primary_resumes.end() || !is_shovel_marker_corners_frame(cpu.x[29])) {
+        original_shovel_marker_primary(cpu);
+        return;
+    }
+
+    const auto point = cpu.x[0];
+    const bool native = use_cpp_shovel_marker && use_cpp_terrain_primary;
+    const auto x = ld<uint32_t>(point), z = ld<uint32_t>(point + 8);
+    if (native) {
+        cpu.x[0] = route_terrain_fallback(cpu, acnh::TerrainFallback::primary, true);
+    } else {
+        original_shovel_marker_primary(cpu);
+    }
+    if (trace_shovel_marker)
+        log("acnh shovel marker %s entry=87a980 call=%llx moved=%u out=%x",
+            native ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+            unsigned(x != ld<uint32_t>(point) || z != ld<uint32_t>(point + 8)), unsigned(cpu.x[0]));
 }
 
 
@@ -3621,7 +3822,17 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x877130, shovel_terrain_adapter, original_shovel_terrain);
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_SAMPLE");
     use_cpp_terrain_sample = !mode || std::string_view(mode) == "cpp";
-    if (use_cpp_terrain_sample || trace_terrain_dispatch)
+    mode = std::getenv("NX_ACNH_SHOVEL_MARKER");
+    use_cpp_shovel_marker = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_marker = std::getenv("NX_ACNH_SHOVEL_MARKER_TRACE") != nullptr;
+    if (use_cpp_shovel_marker || trace_shovel_marker) {
+        constexpr std::array<Fn, 4> marker_adapters{
+            shovel_marker_adapter<0>, shovel_marker_adapter<1>, shovel_marker_adapter<2>, shovel_marker_adapter<3>};
+        for (size_t i = 0; i < marker_adapters.size(); ++i)
+            wrap_function(entries, shovel_marker_entries[i], marker_adapters[i], original_shovel_marker[i]);
+        wrap_function(entries, 0x87a980, shovel_marker_primary_adapter, original_shovel_marker_primary);
+    }
+    if (use_cpp_terrain_sample || trace_terrain_dispatch || trace_shovel_marker)
         wrap_function(entries, 0x862530, terrain_sample_adapter, original_terrain_sample);
 
     trace_terrain_helpers = std::getenv("NX_ACNH_SHOVEL_TERRAIN_HELPERS_TRACE") != nullptr;

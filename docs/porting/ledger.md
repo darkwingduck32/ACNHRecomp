@@ -1643,3 +1643,53 @@ The next group follows the observed center-marker call at
 `0x849ac8`, wrapper `0x876320`, and quadrant query `0x8493f8`.
 The quadrant query also provides scoped reuse opportunities for
 the verified terrain sampler and primary fallback.
+
+### Shovel center and rim markers
+
+The center-marker path now uses C++ for the extent check, global
+terrain wrapper, bit-mask predicate, and corner query. The corner
+query also uses the previously verified terrain sampler and primary
+fallback at the new call sites. Set `NX_ACNH_SHOVEL_MARKER=original`
+to route this group through the generated functions.
+
+| Entry | Function | Independent AArch64 cases | Focal calls per route |
+| --- | --- | ---: | ---: |
+| `0x15ea0c8` | Check the center and rim for a material marker | 96 | 40 |
+| `0x876320` | Check the current terrain for a marker | 232 | 160 |
+| `0x849ac8` | Test four material kinds against the caller's mask | 548 | 360 |
+| `0x8493f8` | Resolve the four corner material kinds | 516 | 360 |
+| `0x862530` | Reuse the terrain record sampler | 328 | 360 |
+| `0x87a980` | Reuse the primary terrain fallback | 80 | 1440 |
+
+The four new ports replayed 52, 208, 468, and 468 original
+marker1 invocations respectively, plus 196 portable cases. The
+reference checked callback order and argument words, and the
+quadrant query compared initial and final output words and ordered
+writes. A portable case covers an aliased output. Another preserves
+the original outgoing words where an out-of-bounds query returns
+fallback kind 7. The original marker capture saw 1,872 primary
+fallback calls returning 7. Non-7 behavior is covered by independent
+fixtures. The first capture comparison exposed a test harness width
+error in the sample reply, which carries a 64-bit address.
+
+The original and opt-in marker1 and default marker2 runs matched
+all six focal traces and the whole-original classdeep2 outcomes.
+All three runs used one muted instance at a time. The 14 Release
+CTest and 14 Python replay and profile checks passed. The discovery
+queue remains at 100. Shared terrain leaves retain their earlier
+verified entries.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-marker1"
+$c = "$r/tree-shake-default-marker2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_marker --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_sample
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_fallbacks --entry 87a980
+```
+
+The primary fallback can still call stage and material helpers in
+other scenes. The next group widens the verified height sampling
+path to the classifier, intermediate point, stage base, and
+obstruction probes. The step's collision query and traversal
+fallback remain generated.

@@ -29,8 +29,31 @@ Count a row after independent whole-function comparison, a matching gameplay run
 that hits the replacement, passing relevant regressions, and a replay through
 the promoted default. Keep the original selectable.
 
-## Next batch discovery
+## Active batch 2
 
-There is no active batch. The [next-candidate queue](next-candidates.md)
-records ten new entries for a future kickoff. The discovery queue does
-not change the verified count for the batch above.
+This batch targets ten verified ports on the same 3.0.3 build, starting
+with the [candidate queue](next-candidates.md). Verified so far, 0.
+
+| Main entry | Provisional function | Stage | Next action |
+| --- | --- | --- | --- |
+| `0x24699b8` | Initialize working action bits once | Offline comparison | Compare traced original and opt-in C++ on the pinned tree-shake and walk scenario. |
+| `0x1218220` | Read a tile record's bit flag | Queued | Replay primary, secondary and fallback record paths. |
+| `0x1146470` | Resolve a column using a 25-slot cache | Queued | Reuse the field-column helper and compare exact cache writes. |
+| `0x113d890` | Test a bit in a cached record column | Queued | Capture slot 22 paths and validate signed index arithmetic. |
+| `0x1632d80` | Initialize four inline string buffers and descriptors | Queued | Validate self-relative pointers and exact writes. |
+| `0x5bd550` | Hash a terminated byte string with a seed | Queued | Capture a field-key call and validate dispatch costs. |
+| `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Queued | Establish repeatable input state and compare ordered writes. |
+| `0x24642a8` | Set or clear an action-mask bit | Queued | Find a scenario reaching a known caller. |
+| `0x1281c54` | Look up a half-tile record | Queued | Exercise the shovel survey caller. |
+| `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Queued | Establish live reachability, then compare fused operations. |
+
+The action-mask no-op candidate failed case 0. The C++ implementation
+matched all 228 fixtures against two fresh Unicorn runs, including the
+ordered 8-byte copy, 4-byte bit clear and one-byte initialization write.
+Only `NX_ACNH_ACTION_MASK=cpp` selects the candidate while validation
+is underway. Set `NX_ACNH_ACTION_MASK_TRACE=1` to capture the object
+fields around each call.
+
+```powershell
+& private/venv/Scripts/python -m private.heading.compare_leaf action_mask
+```

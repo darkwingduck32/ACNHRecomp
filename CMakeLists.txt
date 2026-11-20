@@ -288,6 +288,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/features/runtime.cpp
     runtime/src/features/builtins.cpp
     runtime/src/features/acnh_math.cpp
+    runtime/src/features/acnh_action.cpp
     runtime/src/features/acnh_field_record.cpp
     runtime/src/features/tool_durability/native.cpp
     runtime/src/features/embedded_resources.cpp

@@ -44,3 +44,4 @@ include features/camera/hooks-3.0.3.txt
 21f991c  # refresh its field actor after successful removal
 21c12ac  # refresh fractional plant after the field write
 21c3044  # refresh fractional burial after the field write
+# dispatch 24699b8 # Initialize working action bits

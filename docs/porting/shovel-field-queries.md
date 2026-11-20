@@ -243,10 +243,11 @@ functions and the typed destination record and bounds queries.
 The outer traversal also calls typed C++ for five observed
 surface sites and two stage-height sites. The sweep collision
 query and 16-sector scan run in C++ for the observed calls with
-separate outputs and no destination root. The traversal parent,
-recursive traversal, its stage base and item resolver, and the
-sweep collision's center and rim probe callbacks use generated
-code.
+separate outputs and no destination root. The center and rim
+probes use the C++ surface chain. The traversal parent, recursive
+traversal, and the stage-height subtree below the sweep probe
+include generated calls.
 
 [Traversal height verification](ledger.md#direct-heights-inside-outer-shovel-traversal)
 [Sweep collision verification](ledger.md#sixteen-sector-sweep-collision)
+[Sweep probe verification](ledger.md#height-probes-inside-the-sixteen-sector-sweep)

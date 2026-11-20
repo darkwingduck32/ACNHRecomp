@@ -2436,3 +2436,45 @@ $c = "$r/tree-shake-default-sweepcollision2"
 
 The next group follows the center and rim calls to `0x15e11a0`
 and its surface-height chain.
+
+### Height probes inside the sixteen-sector sweep
+
+The center call at `0x15ede4c` and rim call at `0x15ef5ac` use
+the typed height-difference probe under the sweep caller. The
+probe uses the existing surface dispatcher and its six height
+helpers at `0x15e11d0`. Set `NX_ACNH_SHOVEL_SWEEP_PROBE=original`
+to select the generated versions for this chain.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x15e11a0` | 140 | 5814 |
+| `0x15e026c` | 768 | 5814 |
+| `0x83b024` | 128 | 5814 |
+| `0x83a950` | 128 | 5814 |
+| `0x241e98c` | 30 | 11628 |
+| `0x60cba4` | 3 | 17442 |
+| `0x862700` | 672 | 11628 |
+| `0x22688e4` | 180 | 11628 |
+
+The probe replay includes 36 captures, 18 at each site. The
+live comparison checks the ordered probe XYZ, incoming S0,
+flags, return value, and every scoped surface result. The
+producer consumes W0 and reloads the point before contact
+handling. Original and opt-in `sweepprobe1` and default
+`sweepprobe2` matched 75,582 scoped calls, 342 sweep casts,
+nine traversal results, ten surveys, ten neighborhoods, and 12
+final decisions. All 14 Release CTests and 14 profile and replay
+checks passed. The eight functions retain their existing entries.
+The count is 85 verified, with 100 in discovery.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-sweepprobe1"
+$c = "$r/tree-shake-default-sweepprobe2"
+& private/venv/Scripts/python -m tests.acnh_shovel_traversal_height_live --sweep-probe "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_collision_probes --capture "$o/console.log"
+```
+
+Stage height at `0x15e12bc` and the associated base, item and
+provider queries are the next generated dependencies within the
+probe.

@@ -1683,18 +1683,27 @@ bool use_cpp_shovel_provider_record = false;
 bool trace_shovel_record_leaves = false;
 bool use_cpp_shovel_collision_provider = false;
 bool trace_shovel_collision_provider = false;
+bool use_cpp_shovel_sweep_record = false;
+bool trace_shovel_sweep_record = false;
+
+bool is_shovel_sweep_record_call(uint64_t resume, uint64_t frame) {
+    return resume == 0x15f2674 && acnh_shovel_sweep_frame(frame);
+}
 
 void shovel_provider_record_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
     const bool collision = is_shovel_collision_stage_record_call(resume, cpu.x[29]);
-    if (!collision && !is_shovel_stage_record_call(resume, cpu.x[29])) {
+    const bool sweep = is_shovel_sweep_record_call(resume, cpu.x[29]);
+    if (!collision && !sweep && !is_shovel_stage_record_call(resume, cpu.x[29])) {
         original_shovel_provider_record(cpu);
         return;
     }
     const acnh::ShovelProviderView provider{cpu.x[0]};
     const acnh::HalfTileRef point{cpu.x[1]}, root{cpu.x[2]};
-    const bool native = use_cpp_shovel_provider_record && (!collision || use_cpp_shovel_collision_provider);
-    const bool trace = collision ? trace_shovel_collision_provider : trace_shovel_record_leaves;
+    const bool native = use_cpp_shovel_provider_record && (!collision || use_cpp_shovel_collision_provider)
+        && (!sweep || use_cpp_shovel_sweep_record);
+    const bool trace = sweep ? trace_shovel_sweep_record
+        : collision ? trace_shovel_collision_provider : trace_shovel_record_leaves;
     const int root_x = trace && root.address ? ld<int32_t>(root.address + 8) : 0;
     const int root_z = trace && root.address ? ld<int32_t>(root.address + 12) : 0;
     if (native) {
@@ -1703,9 +1712,10 @@ void shovel_provider_record_adapter(CPU& cpu) {
     } else {
         original_shovel_provider_record(cpu);
     }
-    if (trace && collision)
-        log("acnh shovel collision provider %s entry=11eb21c call=19519ec from=%llx pos=%d,%d initial=%d,%d root=%d,%d out=%llx",
-            native ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+    if (trace && (collision || sweep))
+        log("acnh shovel %s %s entry=11eb21c call=19519ec from=%llx pos=%d,%d initial=%d,%d root=%d,%d out=%llx",
+            sweep ? "sweep record" : "collision provider", native ? "cpp" : "original",
+            static_cast<unsigned long long>(resume - 4),
             ld<int32_t>(point.address + 8), ld<int32_t>(point.address + 12), root_x, root_z,
             root.address ? ld<int32_t>(root.address + 8) : 0,
             root.address ? ld<int32_t>(root.address + 12) : 0,
@@ -1778,6 +1788,7 @@ template<size_t Index>
 void shovel_stage_context_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
     const auto frame = cpu.x[29];
+    const bool sweep = Index == 2 && is_shovel_sweep_record_call(resume, frame);
     bool scoped, collision;
     if constexpr (Index == 0) {
         scoped = resume == 0x15e0724 && is_shovel_stage_height_frame(frame);
@@ -1791,16 +1802,18 @@ void shovel_stage_context_adapter(CPU& cpu) {
         scoped = is_shovel_stage_record_call(resume, frame);
         collision = is_shovel_collision_stage_record_call(resume, frame);
     }
-    if (!scoped && !collision) {
+    if (!scoped && !collision && !sweep) {
         original_shovel_stage_context[Index](cpu);
         return;
     }
 
     GuestMemory memory;
-    const bool native = use_cpp_shovel_stage_context && (!collision || use_cpp_shovel_collision_stage);
-    const bool trace = collision ? trace_shovel_collision_stage : trace_shovel_stage_context;
+    const bool native = use_cpp_shovel_stage_context && (!collision || use_cpp_shovel_collision_stage)
+        && (!sweep || use_cpp_shovel_sweep_record);
+    const bool trace = sweep ? trace_shovel_sweep_record
+        : collision ? trace_shovel_collision_stage : trace_shovel_stage_context;
     const char* route = native ? "cpp" : "original";
-    const char* scope = collision ? "collision stage" : "stage context";
+    const char* scope = sweep ? "sweep record" : collision ? "collision stage" : "stage context";
     const auto site = static_cast<unsigned long long>(resume - 4);
     if constexpr (Index == 0) {
         const acnh::ShovelStageBaseHeightQuery query{cpu.x[0], cpu.x[1], {cpu.x[2]}};
@@ -3294,11 +3307,14 @@ void field_bounds_adapter(CPU& cpu) {
     const auto frame = cpu.x[29];
     const auto record_resume = caller == 0x1951938 && frame ? ld<uint64_t>(frame + 8) - main_base : 0;
     const bool collision = record_resume && is_shovel_collision_stage_record_call(record_resume, ld<uint64_t>(frame));
+    const bool sweep = record_resume && is_shovel_sweep_record_call(record_resume, ld<uint64_t>(frame));
     const bool collision_trace = collision && trace_shovel_collision_provider;
+    const bool sweep_trace = sweep && trace_shovel_sweep_record;
     const bool record_trace = trace_shovel_record_leaves && record_resume
         && is_shovel_stage_record_call(record_resume, ld<uint64_t>(frame));
-    const bool native = use_cpp_field_bounds && (!collision || use_cpp_shovel_collision_provider);
-    if (!native && !trace && !record_trace && !collision_trace) {
+    const bool native = use_cpp_field_bounds && (!collision || use_cpp_shovel_collision_provider)
+        && (!sweep || use_cpp_shovel_sweep_record);
+    if (!native && !trace && !record_trace && !collision_trace && !sweep_trace) {
         original_field_bounds(cpu);
         return;
     }
@@ -3314,9 +3330,10 @@ void field_bounds_adapter(CPU& cpu) {
     const bool inside = bounds && fields.contains(bounds, {position});
     if (native) cpu.x[0] = inside;
     else original_field_bounds(cpu);
-    if (collision_trace)
-        log("acnh shovel collision provider %s entry=194f798 call=1951934 from=%llx table=%x channel=%x pos=%d,%d out=%x",
-            native ? "cpp" : "original", static_cast<unsigned long long>(record_resume - 4),
+    if (collision_trace || sweep_trace)
+        log("acnh shovel %s %s entry=194f798 call=1951934 from=%llx table=%x channel=%x pos=%d,%d out=%x",
+            sweep ? "sweep record" : "collision provider", native ? "cpp" : "original",
+            static_cast<unsigned long long>(record_resume - 4),
             layer.index, channel.index, ld<int32_t>(position + 8), ld<int32_t>(position + 12), unsigned(cpu.x[0]));
     if (record_trace)
         log("acnh shovel record leaf %s entry=194f798 call=1951934 table=%x channel=%x pos=%d,%d out=%x",
@@ -4690,6 +4707,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
 
+    mode = std::getenv("NX_ACNH_SHOVEL_SWEEP_RECORD");
+    use_cpp_shovel_sweep_record = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_sweep_record = std::getenv("NX_ACNH_SHOVEL_SWEEP_RECORD_TRACE") != nullptr;
+
     mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_PROVIDER");
     use_cpp_shovel_collision_provider = !mode || std::string_view(mode) == "cpp";
     trace_shovel_collision_provider = std::getenv("NX_ACNH_SHOVEL_COLLISION_PROVIDER_TRACE") != nullptr;
@@ -4697,7 +4718,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_PROVIDER");
     use_cpp_shovel_provider_record = !mode || std::string_view(mode) == "cpp";
     trace_shovel_record_leaves = std::getenv("NX_ACNH_SHOVEL_STAGE_PROVIDER_TRACE") != nullptr;
-    if (use_cpp_shovel_provider_record || trace_shovel_record_leaves || trace_shovel_collision_provider)
+    if (use_cpp_shovel_provider_record || trace_shovel_record_leaves || trace_shovel_collision_provider || trace_shovel_sweep_record)
         wrap_function(entries, 0x11eb21c, shovel_provider_record_adapter, original_shovel_provider_record);
 
     mode = std::getenv("NX_ACNH_SHOVEL_STEP");
@@ -4733,7 +4754,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_CONTEXT");
     use_cpp_shovel_stage_context = !mode || std::string_view(mode) == "cpp";
     trace_shovel_stage_context = std::getenv("NX_ACNH_SHOVEL_STAGE_CONTEXT_TRACE") != nullptr;
-    if (use_cpp_shovel_stage_context || trace_shovel_stage_context || trace_shovel_collision_stage) {
+    if (use_cpp_shovel_stage_context || trace_shovel_stage_context || trace_shovel_collision_stage || trace_shovel_sweep_record) {
         constexpr std::array<Fn, 3> context_adapters{
             shovel_stage_context_adapter<0>, shovel_stage_context_adapter<1>, shovel_stage_context_adapter<2>};
         for (size_t i = 0; i < context_adapters.size(); ++i)
@@ -4843,7 +4864,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS");
     use_cpp_field_bounds = !mode || std::string_view(mode) == "cpp";
     trace_field_bounds = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS_TRACE") != nullptr;
-    if (use_cpp_field_bounds || trace_field_bounds || trace_shovel_record_leaves || trace_shovel_collision_provider)
+    if (use_cpp_field_bounds || trace_field_bounds || trace_shovel_record_leaves || trace_shovel_collision_provider || trace_shovel_sweep_record)
         wrap_function(entries, 0x194f798, field_bounds_adapter, original_field_bounds);
 
     mode = std::getenv("NX_ACNH_SHOVEL_FIELD_CELL");

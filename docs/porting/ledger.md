@@ -2268,3 +2268,47 @@ The sweep's record lookup `0x195190c` at `0x15f2670` still
 uses generated code. Its bounds check and provider lookup
 are the next group so the destination record and root can be
 verified through the typed interface.
+
+### Destination records inside traversal sweeps
+
+The sweep now uses typed C++ for record selection, the bounds
+predicate, and the provider tail call. All three are reached
+from `0x15f2670`. The bounds callback returns to `0x1951938`.
+The provider inherits the sweep's return address `0x15f2674`.
+Set `NX_ACNH_SHOVEL_SWEEP_RECORD=original` for this scope.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x195190c` | 240 | 18 |
+| `0x194f798` | 464 | 18 |
+| `0x11eb21c` | 344 | 18 |
+
+The original and opt-in sweeprecord1 runs and default
+sweeprecord2 matched all 54 ordered calls. Bounds accepted
+the sampled tiles, the provider updated the root coordinates,
+and the records contained the `0xfffe` empty item marker.
+All 342 default collision calls matched the original
+traversalsweep1 inputs and outputs, including the absent
+destination argument. Separate original AArch64 composition
+cases exercised rejected bounds and a nonempty record with
+an outgoing root. They modeled the surrounding heading, filter
+and collision effects.
+
+The gameplay runs matched nine traversal results, ten
+surveys and neighborhoods, and 12 final decisions. All 14
+Release CTests and 14 Python profile and replay checks passed.
+The three bodies retain their ledger entries. The ledger
+is at 77 and the discovery queue stays at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-sweeprecord1"
+$c = "$r/tree-shake-default-sweeprecord2"
+& private/venv/Scripts/python -m tests.acnh_shovel_sweep_stage_live --record "$o/nx.log" "$c/nx.log"
+```
+
+The sweep's collision call `0x15ed290` at `0x15f2780` still
+uses its generated 16-sector mode with separate output and
+block-flag pointers. The outer traversal parent also still
+uses generated surface and stage heights directly. Follow
+those outer height calls next.

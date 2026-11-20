@@ -18,11 +18,17 @@ directory. Its SHA-256 is
 The additional probe at `tree-shake-original-rowcache2/console.log`
 verified 65 queued entries against original direct calls. Its SHA-256 is
 `087d3fabad7ab88f43a48707bd35c354da08a2f76916125ad6b70019993df474`.
-The four readers moved to the ledger leave 61 observed entries in the
-active queue. The original discovery scan runs from the campaign worktree.
+The additional probe at `tree-shake-original-terraintriangle1/console.log`
+verified 58 queued entries against original direct calls. Its SHA-256 is
+`2873b7d69db36bf814273e2cd41452b5bd818db47d656172a28fa7c0a794a3f1`.
+After moving the eight verified triangle predicates to the ledger and
+refilling the queue, 54 entries have observed direct callers.
 
 ```powershell
-& private/venv/Scripts/python -m private.heading.discover_batch3_extra
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+& private/venv/Scripts/python -m private.heading.discover_batch3_extra `
+    --probe "$r/tree-shake-original-rowcache2/console.log" 087d3fabad7ab88f43a48707bd35c354da08a2f76916125ad6b70019993df474 `
+    --probe "$r/tree-shake-original-terraintriangle1/console.log" 2873b7d69db36bf814273e2cd41452b5bd818db47d656172a28fa7c0a794a3f1
 ```
 
 | Main entry | Unwind size | Direct caller | Stage |
@@ -46,11 +52,6 @@ active queue. The original discovery scan runs from the campaign worktree.
 | `0x21e3f4` | `0x3c` | `0x225d8c` | Observed |
 | `0x21e094` | `0x64` | `0x226540` | Observed |
 | `0x245a688` | `0x110` | `0x220ff10` | Observed |
-| `0x867538` | `0x130` | `0x867ac0` | Observed |
-| `0x867668` | `0x13c` | `0x867dd0` | Observed |
-| `0x866f60` | `0x170` | `0x867de0` | Observed |
-| `0x8670d0` | `0x178` | `0x867ad0` | Observed |
-| `0x867248` | `0x178` | `0x8680f0` | Observed |
 | `0x280cbcc` | `0x6c` | `0x1d28308` | Observed |
 | `0x127d59c` | `0x70` | `0x157c628` | Observed |
 | `0x1596154` | `0x8c` | `0x157e75c` | Observed |
@@ -69,10 +70,7 @@ active queue. The original discovery scan runs from the campaign worktree.
 | `0x128367c` | `0xe4` | `0x12622a8` | Observed |
 | `0x84b728` | `0x118` | `0x15753e0` | Observed |
 | `0x84b840` | `0x118` | `0x15755c0` | Observed |
-| `0x8677a4` | `0x13c` | `0x8683f0` | Observed |
-| `0x8678e0` | `0x13c` | `0x868a10` | Observed |
 | `0x22295ec` | `0x16c` | `0x225aef0` | Observed |
-| `0x8673c0` | `0x178` | `0x868710` | Observed |
 | `0x113b5b0` | `0x214` | `0x9d57f0` | Observed |
 | `0x21e3b8` | `0x30` | `0x222bb0` | Observed |
 | `0x874bc8` | `0x150` | `0x87e184` | Observed |
@@ -88,6 +86,7 @@ active queue. The original discovery scan runs from the campaign worktree.
 | `0x2a673a0` | `0x14c` | `0x2a590f8` | Observed |
 | `0x2a67620` | `0x194` | `0x2a59264` | Observed |
 | `0x2a72930` | `0x1ec` | `0x2a6b870` | Observed |
+| `0x6b3b6c` | `0x150` | `0x6b3da4` | Observed |
 | `0x2375f8` | `0x24` | `0x226e64` | Discovery |
 | `0x23a8c8` | `0x24` | `0x226e70` | Discovery |
 | `0x3daf030` | `0x1a8` | `0x3dafc18` | Discovery |
@@ -124,6 +123,13 @@ active queue. The original discovery scan runs from the campaign worktree.
 | `0x16c0620` | `0x120` | `0x85a0f0` | Discovery |
 | `0x230cb0` | `0x1d8` | `0x230854` | Discovery |
 | `0x230ac0` | `0x1f0` | `0x23063c` | Discovery |
-| `0x6b3b6c` | `0x150` | `0x6b3b24` | Discovery |
 | `0x9bfe70` | `0xfc` | `0x26a391c` | Discovery |
 | `0x16c0a30` | `0x120` | `0x16f90c4` | Discovery |
+| `0x271836c` | `0x28` | `0x2681878` | Discovery |
+| `0x26ebb14` | `0x5c` | `0x2682f20` | Discovery |
+| `0x3757320` | `0x88` | `0x1f1db9c` | Discovery |
+| `0x281731c` | `0x6c` | `0x1d43134` | Discovery |
+| `0x2817388` | `0x6c` | `0x2ded008` | Discovery |
+| `0x170bc10` | `0x70` | `0x1f1d47c` | Discovery |
+| `0x1cbd970` | `0x78` | `0x1f1c514` | Discovery |
+| `0x170b220` | `0x80` | `0x1f1cca4` | Discovery |

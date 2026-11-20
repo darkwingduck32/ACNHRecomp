@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 86.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 94.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -2561,3 +2561,43 @@ The first two recursive legs reached by this fixture are the
 next traversal dependencies. The discovery queue also contains
 eight observed terrain triangle readers that share one query
 implementation.
+
+### Terrain triangle predicates
+
+Eight observed predicates now share the typed terrain triangle query.
+The four slope checks use the ground material, overlay suppression, and
+the cell flag. The four flatness checks use the same material and height
+layout. The runtime unpacks the half-tile descriptor and limits the C++
+route to the 22 verified call sites. Set `NX_ACNH_TERRAIN_TRIANGLES=original`
+to use the generated route.
+
+| Main entry | Unwind size | Typed predicate | Observed caller | Stage |
+| --- | --- | --- | --- | --- |
+| `0x866f60` | `0x170` | Triangle 0 slope | `0x865ec0` | Verified |
+| `0x8670d0` | `0x178` | Triangle 1 slope | `0x8663d0` | Verified |
+| `0x867248` | `0x178` | Triangle 2 slope | `0x8680f0` | Verified |
+| `0x8673c0` | `0x178` | Triangle 3 slope | `0x8658f8` | Verified |
+| `0x867538` | `0x130` | Triangle 0 flatness | `0x867ac0` | Verified |
+| `0x867668` | `0x13c` | Triangle 1 flatness | `0x8658e8` | Verified |
+| `0x8677a4` | `0x13c` | Triangle 2 flatness | `0x865eb0` | Verified |
+| `0x8678e0` | `0x13c` | Triangle 3 flatness | `0x8663c0` | Verified |
+
+Each entry matched both original AArch64 executions on 174 cases, with
+no caller-visible writes. Independent Linux replay covered all 1,392
+cases. The first original run captured all 22 sites but logging volume
+delayed startup and missed the shovel action. The bounded original retry
+and both C++ routes matched eight surveys, eight neighborhoods, and
+eight final decisions. The gameplay checker compares bounded
+caller/tile/result classes with the original inventory and checks every
+sample on the same inputs. All 5,853 opt-in and 6,258 default classes
+matched the full original inventory. The two bounded traces each logged
+6,505 calls. They differed by 33 classes in each direction, so the
+comparison uses the full original inventory for sampled class coverage.
+The default logged 162, 192, 112 and 176 true results for the four slope
+predicates respectively, and both outcomes for every predicate.
+All 14 Release CTests and 14 profile and replay checks passed.
+
+The direct traversal parent, sweep, and measured height paths remain
+typed. Recursive traversal legs, rectangle callbacks, and stage helpers
+outside their measured scopes still use generated code. The next queue
+group completes four observed row readers that share the typed cache.

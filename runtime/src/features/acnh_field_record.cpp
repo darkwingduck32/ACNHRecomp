@@ -29,6 +29,7 @@
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
+#include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
 #include "../../../games/acnh/shovel_item_queries.h"
@@ -556,6 +557,84 @@ void terrain_property_adapter(CPU& cpu) {
 
 constexpr std::array<uint64_t, 2> shovel_terrain_pair_entries{0x880630, 0x881090};
 std::array<Fn, 2> original_shovel_terrain_pair{};
+
+struct TerrainTriangleRoute {
+    uint64_t entry;
+    std::array<uint64_t, 3> resumes;
+};
+
+constexpr std::array<TerrainTriangleRoute, 8> terrain_triangle_routes{{
+    {0x866f60, {0x867de4, 0x868d34, 0x865ec4}},
+    {0x8670d0, {0x867ad4, 0x868404, 0x8663d4}},
+    {0x867248, {0x8680f4, 0x868a24, 0}},
+    {0x8673c0, {0x868714, 0x869044, 0x8658fc}},
+    {0x867538, {0x867ac4, 0x869034, 0}},
+    {0x867668, {0x867dd4, 0x8680e4, 0x8658ec}},
+    {0x8677a4, {0x8683f4, 0x868704, 0x865eb4}},
+    {0x8678e0, {0x868a14, 0x868d24, 0x8663c4}},
+}};
+std::array<Fn, terrain_triangle_routes.size()> original_terrain_triangles{};
+bool use_cpp_terrain_triangles = false;
+bool trace_terrain_triangles = false;
+
+template<size_t Index>
+void terrain_triangle_adapter(CPU& cpu) {
+    constexpr auto route = terrain_triangle_routes[Index];
+    const auto resume = cpu.x[30] - main_base;
+    const auto original = original_terrain_triangles[Index];
+    const auto position = std::find(route.resumes.begin(), route.resumes.end(), resume);
+    if (!resume || position == route.resumes.end()) {
+        original(cpu);
+        return;
+    }
+    const auto index = static_cast<size_t>(position - route.resumes.begin());
+    bool trace = false;
+    if (trace_terrain_triangles) {
+        static std::array<std::atomic<uint64_t>, route.resumes.size()> calls{};
+        const auto visit = calls[index].fetch_add(1, std::memory_order_relaxed) + 1;
+        trace = visit <= 256 || std::has_single_bit(visit);
+    }
+    if (!use_cpp_terrain_triangles && !trace_terrain_triangles) {
+        original(cpu);
+        return;
+    }
+
+    const auto tile = cpu.x[1];
+    const acnh::TerrainTriangleQuery query{{cpu.x[0]}, {ld<int32_t>(tile + 8), ld<int32_t>(tile + 12)},
+        uint8_t(Index % 4), Index < 4 ? acnh::TerrainTriangleTest::sloped : acnh::TerrainTriangleTest::flat};
+    const auto trace_positive = [&](bool positive) {
+        if (!trace_terrain_triangles || !positive || Index >= 4) return false;
+        static std::array<std::atomic<unsigned>, route.resumes.size()> positives{};
+        auto& count = positives[index];
+        return count.load(std::memory_order_relaxed) < 64
+            && count.fetch_add(1, std::memory_order_relaxed) < 64;
+    };
+    bool typed;
+    uint64_t expected;
+    if (use_cpp_terrain_triangles) {
+        typed = acnh::shovel_terrain_triangle(query, GuestMemory{});
+        expected = typed;
+        trace = trace_positive(typed) || trace;
+        if (trace) {
+            // The original reader only writes its own local stack.
+            CPU probe = cpu;
+            original(probe);
+            expected = probe.x[0];
+        }
+        cpu.x[0] = typed;
+    } else {
+        original(cpu);
+        expected = cpu.x[0];
+        trace = trace_positive(expected != 0) || trace;
+        if (!trace) return;
+        typed = acnh::shovel_terrain_triangle(query, GuestMemory{});
+    }
+    if (trace)
+        log("acnh terrain triangle %s entry=%llx call=%llx tile=%d,%d same_input=%s out=%u",
+            use_cpp_terrain_triangles ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+            static_cast<unsigned long long>(resume - 4), query.tile.x, query.tile.z,
+            expected == uint64_t(typed) ? "match" : "mismatch", unsigned(cpu.x[0]));
+}
 
 struct CachedRowValueRoute {
     uint64_t entry;
@@ -5343,6 +5422,19 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_shovel_stage || trace_shovel_stage || trace_shovel_sweep_stage)
         for (auto& route : shovel_stage_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_TERRAIN_TRIANGLES");
+    use_cpp_terrain_triangles = !mode || std::string_view(mode) == "cpp";
+    trace_terrain_triangles = std::getenv("NX_ACNH_TERRAIN_TRIANGLES_TRACE") != nullptr;
+    if (use_cpp_terrain_triangles || trace_terrain_triangles) {
+        constexpr std::array<Fn, terrain_triangle_routes.size()> adapters{
+            terrain_triangle_adapter<0>, terrain_triangle_adapter<1>, terrain_triangle_adapter<2>,
+            terrain_triangle_adapter<3>, terrain_triangle_adapter<4>, terrain_triangle_adapter<5>,
+            terrain_triangle_adapter<6>, terrain_triangle_adapter<7>,
+        };
+        for (size_t i = 0; i < adapters.size(); ++i)
+            wrap_function(entries, terrain_triangle_routes[i].entry, adapters[i], original_terrain_triangles[i]);
+    }
 
     mode = std::getenv("NX_ACNH_FIELD_VALUE_CACHE");
     use_cpp_cached_row_value = !mode || std::string_view(mode) == "cpp";

@@ -4,6 +4,26 @@
 
 namespace nx::acnh {
 
+// Locate the field in the packed row header and cache the row-relative offset.
+template<class Memory>
+bool cache_field_offset(uint64_t row, uint32_t back, uint32_t hash, uint64_t slot, Memory& memory) {
+    if (!back || row == back) return false;
+    const uint64_t header = row - back;
+    const uint32_t prefix = memory.template read<uint8_t>(header + 10) ? 0x1cu : 0x0cu;
+    uint64_t field = header + prefix;
+    if (!field) return false;
+
+    const uint16_t count = memory.template read<uint16_t>(header + 8);
+    memory.template write<int32_t>(slot, -2);
+    for (uint16_t i = 0; i < count; ++i, field += 8) {
+        if (memory.template read<uint32_t>(field) != hash) continue;
+        const uint32_t offset = memory.template read<uint32_t>(field + 4);
+        memory.template write<uint32_t>(slot, offset == UINT32_MAX ? 0 : offset);
+        return true;
+    }
+    return false;
+}
+
 // Resolve a field by its hash and cache its row-relative offset.
 template<uint32_t SlotCount, class Memory>
 uint64_t cached_column(uint64_t row, uint32_t column, uint32_t hash,
@@ -29,23 +49,10 @@ uint64_t cached_column(uint64_t row, uint32_t column, uint32_t hash,
     if (cached != -1) return 0;
 
     const uint32_t back = memory.template read<uint32_t>(row);
-    if (!back || row == back) return 0;
-    const uint64_t header = row - back;
-    const uint32_t prefix = memory.template read<uint8_t>(header + 10) ? 0x1cu : 0x0cu;
-    uint64_t field = header + prefix;
-    if (!field) return 0;
-
-    const uint16_t count = memory.template read<uint16_t>(header + 8);
-    memory.template write<int32_t>(entry, -2);
-    for (uint16_t i = 0; i < count; ++i, field += 8) {
-        if (memory.template read<uint32_t>(field) != hash) continue;
-        const uint32_t offset = memory.template read<uint32_t>(field + 4);
-        memory.template write<uint32_t>(entry, offset == UINT32_MAX ? 0 : offset);
-        if (!memory.template read<uint32_t>(row)) return 0;
-        const int32_t resolved = memory.template read<int32_t>(entry);
-        return resolved >= 0 ? row + resolved : 0;
-    }
-    return 0;
+    if (!cache_field_offset(row, back, hash, entry, memory)) return 0;
+    if (!memory.template read<uint32_t>(row)) return 0;
+    const int32_t resolved = memory.template read<int32_t>(entry);
+    return resolved >= 0 ? row + resolved : 0;
 }
 
 template<class Memory>

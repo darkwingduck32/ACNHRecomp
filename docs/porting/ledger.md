@@ -2977,6 +2977,13 @@ matched five ordered tree-shake heading records. The sampling budget
 exposed most calls during field loading. The three activity CPU
 shares in the coverage report remain the pre-change baseline.
 
+After the first 256 calls at each site, the trace logs powers of two.
+The default run reached those markers at 1,048,576, 131,072 and
+262,144 calls respectively. That puts the full tree fixture's
+lower bound at 1,441,792 worker-grid calls routed through C++.
+The trace additionally ran the original for the 799 sampled
+same-input comparisons.
+
 The default gameplay library linked the two fresh worker callers
 unchanged from the generator, with all five grid edges dispatched.
 The original frame setup synchronizes X29 and SP before those calls.

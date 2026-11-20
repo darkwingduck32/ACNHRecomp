@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "narrative/observation.h"
 
 namespace nx {
 struct ModuleInfo;
@@ -37,6 +38,7 @@ struct Definition {
     std::function<void(const ModuleInfo &, FuncEntry *)> module_loaded;
     std::function<void(plat::PadState &)> input;
     std::function<void()> game_ui_input;
+    std::function<void(const narrative::UiObservation&)> ui_observation;
     std::function<void(uint64_t, uint64_t)> camera_update;
     std::function<bool(float, float, float)> world_projection;
     std::function<bool(std::string_view)> background_depth;

@@ -29,6 +29,7 @@ struct Entry {
 struct Copies {
     std::pmr::monotonic_buffer_resource arena{1 << 20};
     std::pmr::map<const uint8_t*, Entry> map{&arena};
+    uint64_t max_size = 0;  // conservative bound on every entry's guest range in this submit
 };
 PerThread<Copies> g_cp;
 PerThread<uint64_t> g_saved, g_copied, g_data, g_copies_n, g_big_pads;  // g_data: bytes of guest data among g_copied
@@ -73,6 +74,7 @@ Upload dedup_upload(const uint8_t* p, uint64_t size, uint64_t padded, uint64_t a
     std::memcpy(u.ptr, p, size);
     if (padded > size) std::memset(u.ptr + size, 0, padded - size);
     (*g_cp).map[p] = {size, padded, u};
+    (*g_cp).max_size = std::max((*g_cp).max_size, size);
     f = {p, (*g_generation), {size, padded, u}};
     (*g_copied) += padded, (*g_data) += size, (*g_copies_n)++, (*g_big_pads) += padded >= 0x10000;
     return u;
@@ -84,21 +86,27 @@ void dedup_reset() {
     std::destroy_at(&c.map);
     c.arena.release();
     std::construct_at(&c.map, &c.arena);
+    c.max_size = 0;
     (*g_generation)++, (*g_upload_epoch)++;
 }
 
 void dedup_invalidate(const uint8_t* p, uint64_t size) {
     (*g_upload_epoch)++;
     // Entries starting before p may still reach into it: look back over the few that can.
-    auto it = (*g_cp).map.lower_bound(p + size);
-    while (it != (*g_cp).map.begin()) {
+    Copies& c = *g_cp;
+    auto it = c.map.lower_bound(p + size);
+    while (it != c.map.begin()) {
         --it;
+        // Uniform updates on densely decorated islands otherwise walk every earlier upload within 64 MB,
+        // even when all the cached ranges are small. No entry can reach p once its start is this far away.
+        // Keep the largest size until reset: overwriting or erasing that entry must not shorten the bound.
+        const uintptr_t begin = uintptr_t(it->first), at = uintptr_t(p);
+        if (begin <= at && at - begin >= c.max_size) break;
         if (it->first + it->second.size <= p) {
-            if (p - it->first > (64ll << 20)) break;  // nothing larger than 64 MB is copied
             continue;
         }
         if (Front& f = front_of(it->first); f.p == it->first) f.generation = 0;
-        it = (*g_cp).map.erase(it);
+        it = c.map.erase(it);
     }
 }
 

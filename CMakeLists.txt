@@ -180,6 +180,10 @@ if(NX_TESTS AND NOT ANDROID)
     add_executable(features_test tests/features_test.cpp runtime/src/features/embedded_resources.cpp)
     target_link_libraries(features_test PRIVATE nx_feature_core nx_resource_data)
     add_test(NAME native_features COMMAND features_test)
+    add_executable(narrative_observation_test tests/narrative_observation_test.cpp)
+    target_include_directories(narrative_observation_test PRIVATE runtime/src)
+    target_compile_features(narrative_observation_test PRIVATE cxx_std_20)
+    add_test(NAME narrative_observation COMMAND narrative_observation_test)
     add_executable(resource_delta_test tests/resource_delta_test.cpp)
     target_link_libraries(resource_delta_test PRIVATE nx_resource_data)
     add_test(NAME resource_delta COMMAND resource_delta_test)
@@ -189,7 +193,7 @@ if(NX_TESTS AND NOT ANDROID)
         add_test(NAME native_resources COMMAND native_resources_test "${NX_NATIVE_ASSET_GAME}" "${CMAKE_BINARY_DIR}/native-resource-test-cache")
     endif()
 endif()
-add_library(nx_save_storage STATIC runtime/src/save_storage.cpp runtime/src/save_profiles.cpp)
+add_library(nx_save_storage STATIC runtime/src/save_storage.cpp runtime/src/save_profiles.cpp runtime/src/save_archive.cpp)
 target_include_directories(nx_save_storage PUBLIC ${CMAKE_SOURCE_DIR}/runtime/src)
 
 add_library(nx_mod_manager STATIC runtime/src/mod_manager.cpp runtime/src/mod_package.cpp)
@@ -205,8 +209,16 @@ if(WIN32)
 endif()
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)
+    target_link_libraries(nx_save_storage PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(nx_save_storage PRIVATE NX_HAVE_ZLIB)
     target_link_libraries(nx_mod_manager PRIVATE ZLIB::ZLIB)
     target_compile_definitions(nx_mod_manager PRIVATE NX_HAVE_ZLIB)
+endif()
+
+if(NX_TESTS AND NOT ANDROID)
+    add_executable(save_profiles_test tests/save_profiles_test.cpp launcher/save_log_stub.cpp)
+    target_link_libraries(save_profiles_test PRIVATE nx_save_storage)
+    add_test(NAME save_profiles COMMAND save_profiles_test)
 endif()
 
 # The launcher (launcher/): the program a player opens first. It has no game code, so it builds from a plain
@@ -287,6 +299,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/nvn/nvn_extensions.cpp
     runtime/src/features/runtime.cpp
     runtime/src/features/builtins.cpp
+    runtime/src/features/narrative/native.cpp
     runtime/src/features/tool_durability/native.cpp
     runtime/src/features/embedded_resources.cpp
     runtime/src/game_folder.cpp
@@ -615,6 +628,12 @@ else()
         # main-thread stack (recompiled calls nest deeply); a link map for tools/symbolize.py.
         target_link_options(${NX_GAME} PRIVATE /STACK:67108864 /HIGHENTROPYVA:NO /MAP)
     endif()
+endif()
+
+if(NX_TESTS AND NOT ANDROID AND NX_VULKAN_INCLUDE)
+    add_executable(upload_dedup_test tests/upload_dedup_test.cpp runtime/src/nvn/nvn_dedup.cpp)
+    target_include_directories(upload_dedup_test PRIVATE runtime/include runtime/src runtime/src/nvn "${NX_VULKAN_INCLUDE}")
+    add_test(NAME upload_dedup COMMAND upload_dedup_test)
 endif()
 
 # The settings screen (runtime/src/ui): Dear ImGui (NX_IMGUI_DIR, above). Without it the screen is a stub;

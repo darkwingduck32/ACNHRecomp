@@ -203,7 +203,8 @@ ImVec2 g_drag_pos;
 ImVec2 g_page_min, g_page_max;  // the visible part of the page (it scrolls)
 
 // File dialogs answer on their own time (and maybe on another thread): queued here, applied in the frame.
-enum Target { kPickGame, kPickMod, kPickInstall, kPickBuild, kPickSaveImport, kPickModImportFolder, kPickModImportZip };
+enum Target { kPickGame, kPickMod, kPickInstall, kPickBuild, kPickSaveImport, kPickModImportFolder, kPickModImportZip,
+              kPickSaveImportZip };
 struct Picked {
     int target;
     std::vector<std::string> paths;
@@ -376,6 +377,7 @@ void pick(Target t) {
             break;
         case kPickBuild: SDL_ShowOpenFolderDialog(on_picked, user, g_window, nullptr, false); break;
         case kPickSaveImport: SDL_ShowOpenFolderDialog(on_picked, user, g_window, where, false); break;
+        case kPickSaveImportZip: SDL_ShowOpenFileDialog(on_picked, user, g_window, zip, 1, where, false); break;
         case kPickModImportFolder: SDL_ShowOpenFolderDialog(on_picked, user, g_window, where, false); break;
         case kPickModImportZip: SDL_ShowOpenFileDialog(on_picked, user, g_window, zip, 2, where, false); break;
     }
@@ -460,7 +462,8 @@ void apply_picks() {
         switch (p.target) {
             case kPickInstall: g_install = first, g_prereqs = check_prerequisites(g_install); break;
             case kPickBuild: use_build_folder(first); break;
-            case kPickSaveImport: {
+            case kPickSaveImport:
+            case kPickSaveImportZip: {
                 std::string err;
                 std::string id = nx::save_profiles::create_empty_profile(g_build.data, &err);
                 if (id.empty()) {
@@ -471,8 +474,11 @@ void apply_picks() {
                     toast(tr("launcher.saves.import_ok"));
                     select_save_profile(id);
                     refresh_save_profiles();
-                } else
+                } else {
                     g_banner = trf("launcher.saves.import_failed", err);
+                    nx::save_profiles::delete_profile(g_build.data, id);
+                    refresh_save_profiles();
+                }
                 break;
             }
             case kPickModImportFolder:
@@ -1961,10 +1967,19 @@ void saves_popup() {
                 select_save_profile(id);
         }
         ImGui::SameLine();
-        if (button(import_l, kBlue, true, pair_w)) pick(kPickSaveImport);
+        if (button(import_l, kBlue, true, pair_w)) ImGui::OpenPopup("save_import_source");
+        const bool choosing_import = ImGui::IsPopupOpen("save_import_source");
+        ImGui::PushStyleColor(ImGuiCol_NavCursor, col4(kBlue));
+        if (ImGui::BeginPopup("save_import_source")) {
+            if (ImGui::Selectable(tr("saves.pick_folder"))) pick(kPickSaveImport);
+            ImGui::SetItemDefaultFocus();
+            if (ImGui::Selectable(tr("saves.pick_zip"))) pick(kPickSaveImportZip);
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleColor();
         align_right({close_l});
-        if (button(close_l, kWhite) || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
-            ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
+        if (button(close_l, kWhite) || (!choosing_import && (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+            ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))))
             g_saves_open = false, g_saves_delete_id.clear(), ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }

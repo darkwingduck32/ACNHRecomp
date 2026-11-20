@@ -1399,7 +1399,7 @@ void page_controls() {
 #endif
 }
 
-// Saves: what is there, backups, import/export (saves.h). Folder answers come from the platform's picker.
+// Saves: what is there, backups, import/export (saves.h). Paths come from the platform's picker.
 enum class Pick { None, Import, Export };
 Pick g_pick = Pick::None;
 std::string g_confirm_import;  // a path waiting for the player's yes
@@ -1441,10 +1441,7 @@ void page_saves() {
     ImGui::Dummy(ImVec2(0, 4 * g_scale));
     ImGui::TextWrapped("%s", tr("saves.import.desc"));
     ImGui::TextColored(ImVec4(0.75f, 0.35f, 0.3f, 1), "%s", tr("saves.import.warning"));
-    if (button(tr("saves.import"), bw)) {
-        g_pick = Pick::Import;
-        plat::pick_path(false, tr("saves.pick_folder"));
-    }
+    if (button(tr("saves.import"), bw)) ImGui::OpenPopup("import_source");
     ImGui::SameLine();
     ImGui::BeginDisabled(!has);
     if (button(tr("saves.export"), bw)) {
@@ -1452,6 +1449,18 @@ void page_saves() {
         plat::pick_path(false, tr("saves.pick_folder"));
     }
     ImGui::EndDisabled();
+    if (ImGui::BeginPopup("import_source")) {
+        if (ImGui::Selectable(tr("saves.pick_folder"))) {
+            g_pick = Pick::Import;
+            plat::pick_path(false, tr("saves.pick_folder"));
+        }
+        ImGui::SetItemDefaultFocus();
+        if (ImGui::Selectable(tr("saves.pick_zip"))) {
+            g_pick = Pick::Import;
+            plat::pick_path(true, tr("saves.pick_zip"));
+        }
+        ImGui::EndPopup();
+    }
     std::string picked;
     if (g_pick != Pick::None && plat::pick_result(picked)) {
         Pick what = g_pick;

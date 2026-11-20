@@ -480,8 +480,15 @@ void projection_update(CPU& c) {
                 double(f[0]), double(f[1]), double(f[2]), double(f[6]), double(f[7]), double(f[8]),
                 (unsigned long long)(c.x[30] - kModuleBase));
         }
-        if (g_cams.size() == 1 || (g_cams.size() & (g_cams.size() - 1)) == 0)
-            log("nvn: screen scale: %zu camera projections seen", g_cams.size());
+        // The game recycles projection objects, so the live count can return
+        // to eight every frame. Desktop logging flushes synchronously: report
+        // new high-water marks instead of writing the same diagnostic forever.
+        static size_t most_cameras = 0;
+        if (g_cams.size() > most_cameras) {
+            most_cameras = g_cams.size();
+            if (most_cameras == 1 || (most_cameras & (most_cameras - 1)) == 0)
+                log("nvn: screen scale: %zu camera projections seen", most_cameras);
+        }
     }
     rewrite(object, it->second, k, false);  // made right after this: no need to mark it
 }

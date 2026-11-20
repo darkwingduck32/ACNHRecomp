@@ -41,6 +41,10 @@ void camera_update(uint64_t object, uint64_t caller) {
         if (f.camera_update)
             f.camera_update(object, caller);
 }
+void ui_observation(const narrative::UiObservation& event) {
+    for (const auto& f : registry().definitions())
+        if (f.ui_observation) f.ui_observation(event);
+}
 bool world_projection(float n, float z, float fov) {
     for (const auto &f : registry().definitions())
         if (f.world_projection && f.world_projection(n, z, fov))

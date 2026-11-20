@@ -209,7 +209,11 @@ void focus_input(CPU& c) {
     if (manager && !(c.x[3] & 1) && ld<uint32_t>(manager + 0x18)) {
         const uint64_t entries = ld<uint64_t>(manager + 0x20);
         const uint64_t entry = entries ? ld<uint64_t>(entries) : 0;
-        if (entry && ld<uint64_t>(entry + 0x10)) features::game_ui_input();
+        if (entry && ld<uint64_t>(entry + 0x10)) {
+            features::game_ui_input();
+            features::ui_observation({features::narrative::UiObservation::Kind::menu,
+                                     g_frame.load(), manager, 0, false, false});
+        }
     }
     uint64_t f = g_frame.load();
     if (!g_click.pending) focus_hover(c, f);
@@ -272,6 +276,8 @@ void button_input(CPU& c) {
     // Observe page ownership before those guards so orbit stays fixed for
     // the entire exchange. Hidden pages stop receiving input updates.
     if (message) features::game_ui_input();
+    if (message) features::ui_observation({features::narrative::UiObservation::Kind::page,
+        g_frame.load(), owner, h, ld<uint8_t>(h + 0xbc) != 0, (c.x[3] & 1) != 0});
     static const bool camera_trace=std::getenv("NX_FREECAMERA_TRACE")!=nullptr;
     if (camera_trace && message) {
         static int previous=-1;

@@ -1390,3 +1390,53 @@ verified the title screen, outdoor entry, shallow orbit and reset; captures are
 `corners-enter_03481.png` and `corners-orbit_04056.png`. The title trace confirms
 land and water expansion without camera input. This covers the tested poses;
 all islands and camera combinations have not been exhaustively checked.
+
+### Recurring invisible trees: investigation open (2026-11-16)
+
+The user again reports trees disappearing after loading/rotating, including at
+the reset view, and sometimes remaining visible while the player collides with
+them during rotation. The earlier foreground-refresh correction is still
+present in source, the composed 3.0.3 instruction profile, and the current guest
+library: the isolated run logs its refresh callbacks. This report is unresolved;
+the earlier stationary-rectangle check does not cover every tree visibility path.
+
+Before the user stopped further testing, the isolated copied-save session at
+`private/play/roots/tree-recurrence-1/` covered loading, stationary orbit, zoom,
+reset, movement through the grove, and DLAA orbit. Captures did not reproduce
+the reported disappearance. The combined movement/orbit capture does not prove
+sustained tree contact, so it is not a passed collision-specific regression.
+The run used SDR/1080 settings; it does not validate the normal session's
+HDR/2160/supersampling combination. The proposed HDR follow-up was not launched.
+Read-only snapshots are in `private/tree-recurrence/`; the sampled foreground
+rectangles were consistent with the live tree-area bounds, but those snapshots
+do not establish individual model readiness or visibility.
+
+Static review of the first-run model hypothesis:
+
+- `hle_fs.cpp::OpenFile` holds the filesystem lock and completes the native
+  transform before publishing its guest file handle. Reconstruction, content
+  validation, compression and temporary-file preparation are synchronous.
+- `features/embedded_resources.cpp::checked_replacement` validates reconstructed
+  content and cached outputs. `common/artifact_cache.cpp` publishes complete
+  files by same-directory rename and retains verified memory output on cache
+  write failure. Transform failure retains the original resource. No explicit
+  asynchronous placeholder/partial-model path was found in this bridge.
+- The isolated session was itself a cold-cache run: its existing log records
+  reconstruction of oak, cedar, palm and bamboo. The affected normal session's
+  existing log has no reconstruction messages; cache-hit messages are disabled
+  there. A simple cold-versus-warm distinction is therefore not established.
+- Synchronous reconstruction can still delay the game's own loading jobs.
+  Complete file bytes do not prove the guest has finished parsing, creating or
+  registering a model. A timing-dependent guest initialization issue remains
+  a hypothesis, not an observed cause.
+- `foreground_refresh` currently consumes a camera-footprint revision when it
+  requests a native refresh, without an acknowledgement of completed model
+  initialization. There is no model-ready invalidation in that revision cache.
+  Investigate that guest boundary before changing refresh behavior; the host's
+  `resource_prepared` callback precedes guest parsing and is not such an
+  acknowledgement.
+
+The user requested source/existing-log investigation only while the normal game
+is in use: no further launches, gameplay input or tests. No culling/model code,
+installed binaries, normal save, or normal settings were changed by this
+investigation. The separate narrative work remains paused.

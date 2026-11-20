@@ -1,6 +1,7 @@
 #include "../../../games/acnh/field_column.h"
 #include "../../../games/acnh/field_flag.h"
 #include "../../../games/acnh/field_record.h"
+#include "../../../games/acnh/record_category.h"
 
 #include "features/camera/version_303.h"
 #include "features/module_hooks.h"
@@ -193,6 +194,53 @@ void field_flag_adapter(CPU& cpu) {
     }
 }
 
+template<size_t Index>
+void record_category_adapter(CPU& cpu);
+
+struct CategoryRoute {
+    uint64_t entry;
+    uint64_t caller;
+    Fn adapter;
+    Fn original = nullptr;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<CategoryRoute, 5> category_routes{{
+    {0x23255e4, 0x2431044, record_category_adapter<0>},
+    {0x2325688, 0x2430fc0, record_category_adapter<1>},
+    {0x232572c, 0x2430fe4, record_category_adapter<2>},
+    {0x23257d0, 0x2431004, record_category_adapter<3>},
+    {0x2325874, 0x2431024, record_category_adapter<4>},
+}};
+bool use_cpp_categories = false;
+bool trace_categories = false;
+
+template<size_t Index>
+void record_category_adapter(CPU& cpu) {
+    auto& route = category_routes[Index];
+    const uint64_t caller = cpu.x[30] - main_base;
+    const bool trace = trace_categories && caller == route.caller &&
+        route.samples.fetch_add(1, std::memory_order_relaxed) < 12;
+    if (!use_cpp_categories && !trace) {
+        route.original(cpu);
+        return;
+    }
+
+    const uint64_t row = cpu.x[0];
+    std::string reads;
+    constexpr uint16_t category = static_cast<uint16_t>(Index + 3);
+    const bool accepted = acnh::record_category(main_base, row, category, GuestMemory{trace ? &reads : nullptr});
+    if (use_cpp_categories) cpu.x[0] = accepted;
+    else route.original(cpu);
+
+    if (trace) {
+        log("acnh record category %s entry=%llx caller=%llx base=%llx row=%llx w0=%llx reads=%s",
+            use_cpp_categories ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+            static_cast<unsigned long long>(caller), static_cast<unsigned long long>(main_base),
+            static_cast<unsigned long long>(row), static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
+    }
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -217,6 +265,13 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_field_flag = std::getenv("NX_ACNH_FIELD_FLAG_TRACE") != nullptr;
     if (use_cpp_field_flag || trace_field_flag)
         wrap_function(entries, field_flag_entry, field_flag_adapter, original_field_flag);
+
+    mode = std::getenv("NX_ACNH_RECORD_CATEGORY");
+    use_cpp_categories = !mode || std::string_view(mode) == "cpp";
+    trace_categories = std::getenv("NX_ACNH_RECORD_CATEGORY_TRACE") != nullptr;
+    if ((use_cpp_categories || trace_categories) && module.data <= 0x5390120 && 0x5390130 <= data_end)
+        for (auto& route : category_routes)
+            wrap_function(entries, route.entry, route.adapter, route.original);
 }
 
 }  // namespace

@@ -63,3 +63,25 @@ Next action: inspect the original and C++ trial logs, then pass them to
 `tests.acnh_heading_replay --live ORIGINAL_LOG CPP_LOG` after the two
 positionals above. Finish the full generated build and repeat the scenario
 through the promoted default before counting the row.
+
+The first unpinned-clock trials did not reach the tree. A frame capture
+showed the title screen and then the daily announcement. Trial 4 pins the
+game clock to 2026-11-12 12:16 local time, the time of the prior successful
+scenario, and copies the same disposable save for each run. Its original
+route reached the heading entry five times with one unique input.
+
+Both trial 4 routes made five calls with the same single input. The player
+screenshots show three apples on the ground after the shake in each run.
+The capture logs are in `tree-shake-original-trial4/nx.log` and
+`tree-shake-cpp-trial4/nx.log` under the campaign output directory. Their
+SHA-256 digests are, respectively,
+`f05311b5f707a3bae6c47a08f9d785c6653b7450e6e5fe4f7f1ed3543f5b3208` and
+`a34af3f3eb1d84912e5c7b3e1bbddf07ad393ac01779f2f7c5cc6419d249cc61`.
+Adding these logs with `--live` gave 3,417 matching comparisons, including
+the captured call, each with two independent runs of the reference.
+
+Full emission with the same 3.0.3 hook profile and the locally prepared
+3.0.3 60 FPS patch produced 1,380 files and zero unhandled instructions.
+The generated module build uses the cached SDK and no-change main objects.
+The local driver `private.heading.build_generated_dll` checks the generated
+header and compares each main source file before reusing its object.

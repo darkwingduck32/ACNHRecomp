@@ -45,7 +45,7 @@ void heading_adapter(CPU& cpu) {
 void install_heading(const ModuleInfo& module, FuncEntry* entries) {
     if (std::string_view(module.name) != "main") return;
     const char* mode = std::getenv("NX_ACNH_HEADING");
-    use_cpp = mode && std::string_view(mode) == "cpp";
+    use_cpp = !mode || std::string_view(mode) == "cpp";
     trace_heading = std::getenv("NX_ACNH_HEADING_TRACE") != nullptr;
     if (!use_cpp && !trace_heading) return;
     if (mod_package::build_id(plat::data_root()) != camera303::build_id) return;

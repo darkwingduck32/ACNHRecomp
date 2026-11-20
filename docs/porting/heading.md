@@ -38,8 +38,8 @@ clang-cl /nologo /std:c++20 /O2 /fp:precise /Foprivate/heading/candidate.obj /Fe
 
 The recompiler reads the opt-in dispatch target from the 3.0.3 hooks
 profile. Calls to it now go through the runtime dispatch table. The installed
-adapter selects the C++ route only with `NX_ACNH_HEADING=cpp`; the original is
-the default and remains the fallback for non-finite inputs. Use
+adapter defaults to C++ for finite inputs on 3.0.3. Select the original with
+`NX_ACNH_HEADING=original`. Non-finite inputs use the original. Use
 `NX_ACNH_HEADING_TRACE=1` to log input and output bits at the tree-shake call.
 
 The standard emitter produced the expected dispatch at the actual caller:
@@ -58,11 +58,6 @@ tree-shake call sites (base and speed variant) routed through dispatch.
 This exercises the same call in gameplay before the full generated rebuild.
 The player build, probe DLL, and disposable saves/logs live under
 `H:/ACNH/ACNHRecomp/private/port-acnh-engine/`.
-
-Next action: inspect the original and C++ trial logs, then pass them to
-`tests.acnh_heading_replay --live ORIGINAL_LOG CPP_LOG` after the two
-positionals above. Finish the full generated build and repeat the scenario
-through the promoted default before counting the row.
 
 The first unpinned-clock trials did not reach the tree. A frame capture
 showed the title screen and then the daily announcement. Trial 4 pins the
@@ -85,3 +80,37 @@ Full emission with the same 3.0.3 hook profile and the locally prepared
 The generated module build uses the cached SDK and no-change main objects.
 The local driver `private.heading.build_generated_dll` checks the generated
 header and compares each main source file before reusing its object.
+
+The disposable save manifest for trial 4 covers 11 files. Its SHA-256 is
+`82edb9109060b0b6d57ddb8393087f732987fc42b2ca66959f073b18c39a743b`,
+calculated from each relative path followed by a NUL and that file's binary
+SHA-256, in path order. The DLL linked from full emission is
+`generated-dll/heading_generated.dll`, SHA-256
+`13737e6e19b06637d3190581eb7fa572eb825fe110be6d6702dfb9796ae79577`.
+The 925 generated call sites all use runtime dispatch.
+
+## Verification on the generated build
+
+The generated DLL linked after rebuilding 176 changed units and reusing
+1,206 byte-identical ones. The build still uses the cached SDK and subsdk0
+modules. Verification applies to the local Windows 3.0.3 build.
+
+From the campaign worktree, rerun the scenario on disposable copies with
+the following commands. The default run sets the trace switch and leaves
+the route switch unset.
+
+```powershell
+$env:PORT_HEADING_LIBRARY = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/generated-dll/heading_generated.dll'
+& private/venv/Scripts/python -m private.heading.try_tree_shake full1 default original
+$root = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+& private/venv/Scripts/python -m tests.acnh_heading_replay H:/ACNH/ACNHRecomp/private/game/exefs/main private/heading/candidate.exe --live "$root/tree-shake-original-full1/nx.log" "$root/tree-shake-default-full1/nx.log"
+```
+
+Both runs reached the expected route five times with one unique input,
+and the result matched Unicorn exactly. Both result screenshots show
+three apples dropped. The 3,417 cases passed against two fresh reference
+runs per case. The isolated Release player passed all 13 registered CTest
+tests and all eight replay and profile unit tests passed. The original
+and default trace log SHA-256 values were
+`86b38e67ac989978818eaeabeb4e44a580c7acae2241c6fa50c80b1b3e100400` and
+`bf5689cf970978ec71f72ceb45f3bf4268d933b387243fdfe379b24beddf0d92`.

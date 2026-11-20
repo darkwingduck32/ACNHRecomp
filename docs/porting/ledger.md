@@ -2478,3 +2478,47 @@ $c = "$r/tree-shake-default-sweepprobe2"
 Stage height at `0x15e12bc` and the associated base, item and
 provider queries are the next generated dependencies within the
 probe.
+
+### Shared stage subtree under shovel traversal
+
+The sweep probe's stage query at `0x15e12bc` and the two
+existing outer stage calls share the same typed C++ base
+height, overlay and grid sampling, item resolution, bounds,
+and provider lookup. Resolver returns at `0x15e0798` and
+`0x15e0c54` pass the field record lookup at `0x15e7bf4`.
+The provider tail inherits that return address. The bounds
+adapter retains the separate lookup frame at `0x1951938`.
+Set `NX_ACNH_SHOVEL_TRAVERSAL_STAGE=original` for this new scope.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x15e06d0` | 124 | 5814 |
+| `0x15e80f0` | 59 | 5832 |
+| `0x83a950` | 128 | 5832 |
+| `0x862700` | 672 | 5832 |
+| `0x15e7980` | 73 | 6051 |
+| `0x195190c` | 240 | 6051 |
+| `0x194f798` | 464 | 6051 |
+| `0x11eb21c` | 344 | 6051 |
+
+The 18 outer calls use the existing direct stage-height route
+at their entry. Each contributes to the stage-base and item
+subtree measured here. Original and opt-in `traversalstage1`
+and default `traversalstage2` matched 47,514 ordered records
+across all eight bodies. The 342 sweep casts, nine traversal
+results, ten surveys, ten neighborhoods, and 12 final decisions
+also matched. All 14 Release CTests and 14 profile and replay
+checks passed. The functions retain their earlier entries.
+Batch 3 stays at 85 verified and 100 discovery candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-traversalstage1"
+$c = "$r/tree-shake-default-traversalstage2"
+& private/venv/Scripts/python -m tests.acnh_shovel_traversal_stage_live "$o/nx.log" "$c/nx.log"
+```
+
+The stage-name and predicate calls
+from this subtree remain generated. The next group ports the
+direct traversal parent that coordinates the height checks,
+recursive legs, and two sweeps.

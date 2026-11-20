@@ -121,6 +121,8 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 29cc930 # Read cached row value at slot 5
 # dispatch 29cca60 # Read cached row value at slot 6
 # dispatch 29ccb90 # Read cached row value at slot 7
+# dispatch 84b728 # Check the ground terrain material mask
+# dispatch 84b840 # Check the overlay terrain material mask
 # dispatch 866f60 # Test terrain slope for triangle zero
 # dispatch 8670d0 # Test terrain slope for triangle one
 # dispatch 867248 # Test terrain slope for triangle two

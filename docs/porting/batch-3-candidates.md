@@ -1,7 +1,7 @@
 # ACNH 3.0.3 batch 3 candidate queue
 
-This discovery queue tracks 100 entries on build
-`FF1D1C05670DB6021C85B624A710B963`. The [ledger](ledger.md#active-batch-3)
+This archived discovery queue records 100 entries on build
+`FF1D1C05670DB6021C85B624A710B963`. The [ledger](ledger.md#completed-batch-3)
 tracks candidates selected for implementation.
 
 The scan followed direct calls up to seven levels from 61 gameplay caller

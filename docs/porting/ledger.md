@@ -221,10 +221,11 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-half-tile "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-default-batch2final/nx.log" --live-category-mask "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-default-batch2final/nx.log"
 ```
 
-## Active batch 3
+## Completed batch 3
 
-The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 98.
+Batch 3 verified 100 functions on main build
+`FF1D1C05670DB6021C85B624A710B963`. The rolling discovery queue
+continues in [batch 4](#active-batch-4).
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -250,7 +251,7 @@ All gameplay tests use the same muted single-instance launcher.
 | `0x29cca60` | `0x124` | Read cached row value from slot 6 | `0x29cd470` | Verified |
 | `0x29ccb90` | `0x124` | Read cached row value from slot 7 | `0x29cd490` | Verified |
 
-The [discovery queue](batch-3-candidates.md) holds 100 candidates beyond
+The [archived discovery queue](batch-3-candidates.md) records 100 candidates beyond
 the implementation entries listed here. The queue marks entries with
 observed direct callers.
 
@@ -2632,3 +2633,40 @@ $c = "$r/tree-shake-default-earlyrow2"
 & private/venv/Scripts/python -m tests.acnh_field_value_cache_live --early "$o/nx.log" "$c/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf field_value_cache --early --capture "$o/nx.log"
 ```
+
+### Terrain material masks
+
+The ground and overlay material predicates now use a typed query for
+the half tile, terrain layer, and 96-bit mask. Each resolves the grid
+from its caller's terrain owner and checks the four material bytes.
+Both share the material-bit test with the shovel marker. The C++ route
+applies at the verified BL for each entry. Set
+`NX_ACNH_TERRAIN_MATERIAL=original` to call the generated predicates.
+
+| Main entry | Unwind size | Typed predicate | Observed caller | Stage |
+| --- | --- | --- | --- | --- |
+| `0x84b728` | `0x118` | Ground material intersects mask | `0x15753e0` | Verified |
+| `0x84b840` | `0x118` | Overlay material intersects mask | `0x15755c0` | Verified |
+
+Each independently matched 136 cases against two original AArch64
+runs with no caller-visible writes. The marker regression passed
+its 196 cases after sharing the bit test. Original and opt-in
+`terrainmaterial1` and default `terrainmaterial2` matched all
+414,358 ordered material calls and the eight survey, neighborhood, and
+final outcomes. Each route exercised 464 true and 28,456 false ground
+queries, plus 1,752 true and 383,686 false overlay queries. The
+same-input check matched every recorded call. All 14 Release CTests
+and 14 profile and replay checks passed.
+
+## Active batch 4
+
+The discovery queue starts with [100 candidates](batch-4-candidates.md).
+It carries forward unverified entries and adds replacements for the
+two promoted material queries. Verified so far, 0.
+
+Implementation continues on the typed shovel traversal path. The next
+group covers the two recursive calls already observed at `0x15f1dd8`
+and `0x15f1e24`, their peak sampler, and the reached height dependencies.
+These reused bodies retain their Batch 3 entries. The traversal rectangle
+predicate has independent replay evidence and still needs a gameplay
+fixture that reaches its caller.

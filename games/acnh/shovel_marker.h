@@ -10,7 +10,7 @@ template<class Memory>
 bool shovel_marker_in_mask(TerrainQuadrants corners, uint64_t mask, const Memory& memory) {
     for (const auto output : corners.output) {
         const auto kind = memory.template read<uint32_t>(output);
-        if (kind < 73 && (memory.template read<uint32_t>(mask + 4 * (kind / 32)) & (1u << (kind % 32))))
+        if (terrain_kind_in_mask(kind, mask, memory))
             return true;
     }
     return false;

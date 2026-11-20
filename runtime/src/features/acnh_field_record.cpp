@@ -29,6 +29,7 @@
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
+#include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
@@ -557,6 +558,48 @@ void terrain_property_adapter(CPU& cpu) {
 
 constexpr std::array<uint64_t, 2> shovel_terrain_pair_entries{0x880630, 0x881090};
 std::array<Fn, 2> original_shovel_terrain_pair{};
+
+constexpr std::array<uint64_t, 2> terrain_material_entries{0x84b728, 0x84b840};
+constexpr std::array<uint64_t, 2> terrain_material_resumes{0x15753e4, 0x15755c4};
+std::array<Fn, terrain_material_entries.size()> original_terrain_material{};
+bool use_cpp_terrain_material = false;
+bool trace_terrain_material = false;
+
+template<size_t Index>
+void terrain_material_adapter(CPU& cpu) {
+    const auto original = original_terrain_material[Index];
+    const auto tile = cpu.x[1];
+    if (cpu.x[30] - main_base != terrain_material_resumes[Index] || !cpu.x[0] || !tile || !cpu.x[2]
+        || (!use_cpp_terrain_material && !trace_terrain_material)) {
+        original(cpu);
+        return;
+    }
+    const acnh::TerrainMaterialMaskQuery query{
+        {cpu.x[0]}, {ld<int32_t>(tile + 8), ld<int32_t>(tile + 12)}, cpu.x[2],
+        Index == 0 ? acnh::TerrainMaterialLayer::ground : acnh::TerrainMaterialLayer::overlay,
+    };
+    const bool typed = acnh::terrain_material_mask_matches(query, GuestMemory{});
+    uint64_t expected = typed;
+    if (!use_cpp_terrain_material) {
+        original(cpu);
+        expected = cpu.x[0];
+    } else {
+        if (trace_terrain_material) {
+            // The guest predicate writes only to its own stack frame.
+            CPU probe = cpu;
+            original(probe);
+            expected = probe.x[0];
+        }
+        cpu.x[0] = typed;
+    }
+    if (trace_terrain_material)
+        log("acnh terrain material %s entry=%llx call=%llx tile=%d,%d mask=%08x,%08x,%08x same_input=%s out=%u",
+            use_cpp_terrain_material ? "cpp" : "original",
+            static_cast<unsigned long long>(terrain_material_entries[Index]),
+            static_cast<unsigned long long>(terrain_material_resumes[Index] - 4), query.tile.x, query.tile.z,
+            ld<uint32_t>(query.mask), ld<uint32_t>(query.mask + 4), ld<uint32_t>(query.mask + 8),
+            expected == uint64_t(typed) ? "match" : "mismatch", unsigned(cpu.x[0]));
+}
 
 struct TerrainTriangleRoute {
     uint64_t entry;
@@ -5431,6 +5474,17 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_shovel_stage || trace_shovel_stage || trace_shovel_sweep_stage)
         for (auto& route : shovel_stage_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_TERRAIN_MATERIAL");
+    use_cpp_terrain_material = !mode || std::string_view(mode) == "cpp";
+    trace_terrain_material = std::getenv("NX_ACNH_TERRAIN_MATERIAL_TRACE") != nullptr;
+    if (use_cpp_terrain_material || trace_terrain_material) {
+        constexpr std::array<Fn, terrain_material_entries.size()> adapters{
+            terrain_material_adapter<0>, terrain_material_adapter<1>,
+        };
+        for (size_t i = 0; i < adapters.size(); ++i)
+            wrap_function(entries, terrain_material_entries[i], adapters[i], original_terrain_material[i]);
+    }
 
     mode = std::getenv("NX_ACNH_TERRAIN_TRIANGLES");
     use_cpp_terrain_triangles = !mode || std::string_view(mode) == "cpp";

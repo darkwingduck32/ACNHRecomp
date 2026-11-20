@@ -21,6 +21,11 @@ struct TerrainOwner { uint64_t address; };
 struct TerrainSample { uint64_t address; };
 
 template<class Memory>
+bool terrain_kind_in_mask(uint32_t kind, uint64_t mask, const Memory& memory) {
+    return kind < 73 && (memory.template read<uint32_t>(mask + 4 * (kind / 32)) & (1u << (kind % 32)));
+}
+
+template<class Memory>
 void sample_terrain(TerrainGrid grid, HalfTile tile, TerrainSample output, Memory& memory) {
     const auto width = memory.template read<uint32_t>(grid.address + 0x38);
     const uint32_t index = width * uint32_t(tile.z) + uint32_t(tile.x);

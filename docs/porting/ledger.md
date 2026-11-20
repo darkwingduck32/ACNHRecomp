@@ -1869,3 +1869,47 @@ overlay scopes inside the mixed cast and the generated traversal
 fallback `0x15f10f0` are the main remaining step dependencies.
 The flat fixture has zero traversal hits. A side-strip terrain
 fixture is queued for the traversal evidence.
+
+### Terrain sampling inside the mixed cast
+
+The mixed cast now reaches the existing C++ ground, overlay, and
+grid samplers and both material fallbacks. The secondary fallback
+also reaches the existing C++ layer material predicate. Their new
+caller scope retains the original route through
+`NX_ACNH_SHOVEL_CAST_HEIGHT=original`.
+
+| Entry | Independent AArch64 cases | Focal calls per route |
+| --- | ---: | ---: |
+| `0x83b024` | 128 | 360 |
+| `0x83a950` | 128 | 1080 |
+| `0x862700` | 672 | 1440 |
+| `0x87a980` | 80 | 1404 |
+| `0x87aa70` | 480 | 1044 |
+| `0x1285040` | 42 | 1044 |
+
+The original and opt-in castheight1 and default castheight2 runs
+matched all 6,372 focal calls, including same-input grid checks and
+material fallback results. They also matched all four neighborhoods,
+surveys, and final decisions against the whole-original classdeep2
+route. All 14 Release CTests and 14 Python replay and profile
+checks passed. The six reused bodies retain their original ledger
+entries and the Batch 3 count remains 72. The discovery queue
+contains 100 entries.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-castheight1"
+$c = "$r/tree-shake-default-castheight2"
+& private/venv/Scripts/python -m tests.acnh_shovel_height_chain_live "$o/nx.log" "$c/nx.log" --cast --survey-tile 40 69
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_height_dependencies
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_grid_height
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_fallbacks
+```
+
+The step traversal fallback `0x15f10f0` had zero hits in the
+traversalcapture1 side-strip test and traversalcapture2. Both tests
+completed 52 step checks. Target traces in the retry placed the
+actor on the original centerline. Retry with lateral movement after
+the first shovel action. The next group follows the previously
+observed alternate terrain property pair at `0x880630` and
+`0x881090` and its shared cache.

@@ -681,6 +681,15 @@ bool trace_terrain_fallbacks = false;
 bool trace_sampler_terrain = false;
 bool use_cpp_sampler_terrain = false;
 
+enum class ShovelHeightScope {
+    unrelated, target, classifier, intermediate, stage_base = 5, obstacle, cast,
+};
+
+bool use_cpp_shovel_cast_height = false;
+bool trace_shovel_cast_height = false;
+bool is_cast_sampler_frame(uint64_t frame, bool ground);
+bool is_shovel_step_cast_frame(uint64_t frame);
+
 bool is_shovel_height_child_frame(uint64_t frame, uint64_t expected_resume);
 
 constexpr std::array terrain_primary_resumes{0x848fe8u, 0x849044u, 0x84909cu, 0x8490f4u};
@@ -695,12 +704,14 @@ void terrain_field_material_adapter(CPU& cpu) {
     const bool shovel_quadrants = quadrant_frame && ld<uint64_t>(quadrant_frame + 8) == main_base + 0x877330
         && ld<uint64_t>(ld<uint64_t>(quadrant_frame) + 8) == main_base + shovel_terrain_caller;
     const bool shovel_sampler = parent == 0x83ab2c && is_shovel_height_child_frame(ld<uint64_t>(cpu.x[29]), 0x15e02f8);
-    if (!shovel_quadrants && !shovel_sampler) {
+    const bool cast_sampler = parent == 0x83ab2c && is_cast_sampler_frame(ld<uint64_t>(cpu.x[29]), false);
+    if (!shovel_quadrants && !shovel_sampler && !cast_sampler) {
         original_terrain_field_material(cpu);
         return;
     }
     const acnh::HalfTile point{ld<int32_t>(cpu.x[0] + 8), ld<int32_t>(cpu.x[0] + 12)};
-    const bool native = use_cpp_terrain_field_material && (!shovel_sampler || use_cpp_sampler_terrain);
+    const bool native = use_cpp_terrain_field_material && (!shovel_sampler || use_cpp_sampler_terrain)
+        && (!cast_sampler || (use_cpp_sampler_terrain && use_cpp_shovel_cast_height));
     if (native) {
         GuestMemory memory;
         cpu.x[0] = acnh::terrain_has_field_material(main_base, point, memory);
@@ -708,7 +719,11 @@ void terrain_field_material_adapter(CPU& cpu) {
         trace_shovel_dependency(0x1285040, 0x87aae8);
         original_terrain_field_material(cpu);
     }
-    if (shovel_sampler ? trace_sampler_terrain : trace_terrain_fallbacks)
+    if (cast_sampler) {
+        if (trace_shovel_cast_height)
+            log("acnh shovel height chain %s entry=1285040 call=87aae4 scope=%u out=%x",
+                native ? "cpp" : "original", unsigned(ShovelHeightScope::cast), unsigned(cpu.x[0]));
+    } else if (shovel_sampler ? trace_sampler_terrain : trace_terrain_fallbacks)
         log("acnh shovel %sterrain fallback %s entry=1285040 call=87aae4 pos=%d,%d out=%x",
             shovel_sampler ? "sampler " : "", native ? "cpp" : "original",
             point.x, point.z, static_cast<unsigned>(cpu.x[0]));
@@ -832,10 +847,6 @@ bool is_shovel_point_classifier_frame(uint64_t frame) {
         && is_shovel_target_frame(ld<uint64_t>(frame));
 }
 
-enum class ShovelHeightScope {
-    unrelated, target, classifier, intermediate, stage_base = 5, obstacle,
-};
-
 bool use_cpp_shovel_height_chain = false;
 bool trace_shovel_height_chain = false;
 
@@ -845,6 +856,14 @@ ShovelHeightScope shovel_sampler_scope(bool ground, uint64_t resume, uint64_t fr
 ShovelHeightScope shovel_surface_frame(uint64_t frame) {
     return frame ? shovel_surface_scope(ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame))
                  : ShovelHeightScope::unrelated;
+}
+
+bool use_cpp_height_scope(ShovelHeightScope scope) {
+    return scope == ShovelHeightScope::cast ? use_cpp_shovel_cast_height : use_cpp_shovel_height_chain;
+}
+
+bool trace_height_scope(ShovelHeightScope scope) {
+    return scope == ShovelHeightScope::cast ? trace_shovel_cast_height : trace_shovel_height_chain;
 }
 
 bool is_new_height_scope(ShovelHeightScope scope) {
@@ -883,8 +902,8 @@ void shovel_grid_height_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
     const acnh::GridHeightQuery query{{cpu.x[0]}, cpu.x[1], cpu.x[2], cpu.x[4], (cpu.x[3] & 1) != 0};
     const bool extended = is_new_height_scope(scope);
-    const bool native = use_cpp_shovel_grid_height && (!extended || use_cpp_shovel_height_chain);
-    const bool trace = extended ? trace_shovel_height_chain : trace_shovel_grid_height;
+    const bool native = use_cpp_shovel_grid_height && (!extended || use_cpp_height_scope(scope));
+    const bool trace = extended ? trace_height_scope(scope) : trace_shovel_grid_height;
     if (!trace) {
         if (native) {
             GuestMemory memory;
@@ -1055,6 +1074,10 @@ struct ShovelSamplerServices : HeightGuestFrame {
         const uint64_t entry = secondary ? 0x87aa70 : 0x87a980;
         const uint64_t resume = ground ? 0x83b0e4 : (secondary ? 0x83ab2c : 0x83ab10);
         nested.x[30] = main_base + resume;
+        if (is_cast_sampler_frame(cpu.x[29], ground)) {
+            call(nested, main_base + entry);
+            return uint32_t(nested.x[0]);
+        }
         const bool native = use_cpp_sampler_terrain && (secondary ? use_cpp_terrain_secondary : use_cpp_terrain_primary);
         const auto before_x = trace_sampler_terrain ? ld<uint32_t>(point) : 0;
         const auto before_z = trace_sampler_terrain ? ld<uint32_t>(point + 8) : 0;
@@ -1171,8 +1194,8 @@ void shovel_height_parameter_type_adapter(CPU& cpu) {
     const auto requested = cpu.x[1];
     unsigned type = 0;
     const bool extended = is_new_height_scope(scope);
-    const bool trace = extended ? trace_shovel_height_chain : trace_shovel_height_parameter_type;
-    const bool native = use_cpp_shovel_height_parameter_type && (!extended || use_cpp_shovel_height_chain);
+    const bool trace = extended ? trace_height_scope(scope) : trace_shovel_height_parameter_type;
+    const bool native = use_cpp_shovel_height_parameter_type && (!extended || use_cpp_height_scope(scope));
     if (trace) {
         if (requested == ld<uint64_t>(main_base + 0x4ac3108)) type = 1;
         else if (requested == ld<uint64_t>(main_base + 0x4ab35f0)) type = 2;
@@ -1221,7 +1244,7 @@ void shovel_height_adapter(CPU& cpu) {
     const bool from_classifier = Index == 0 && scope == ShovelHeightScope::classifier;
     const bool extended = is_new_height_scope(scope) && !from_classifier;
     const bool native = use_cpp_shovel_height[Index] && (!from_classifier || use_cpp_shovel_point_height)
-        && (!extended || use_cpp_shovel_height_chain);
+        && (!extended || use_cpp_height_scope(scope));
     if (!native) {
         original_shovel_height[Index](cpu);
     } else if constexpr (Index == 0) {
@@ -1249,7 +1272,7 @@ void shovel_height_adapter(CPU& cpu) {
                 std::bit_cast<uint32_t>(cpu.v[0].f32[0]));
         return;
     }
-    if (extended ? !trace_shovel_height_chain : !trace_shovel_height) return;
+    if (extended ? !trace_height_scope(scope) : !trace_shovel_height) return;
     const auto entry = static_cast<unsigned long long>(shovel_height_entries[Index]);
     const auto call_site = static_cast<unsigned long long>(resume - 4);
     if (extended) {
@@ -1847,6 +1870,11 @@ ShovelHeightScope shovel_surface_scope(uint64_t resume, uint64_t frame) {
 
 ShovelHeightScope shovel_sampler_scope(bool ground, uint64_t resume, uint64_t frame) {
     if (resume == (ground ? 0x15e02e0u : 0x15e02f8u)) return shovel_surface_frame(frame);
+    constexpr std::array cast_overlays{0x15ed374u, 0x15ed810u, 0x15ed874u, 0x15eed8cu, 0x15ef1e4u, 0x15ef244u};
+    const bool from_cast = ground ? resume == 0x15ed360 || resume == 0x15eed78
+        : std::find(cast_overlays.begin(), cast_overlays.end(), resume) != cast_overlays.end();
+    if (from_cast && is_shovel_step_cast_frame(frame) && ld<uint64_t>(frame + 8) == main_base + 0x15f0fc8)
+        return ShovelHeightScope::cast;
     if (ground || !frame) return ShovelHeightScope::unrelated;
     if (resume == 0x15e0724 && is_shovel_stage_height_frame(frame)) return ShovelHeightScope::stage_base;
     constexpr std::array resumes{0x15ea86cu, 0x15ea8d0u, 0x15ea954u, 0x15ea9c8u, 0x15eaa40u,
@@ -1857,12 +1885,18 @@ ShovelHeightScope shovel_sampler_scope(bool ground, uint64_t resume, uint64_t fr
     return ShovelHeightScope::unrelated;
 }
 
+bool is_cast_sampler_frame(uint64_t frame, bool ground) {
+    return frame && shovel_sampler_scope(ground, ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame))
+        == ShovelHeightScope::cast;
+}
+
 constexpr std::array<uint64_t, 4> shovel_marker_entries{0x15ea0c8, 0x876320, 0x849ac8, 0x8493f8};
 constexpr std::array<uint64_t, 5> shovel_marker_direct_resumes{0x15ea1b4, 0x15ea294, 0x15ea39c, 0x15ea494, 0x15ea590};
 constexpr std::array<uint64_t, 4> shovel_marker_global_resumes{0x15ea628, 0x15ea6c0, 0x15ea760, 0x15ea828};
 constexpr std::array<uint64_t, 4> shovel_marker_primary_resumes{0x8494c0, 0x8494f8, 0x84952c, 0x849560};
 std::array<Fn, 4> original_shovel_marker{};
-Fn original_shovel_marker_primary = nullptr;
+Fn original_shovel_primary_terrain_fallback = nullptr;
+Fn original_shovel_cast_secondary = nullptr;
 bool use_cpp_shovel_marker = false;
 bool trace_shovel_marker = false;
 
@@ -2028,11 +2062,44 @@ bool try_shovel_marker_terrain_sample(CPU& cpu) {
     return true;
 }
 
-void shovel_marker_primary_adapter(CPU& cpu) {
+void shovel_cast_terrain_fallback(CPU& cpu, acnh::TerrainFallback fallback, Fn original) {
+    const auto point = cpu.x[0];
+    const auto before_x = ld<uint32_t>(point);
+    const auto before_z = ld<uint32_t>(point + 8);
     const auto resume = cpu.x[30] - main_base;
+    const bool secondary = fallback == acnh::TerrainFallback::secondary;
+    const bool native = use_cpp_shovel_cast_height && use_cpp_sampler_terrain
+        && (secondary ? use_cpp_terrain_secondary : use_cpp_terrain_primary);
+    if (native) {
+        cpu.x[0] = route_terrain_fallback(cpu, fallback, true);
+    } else {
+        original(cpu);
+    }
+    if (trace_shovel_cast_height)
+        log("acnh shovel height chain %s entry=%x call=%llx scope=%u moved=%u out=%x",
+            native ? "cpp" : "original", secondary ? 0x87aa70 : 0x87a980,
+            static_cast<unsigned long long>(resume - 4), unsigned(ShovelHeightScope::cast),
+            unsigned(before_x != ld<uint32_t>(point) || before_z != ld<uint32_t>(point + 8)),
+            unsigned(cpu.x[0]));
+}
+
+void shovel_cast_secondary_adapter(CPU& cpu) {
+    if (cpu.x[30] == main_base + 0x83ab2c && is_cast_sampler_frame(cpu.x[29], false)) {
+        shovel_cast_terrain_fallback(cpu, acnh::TerrainFallback::secondary, original_shovel_cast_secondary);
+    } else {
+        original_shovel_cast_secondary(cpu);
+    }
+}
+
+void shovel_primary_terrain_fallback_adapter(CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    if ((resume == 0x83b0e4 || resume == 0x83ab10) && is_cast_sampler_frame(cpu.x[29], resume == 0x83b0e4)) {
+        shovel_cast_terrain_fallback(cpu, acnh::TerrainFallback::primary, original_shovel_primary_terrain_fallback);
+        return;
+    }
     if (std::find(shovel_marker_primary_resumes.begin(), shovel_marker_primary_resumes.end(), resume)
             == shovel_marker_primary_resumes.end() || !is_shovel_marker_corners_frame(cpu.x[29])) {
-        original_shovel_marker_primary(cpu);
+        original_shovel_primary_terrain_fallback(cpu);
         return;
     }
 
@@ -2042,7 +2109,7 @@ void shovel_marker_primary_adapter(CPU& cpu) {
     if (native) {
         cpu.x[0] = route_terrain_fallback(cpu, acnh::TerrainFallback::primary, true);
     } else {
-        original_shovel_marker_primary(cpu);
+        original_shovel_primary_terrain_fallback(cpu);
     }
     if (trace_shovel_marker)
         log("acnh shovel marker %s entry=87a980 call=%llx moved=%u out=%x",
@@ -4137,6 +4204,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x877130, shovel_terrain_adapter, original_shovel_terrain);
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_SAMPLE");
     use_cpp_terrain_sample = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_SHOVEL_CAST_HEIGHT");
+    use_cpp_shovel_cast_height = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_cast_height = std::getenv("NX_ACNH_SHOVEL_CAST_HEIGHT_TRACE") != nullptr;
+
     mode = std::getenv("NX_ACNH_SHOVEL_MARKER");
     use_cpp_shovel_marker = !mode || std::string_view(mode) == "cpp";
     trace_shovel_marker = std::getenv("NX_ACNH_SHOVEL_MARKER_TRACE") != nullptr;
@@ -4145,8 +4216,11 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
             shovel_marker_adapter<0>, shovel_marker_adapter<1>, shovel_marker_adapter<2>, shovel_marker_adapter<3>};
         for (size_t i = 0; i < marker_adapters.size(); ++i)
             wrap_function(entries, shovel_marker_entries[i], marker_adapters[i], original_shovel_marker[i]);
-        wrap_function(entries, 0x87a980, shovel_marker_primary_adapter, original_shovel_marker_primary);
     }
+    if (use_cpp_shovel_marker || trace_shovel_marker || use_cpp_shovel_cast_height || trace_shovel_cast_height)
+        wrap_function(entries, 0x87a980, shovel_primary_terrain_fallback_adapter, original_shovel_primary_terrain_fallback);
+    if (use_cpp_shovel_cast_height || trace_shovel_cast_height)
+        wrap_function(entries, 0x87aa70, shovel_cast_secondary_adapter, original_shovel_cast_secondary);
     if (use_cpp_terrain_sample || trace_terrain_dispatch || trace_shovel_marker)
         wrap_function(entries, 0x862530, terrain_sample_adapter, original_terrain_sample);
 
@@ -4162,7 +4236,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT");
     use_cpp_shovel_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
-    if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain)
+    if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
 
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_PROVIDER");
@@ -4234,7 +4308,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE");
     use_cpp_shovel_height_parameter_type = !mode || std::string_view(mode) == "cpp";
     trace_shovel_height_parameter_type = std::getenv("NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE_TRACE") != nullptr;
-    if (use_cpp_shovel_height_parameter_type || trace_shovel_height_parameter_type || trace_shovel_height_chain)
+    if (use_cpp_shovel_height_parameter_type || trace_shovel_height_parameter_type || trace_shovel_height_chain || trace_shovel_cast_height)
         wrap_function(entries, 0x22688e4, shovel_height_parameter_type_adapter, original_shovel_height_parameter_type);
 
     trace_shovel_height = std::getenv("NX_ACNH_SHOVEL_HEIGHT_TRACE") != nullptr;
@@ -4244,7 +4318,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     for (size_t i = 0; i < height_adapters.size(); ++i) {
         const char* setting = std::getenv(shovel_height_switches[i]);
         use_cpp_shovel_height[i] = !setting || std::string_view(setting) == "cpp";
-        if (use_cpp_shovel_height[i] || trace_shovel_height || trace_shovel_height_chain || (i == 0 && trace_shovel_point_height))
+        if (use_cpp_shovel_height[i] || trace_shovel_height || trace_shovel_height_chain || trace_shovel_cast_height || (i == 0 && trace_shovel_point_height))
             wrap_function(entries, shovel_height_entries[i], height_adapters[i], original_shovel_height[i]);
     }
 
@@ -4272,7 +4346,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_sampler_terrain = std::getenv("NX_ACNH_SHOVEL_SAMPLER_TERRAIN_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_SHOVEL_SAMPLER_TERRAIN");
     use_cpp_sampler_terrain = !mode || std::string_view(mode) == "cpp";
-    if (use_cpp_terrain_field_material || trace_terrain_fallbacks || trace_sampler_terrain)
+    if (use_cpp_terrain_field_material || trace_terrain_fallbacks || trace_sampler_terrain || trace_shovel_cast_height)
         wrap_function(entries, 0x1285040, terrain_field_material_adapter, original_terrain_field_material);
 
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_MATERIALS");

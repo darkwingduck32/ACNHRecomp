@@ -7,6 +7,7 @@
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
 #include "../../../games/acnh/shovel_item_queries.h"
+#include "../../../games/acnh/shovel_stage.h"
 #include "../../../games/acnh/record_category.h"
 #include "../../../games/acnh/tile_record_flag.h"
 
@@ -1299,6 +1300,83 @@ void shovel_item_query_adapter(CPU& cpu) {
             unsigned(cpu.x[0] & 1));
 }
 
+template<size_t Index>
+void shovel_stage_adapter(CPU& cpu);
+
+struct ShovelStageRoute {
+    uint64_t entry;
+    Fn adapter;
+    Fn original = nullptr;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<ShovelStageRoute, 3> shovel_stage_routes{{
+    {0x16f37d0, shovel_stage_adapter<0>},
+    {0x16f3a18, shovel_stage_adapter<1>},
+    {0x16baf44, shovel_stage_adapter<2>},
+}};
+bool use_cpp_shovel_stage = false;
+bool trace_shovel_stage = false;
+
+struct ShovelStageServices {
+    CPU cpu;
+
+    explicit ShovelStageServices(const CPU& caller) : cpu(caller) {
+        cpu.x[31] -= 0x20;
+        st<uint64_t>(cpu.x[31], caller.x[29]);
+        st<uint64_t>(cpu.x[31] + 8, caller.x[30]);
+        cpu.x[29] = cpu.x[31];
+    }
+
+    bool invoke(acnh::ShovelStageKey key, uint64_t entry, uint64_t resume) const {
+        CPU nested = cpu;
+        nested.x[0] = key.hash;
+        nested.x[30] = main_base + resume;
+        call(nested, main_base + entry);
+        return (nested.x[0] & 1) != 0;
+    }
+
+    bool primary(acnh::ShovelStageKey key) const { return invoke(key, 0x16f37d0, 0x16baf58); }
+    bool secondary(acnh::ShovelStageKey key) const { return invoke(key, 0x16f3a18, 0x16bb510); }
+};
+
+template<size_t Index>
+void shovel_stage_adapter(CPU& cpu) {
+    auto& route = shovel_stage_routes[Index];
+    const uint64_t caller = cpu.x[30] - main_base;
+    bool on_shovel_path;
+    if constexpr (Index == 2) {
+        on_shovel_path = caller == 0x127cb6c && ld<uint64_t>(cpu.x[29] + 8) == main_base + 0x21f7618;
+    } else {
+        constexpr uint64_t resume = Index == 0 ? 0x16baf58 : 0x16bb510;
+        const uint64_t frame = cpu.x[29];
+        on_shovel_path = caller == resume && ld<uint64_t>(frame + 8) == main_base + 0x127cb6c &&
+                         ld<uint64_t>(ld<uint64_t>(frame) + 8) == main_base + 0x21f7618;
+    }
+
+    if (!on_shovel_path) {
+        route.original(cpu);
+        return;
+    }
+
+    const acnh::ShovelStageKey key{static_cast<uint32_t>(cpu.x[0])};
+    if (use_cpp_shovel_stage) {
+        if constexpr (Index == 0) cpu.x[0] = acnh::shovel_stage_primary(key);
+        if constexpr (Index == 1) cpu.x[0] = acnh::shovel_stage_secondary(key);
+        if constexpr (Index == 2) {
+            ShovelStageServices services{cpu};
+            cpu.x[0] = acnh::shovel_stage_matches(key, services);
+        }
+    } else {
+        route.original(cpu);
+    }
+
+    if (trace_shovel_stage && route.samples.fetch_add(1, std::memory_order_relaxed) < 24)
+        log("acnh shovel stage %s entry=%llx key=%x out=%u",
+            use_cpp_shovel_stage ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+            key.hash, unsigned(cpu.x[0] & 1));
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -1424,6 +1502,13 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_shovel_item_queries = std::getenv("NX_ACNH_SHOVEL_ITEM_CLASS_TRACE") != nullptr;
     if (use_cpp_shovel_item_queries || trace_shovel_item_queries)
         for (auto& route : shovel_item_queries)
+            wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_STAGE");
+    use_cpp_shovel_stage = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_stage = std::getenv("NX_ACNH_SHOVEL_STAGE_TRACE") != nullptr;
+    if (use_cpp_shovel_stage || trace_shovel_stage)
+        for (auto& route : shovel_stage_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
 
     mode = std::getenv("NX_ACNH_RECORD_CATEGORY");

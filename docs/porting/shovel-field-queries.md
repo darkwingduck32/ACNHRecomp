@@ -62,7 +62,7 @@ shovel survey consumes these outputs at `0x21f7618`.
 | --- | --- | --- |
 | `0x127cb2c` | Virtual stage lookup | Generated |
 | `0x127cb38` | Hash the stage key | Verified C++ default |
-| `0x127cb68` | `0x16baf44` stage predicate | Generated |
+| `0x127cb68` | `0x16baf44` stage predicate | Verified C++ default with both stage-key helpers |
 | `0x127cc84`, `0x127cf84`, `0x127cfd0`, `0x127cff8` | `0x195033c` field-cell lookup | Verified C++ default on these four call sites |
 | Five calls from `0x127ccb8` through `0x127ce50` | `0x267d6c4` item-ID resolution | Verified C++ default |
 | `0x127cd94`, `0x127cea0` | `0x19ee3b4`, `0x253fe7c` field predicates | Generated |
@@ -73,7 +73,7 @@ and channel bounds through `0x194f798`, initializes an empty item through
 virtual dispatch. The lookup returns the item into the caller's X8
 result buffer. Its X3 argument carries the resolved position. The typed bounds and cell queries are verified defaults on the shovel path.
 The runtime boundary maintains the original routes and calls the generated
-initializer and provider. The original, opt-in and default trials matched
+item initializer. The provider now has a typed C++ default. The original, opt-in and default trials matched
 the result item and resolved position at all four gather call sites.
 
 ## Verified neighborhood path
@@ -86,7 +86,7 @@ Outside the shovel call site, its existing generated entry is used.
 The field provider `0x11e4f58` runs its occupancy filter and record
 selection in C++. It calls five verified handwritten methods for table
 lookup, readiness and indexing. The runtime boundary supplies generated
-context callbacks and continuation resolution and cleanup. The stage rule `0x16baf44`, item
+context callbacks and continuation resolution and cleanup. The item
 initializer `0x267d4ac`, metadata predicate `0x19ee3b4`, extent helper
 `0x253fe7c`, terrain orchestration and item classification also remain
 generated. The runtime adapters keep these calls selectable and preserve
@@ -142,8 +142,11 @@ The classifier and both entry checks now default to C++. The six
 half-tile outcomes exercised the two early rejections. Replay also
 covered accepted results and the remaining descriptor branches.
 
-The next group is the neighborhood stage filter `0x16baf44` and its
-stage-key helpers `0x16f37d0` and `0x16f3a18`. Each of the recorded
-false stage decisions implies both helper calls ran. This group removes
-the stage filter from each shovel gather while leaving stage lookup and
-the provider's lifecycle callbacks at the ABI boundary.
+## Stage filter and next dependencies
+
+The neighborhood stage filter `0x16baf44` and both stage-key helpers
+`0x16f37d0` and `0x16f3a18` now default to C++. The virtual stage
+lookup still returns the runtime stage name. The continuation resolver
+`0x11e4578` and cleanup `0x2540184` are the next pair. A live provider
+query at (78, 138) resolved to (78, 137), which reaches both functions
+through the continuation branch.

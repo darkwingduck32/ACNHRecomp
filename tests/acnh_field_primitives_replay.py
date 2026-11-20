@@ -328,15 +328,15 @@ def live_items(path, expected_route, required_entries):
 
 
 def survey_outcomes(path, tile=None, kind="survey"):
-    prefix = f"acnh shovel {kind} "
+    prefix = "SHOVEL_FIELD_RESULT " if kind == "final" else f"acnh shovel {kind} "
     if tile is not None:
         x, z = tile
         prefix += f"x={x} z={z} "
     outcomes = collections.Counter(line for line in path.read_text(errors="replace").splitlines()
                                    if line.startswith(prefix))
     if not outcomes:
-        raise ValueError(f"{path}: no shovel survey snapshots")
-    print(f"{path}: {outcomes.total()} shovel survey outcomes")
+        raise ValueError(f"{path}: no shovel {kind} snapshots")
+    print(f"{path}: {outcomes.total()} shovel {kind} outcomes")
     return outcomes
 
 
@@ -358,6 +358,7 @@ def main():
                         help="allow extra repeats of identical initialized scratch states")
     parser.add_argument("--live-item", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     parser.add_argument("--item-entry", action="append", type=lambda s: int(s, 16), choices=(0x1a03610, 0x267d6c4))
+    parser.add_argument("--live-final", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     parser.add_argument("--live-neighborhood", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
@@ -386,6 +387,9 @@ def main():
     if args.live_neighborhood and survey_outcomes(args.live_neighborhood[0], args.survey_tile, "neighborhood") != \
             survey_outcomes(args.live_neighborhood[1], args.survey_tile, "neighborhood"):
         raise SystemExit("shovel neighborhood records differ")
+    if args.live_final and survey_outcomes(args.live_final[0], args.survey_tile, "final") != \
+            survey_outcomes(args.live_final[1], args.survey_tile, "final"):
+        raise SystemExit("final shovel flags, action codes or return values differ")
     if args.live_layer_flag:
         original_states, original = live_layer_flags(args.live_layer_flag[0], "original")
         replacement_states, replacement = live_layer_flags(args.live_layer_flag[1], "cpp")

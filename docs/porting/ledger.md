@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 21.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 24.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -247,7 +247,7 @@ All gameplay tests use the same muted single-instance launcher.
 | `0x29cc6d0` | `0x124` | Read cached row value from slot 3 | `0x29cd440` | Reference replay passed |
 
 The [discovery queue](batch-3-candidates.md) holds 100 candidates beyond
-the implementation entries listed here. 23 queue entries have
+the implementation entries listed here. 22 queue entries have
 observed direct callers.
 
 Implementation priority is the [shovel field-query path](shovel-field-queries.md). The queue also holds observed candidates outside that path.
@@ -616,4 +616,29 @@ $o = "$r/tree-shake-original-itemquery1/nx.log"
 $c = "$r/tree-shake-default-itemquery2/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf shovel_item_queries --live $o $c
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
+```
+
+### Neighborhood stage filter
+
+The stage filter `0x16baf44` and predicates `0x16f37d0` and
+`0x16f3a18` default to C++ inside the shovel neighborhood gather.
+They use sorted key sets and retain the original evaluation order.
+`NX_ACNH_SHOVEL_STAGE=original` selects the generated bodies.
+The virtual stage source still supplies the stage name at the boundary.
+
+The individual AArch64 replays matched 1509, 198 and 109 cases
+respectively, including the live stage key, both helper paths,
+accepted keys and adjacent rejected keys. The muted `shovelstage1`
+original and opt-in trials and `shovelstage2` default trial each
+captured five calls per entry. All observed decisions were false.
+Four focal surveys and all neighborhood records matched, along with
+the final action flags, action code and return register at
+`0x21f78dc`. All 13 Release CTest cases passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-shovelstage1"
+$c = "$r/tree-shake-default-shovelstage2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_stage --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
 ```

@@ -41,7 +41,6 @@
 #include <nx/game.h>
 #include "touch_layout.h"
 #include "game_clock.h"
-#include "mod_package.h"
 #include "platform.h"
 #include "project_links.h"
 #include "saves.h"
@@ -638,13 +637,6 @@ void page_game() {
     row("ui.language", "ui.language.desc", [&](float w) { combo("ui.language", "auto", ui_langs, w); });
     row("video.show_fps", "video.show_fps.desc", [&](float w) { toggle("video.show_fps", config_show_fps(), w); });
 
-    static const bool half_tiles = mod_package::build_id(plat::data_root()) == "FF1D1C05670DB6021C85B624A710B963";
-    if (half_tiles) {
-        row("game.field_placement", "game.field_placement.desc", [&](float w) {
-            combo("game.field_placement", "tile", {{"tile", tr("game.placement.tile")}, {"east", tr("game.placement.east")},
-                  {"south", tr("game.placement.south")}, {"southeast", tr("game.placement.southeast")}}, w);
-        });
-    }
     camera_settings();
     section("game.section.time");
     row("game.time_travel.sync", "game.time_travel.sync.desc", [&](float w) { toggle("game.time_travel_enabled", true, w); });

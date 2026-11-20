@@ -218,12 +218,6 @@ const Entry kEn[] = {
     {"ui.language", "Menu language"},
     {"ui.language.desc", "Language of this settings screen."},
     {"game.section.time", "Time"},
-    {"game.field_placement", "Planting and burial position"},
-    {"game.field_placement.desc", "Choose where to plant or bury offline. If the offset is blocked, the item stays on the selected whole tile."},
-    {"game.placement.tile", "Whole tile"},
-    {"game.placement.east", "0.5 east"},
-    {"game.placement.south", "0.5 south"},
-    {"game.placement.southeast", "0.5 east and south"},
     {"game.time_travel.sync", "Real-time sync"},
     {"game.time_travel.sync.desc",
      "When on, the island follows this computer's date and time. When off, set a custom date and time; it still "

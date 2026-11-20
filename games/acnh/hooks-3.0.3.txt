@@ -17,18 +17,3 @@
 3c4b20c  # button handler input entry (v3_0_3.cpp; 3.0.2 main+3c4b1fc)
 
 include features/camera/hooks-3.0.3.txt
-21f7618  # shovel 3x3 field survey complete, before classifying the selected tile
-23e0808  # tree shake preparation, after masking the selected trunk coordinates
-23e0f50  # tree shake, before dispatching the visual event rectangle
-10e8d00  # field actor effect dispatch, retain fractional trunk for shake and fruit effects
-23dff18  # center of the trunk selected by the action-button probe
-23dfcec  # initialize the native button probe's ray index
-23dfd14  # advance to the next ray after a missed tree contact
-23e0394  # center of the trunk for the native approach check
-23e0698  # tree shake pose target
-21c128c  # new plant anchor, before committing its field footprint
-21c303c  # burial anchor after removing the original hole
-21f9918  # selected buried mark before native removal
-21f991c  # refresh its field actor after successful removal
-21c12ac  # refresh fractional plant after the field write
-21c3044  # refresh fractional burial after the field write

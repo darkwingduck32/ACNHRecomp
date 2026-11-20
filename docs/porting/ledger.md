@@ -247,7 +247,7 @@ All gameplay tests use the same muted single-instance launcher.
 | `0x29cc6d0` | `0x124` | Read cached row value from slot 3 | `0x29cd440` | Reference replay passed |
 
 The [discovery queue](batch-3-candidates.md) holds 100 candidates beyond
-the implementation entries listed here. 21 queue entries have
+the implementation entries listed here. The queue marks entries with
 observed direct callers.
 
 Implementation priority is the [shovel field-query path](shovel-field-queries.md). The queue also holds observed candidates outside that path.
@@ -2083,3 +2083,45 @@ The original trace did not capture the provider tail call
 directly. The provider still uses generated code in this scope.
 Retry the provider and its paired bounds predicate in a smaller
 group with both calls routed through dispatch.
+
+### Provider and bounds inside collision stage queries
+
+The C++ field record selection now uses the typed bounds predicate
+`0x194f798` and provider lookup `0x11eb21c` for collision probes.
+Both paths preserve the record and output root. The direct probe
+returns to `0x15ec8b8` and the stage resolver returns to
+`0x15e7bf4` after the provider tail call. Set
+`NX_ACNH_SHOVEL_COLLISION_PROVIDER=original` for these two
+generated bodies in the collision scope.
+
+| Entry | Independent AArch64 cases | Focal calls per gameplay route |
+| --- | ---: | ---: |
+| `0x194f798` | 464 | 888 |
+| `0x11eb21c` | 344 | 888 |
+
+The original and opt-in collisionprovider1 runs and the default
+collisionprovider3 run matched all 1,776 calls in order, including
+the input tile, accepted bounds, incoming and resulting root,
+and record contents. Of the 888 pairs, 720 came through the stage
+resolver and 168 came directly through the collision item probe.
+The first default run sent movement input 60 frames later, and
+14 bounds inputs differed at the target. The retry scheduled
+inputs at the original HID acknowledgement frames and
+reproduced the full trace. Both C++ routes matched all four
+whole-original classdeep2 outcomes.
+
+All 14 Release CTests and 14 Python profile and replay checks
+passed. These two bodies retain their earlier ledger entries, so
+the Batch 3 count stays at 75 and the discovery queue at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-collisionprovider1"
+$c = "$r/tree-shake-default-collisionprovider3"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_record_leaves --collision --capture "$r/tree-shake-original-recordleaf1/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+Stage filters at the newer classifier and collision call sites
+still use generated code. The step traversal fallback still needs
+a gameplay hit. The next groups cover the stage filters and
+retry the traversal fixture with post-action lateral movement.

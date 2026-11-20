@@ -19,6 +19,7 @@ BUILD = "FF1D1C05670DB6021C85B624A710B963"
 SIZES = {0x194f798: 0x268, 0x11eb21c: 0xe4}
 FRAMES = {0x194f798: 0x10, 0x11eb21c: 0}
 TRACE = re.compile(r"acnh shovel record leaf (original|cpp) entry=([0-9a-f]+) (call=.* out=[0-9a-f]+)")
+COLLISION_TRACE = re.compile(r"acnh shovel collision provider (original|cpp) entry=([0-9a-f]+) (call=.* out=[0-9a-f]+)")
 
 BASE = 0x4000000000
 P, X, R, TABLE, O, SLOT, STAGE = 0x20000, 0x21000, 0x22000, 0x23000, 0x24000, 0x25000, 0x26000
@@ -128,6 +129,7 @@ def main():
     parser.add_argument("--capture", type=Path)
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     parser.add_argument("--survey-tile", nargs=2, type=int, metavar=("X", "Z"))
+    parser.add_argument("--collision", action="store_true", help="Compare the collision-probe gameplay scope")
     parser.add_argument("--no-op", action="store_true")
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
@@ -137,7 +139,8 @@ def main():
     if any(extents.get(entry) != size for entry, size in SIZES.items()):
         parser.error("unexpected record lookup function boundary")
     entries = tuple(SIZES) if args.entry is None else (args.entry,)
-    compare_live(args.live, tuple(args.survey_tile) if args.survey_tile else None, entries, TRACE)
+    compare_live(args.live, tuple(args.survey_tile) if args.survey_tile else None,
+                 entries, COLLISION_TRACE if args.collision else TRACE)
     cases = [(*case, None) for case in branches() if case[1] in entries]
     if args.capture:
         observed = [cap for cap in read_capture(args.capture) if cap.entry in entries]

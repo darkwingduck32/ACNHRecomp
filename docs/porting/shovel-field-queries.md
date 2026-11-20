@@ -10,7 +10,7 @@ The action engine continues to own item removal, inventory, and hole creation.
 | `0x21f7568` to `0x21f75a4` | `0x3f04450`, `0x127c524`, `0x127c6ec` | Prepare the survey scratch data | `0x127c6ec` and `0x127c524` are verified C++ defaults. The generated item initializer remains. |
 | `0x21f7614` | `0x127cab0` | Gather the neighborhood records and occupancy flags | Verified C++ default at the shovel call site |
 | `0x21f76b0` | `0x267d6c4` | Resolve an item ID | Verified C++ default with original auxiliary fallback `0x1a03610` |
-| `0x21f7788` | `0x877130` | Test the selected terrain | Generated, with `0x880870` and `0x1285fe0` in C++ by default |
+| `0x21f7788` | `0x877130` | Test the selected terrain | Verified C++ dispatcher calling the generated rectangle and quadrant checks |
 | `0x21f77ac` through `0x21f7944` | `0x127d05c` | Classify field item and terrain properties | Generated, with `0x113d890` already in C++ |
 | `0x21f787c` | `0x1281c54` | Find the field record at a half-tile position | Verified C++ default through typed field queries |
 | `0x21f790c`, `0x21f7bb8` | `0x8773f0` | Check the alternate terrain condition | Generated, with leaf `0x880a10` |
@@ -120,3 +120,10 @@ called the shared terrain record reader `0x862530` eight times from
 their respective sites at `0x872110` and `0x848ed0`. These four
 functions connect the shovel survey to the terrain record property and
 the layer flag check that already run in C++.
+
+The dispatcher and shared record sampler now default to C++ for the
+observed shovel path. This leaves the rectangle height check
+`0x871f80` and material quadrant check `0x848e68` in generated code.
+The material check can call `0x87a980` and `0x87aa70` for world-position
+fallbacks. The top-level classifying calls `0x127d05c` and
+`0x8773f0` remain generated.

@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 14.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 16.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -247,7 +247,7 @@ All gameplay tests use the same muted single-instance launcher.
 | `0x29cc6d0` | `0x124` | Read cached row value from slot 3 | `0x29cd440` | Reference replay passed |
 
 The [discovery queue](batch-3-candidates.md) holds 100 candidates beyond
-the implementation entries listed here. 24 queue entries have
+the implementation entries listed here. 23 queue entries have
 observed direct callers.
 
 Implementation priority is the [shovel field-query path](shovel-field-queries.md). The queue also holds observed candidates outside that path.
@@ -536,5 +536,34 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 $o = "$r/tree-shake-original-providercell3/nx.log"
 $c = "$r/tree-shake-default-providercell4/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf provider_cell --live $o $c
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
+```
+
+### Shovel terrain dispatcher and shared record reader
+
+`0x877130` and `0x862530` are verified defaults on the shovel terrain
+path. The first converts the tile into half-tile bounds, checks flags,
+and dispatches the material and layer checks. The second composes all
+four ground and overlay samples. The runtime preserves the original
+selectors `NX_ACNH_SHOVEL_TERRAIN_DISPATCH=original` and
+`NX_ACNH_SHOVEL_TERRAIN_SAMPLE=original`.
+
+The dispatcher replay matched 40 cases, including ordered calls,
+coordinate arguments and results. The sample replay matched 328 cases,
+including the order of record writes. The muted original and opt-in
+`terraindispatch1` trials and the default `terraindispatch2` trial each
+captured two terrain decisions and 16 samples (eight from each helper).
+The material records, full neighborhoods and four outcomes at
+(40, 69) matched. Both live terrain decisions were accepted. The
+independent dispatcher replay covers rejection cases. The next
+group replaces the two remaining terrain helpers `0x871f80` and
+`0x848e68`.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-terraindispatch1/nx.log"
+$c = "$r/tree-shake-default-terraindispatch2/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain --live $o $c
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_sample --live $o $c
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
 ```

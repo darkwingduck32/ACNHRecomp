@@ -2398,3 +2398,41 @@ $c = "$r/tree-shake-default-rowcache3"
 & private/venv/Scripts/python -m tests.acnh_field_value_cache_live "$o/nx.log" "$c/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf field_value_cache --capture "$o/nx.log"
 ```
+
+### Sixteen-sector sweep collision
+
+The traversal sweep's call at `0x15f2780` now uses a typed
+collision query for mask 4 and mode `0x10001`, with writable XYZ
+and a separate block flag. The observed calls had no destination
+root. Calls with a destination root use the generated body. The
+C++ route tests the center and all 16 rim points and retains the
+first hit's XYZ. It records the block flag independently of W0.
+Set `NX_ACNH_SHOVEL_SWEEP_COLLISION=original` to select the
+generated sweep collision body. The other cast modes keep their
+existing routes.
+
+Independent AArch64 replay compared 96 portable cases and 36
+captured sweep calls. It checked the callback order, probe XYZ and
+S0, root inputs, returns, and ordered output writes. The original
+center and rim height probes and contact-stage helpers remain
+separate callbacks. The existing simple and mixed cast replays
+also passed all 218 and 162 cases, respectively.
+
+Original and opt-in `sweepcollision1` and default
+`sweepcollision2` matched 342 ordered casts, including 102 hits
+and 240 misses. The measured heading increment was `0x10000000`.
+The traces also matched nine traversal results, ten surveys,
+ten neighborhoods, and 12 final decisions. All 14 Release CTests
+and 14 profile and replay checks passed. This caller uses the
+already counted cast body. Batch 3 is at 85 verified functions
+with 100 candidates in discovery.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-sweepcollision1"
+$c = "$r/tree-shake-default-sweepcollision2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_sweep_collision --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log"
+```
+
+The next group follows the center and rim calls to `0x15e11a0`
+and its surface-height chain.

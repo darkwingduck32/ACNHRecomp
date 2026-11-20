@@ -23,6 +23,7 @@
 #include "../../../games/acnh/shovel_marker.h"
 #include "../../../games/acnh/shovel_collision.h"
 #include "../../../games/acnh/shovel_mixed_cast.h"
+#include "../../../games/acnh/shovel_sweep_collision.h"
 #include "../../../games/acnh/shovel_alternate_terrain.h"
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
@@ -2721,24 +2722,24 @@ struct ShovelStepCastServices : HeightGuestFrame {
     }
 
 
-    bool probe(acnh::ShovelTargetPoint& point, acnh::ShovelStepCastMask mask, bool center) const {
+    bool probe(acnh::ShovelTargetPoint& point, acnh::ShovelStepCastMask mask, bool center, float scalar = 0.f) const {
         const bool height = mask == acnh::ShovelStepCastMask::height;
         const auto address = stack(center ? 0x78 : 0x44);
         put_point(address, point);
         const auto resume = height ? (center ? 0x15ede50 : 0x15ef5b0) : (center ? 0x15edfd8 : 0x15ef894);
-        const auto result = invoke_child(main_base + (height ? 0x15e11a0 : 0x15ec764), resume, {address, 1, 0});
+        const auto result = invoke_child(main_base + (height ? 0x15e11a0 : 0x15ec764), resume, {address, 1, 0}, scalar);
         point = {ld<float>(address), ld<float>(address + 4), ld<float>(address + 8)};
         return (result.x[0] & 1) != 0;
     }
 
-    uint32_t stage_hash(uint64_t owner, uint32_t index, bool center) const {
+    uint32_t stage_hash(uint64_t owner, uint32_t index, bool center, float scalar = 0.f) const {
         const uint64_t resume = center ? 0x15ef9a0 : 0x15ef678;
         const auto getter = ld<uint64_t>(ld<uint64_t>(owner) + 0x18);
-        const auto name = invoke_child(getter, resume, {owner, index}).x[0];
-        return uint32_t(invoke_child(main_base + 0x5bd550, resume + 0xc, {ld<uint64_t>(name), 0}).x[0]);
+        const auto name = invoke_child(getter, resume, {owner, index}, scalar).x[0];
+        return uint32_t(invoke_child(main_base + 0x5bd550, resume + 0xc, {ld<uint64_t>(name), 0}, scalar).x[0]);
     }
 
-    void record_height_contact(acnh::ShovelTargetPoint point, uint32_t key, bool center) const {
+    uint64_t lookup_height_contact(acnh::ShovelTargetPoint point, uint32_t key, bool center, float scalar) const {
         const auto coordinate = [](float value) { return std::isnan(value) ? 0 : acnh::terrain_half_tile(value); };
         const auto descriptor = stack(0x50);
         const auto root = stack(0x98);
@@ -2752,9 +2753,38 @@ struct ShovelStepCastServices : HeightGuestFrame {
         st<uint64_t>(descriptor, ld<uint64_t>(main_base + 0x4abfe68) + 0x10);
         st<uint32_t>(descriptor + 8, 0);
         st<uint32_t>(descriptor + 12, key);
-        const auto flag = invoke_child(main_base + 0x16baf44, center ? 0x15ef9e4 : 0x15ef6ec, {key}).x[0] & 1;
+        const auto flag = invoke_child(main_base + 0x16baf44, center ? 0x15ef9e4 : 0x15ef6ec, {key}, scalar).x[0] & 1;
         st<uint8_t>(descriptor + 16, uint8_t(flag));
-        invoke_child(main_base + 0x195190c, center ? 0x15efa00 : 0x15ef708, {descriptor, 0, tile, root});
+        invoke_child(main_base + 0x195190c, center ? 0x15efa00 : 0x15ef708, {descriptor, 0, tile, root}, scalar);
+        return root;
+    }
+
+    void record_height_contact(acnh::ShovelTargetPoint point, uint32_t key, bool center) const {
+        lookup_height_contact(point, key, center, 0.f);
+    }
+};
+
+struct ShovelSweepCollisionServices : ShovelStepCastServices {
+    using ShovelStepCastServices::ShovelStepCastServices;
+    float contact_scalar = 0.f;
+
+    bool height_probe(acnh::ShovelTargetPoint& point, bool center, float scalar) const {
+        return probe(point, acnh::ShovelStepCastMask::height, center, scalar);
+    }
+
+    uint32_t stage_hash(uint64_t owner, uint32_t index, bool center) const {
+        return ShovelStepCastServices::stage_hash(owner, index, center, contact_scalar);
+    }
+
+    acnh::ShovelSweepCollisionRoots contact_roots(acnh::ShovelTargetPoint point, bool center) {
+        const auto reference_slot = main_base + 0x4ab5d40;
+        auto reference = center ? uint64_t{} : ld<uint64_t>(reference_slot);
+        contact_scalar = center ? point.x : point.z;
+        const auto key = acnh::shovel_step_cast_stage_key(main_base, center, GuestMemory{}, *this);
+        const auto root = lookup_height_contact(point, key, center, contact_scalar);
+        if (center) reference = ld<uint64_t>(reference_slot);
+        return {{ld<int32_t>(root + 8), ld<int32_t>(root + 12)},
+                {ld<int32_t>(reference + 8), ld<int32_t>(reference + 12)}};
     }
 };
 
@@ -2764,8 +2794,49 @@ bool trace_shovel_simple_cast = false;
 bool use_cpp_shovel_mixed_cast = false;
 bool trace_shovel_mixed_cast = false;
 
+bool use_cpp_shovel_sweep_collision = false;
+bool trace_shovel_sweep_collision = false;
+
+void shovel_sweep_collision_adapter(CPU& cpu) {
+    const auto request = cpu.x[0];
+    const auto output = cpu.x[1];
+    const auto flag = cpu.x[2];
+    const float radius = ld<float>(request + 0xc);
+    const float range = radius * ld<float>(request + 0x10);
+    const auto mode = ld<uint32_t>(request + 0x18);
+    if (!output || !flag || cpu.x[3] || ld<uint32_t>(request + 0x14) != 4 || mode != 0x10001
+        || radius < 0.f || !std::isfinite(range)) {
+        original_shovel_step_cast(cpu);
+        return;
+    }
+    const acnh::ShovelSweepCollisionQuery query{{ld<float>(request), ld<float>(request + 4), ld<float>(request + 8)},
+                                                range, output, flag};
+    const auto initial = trace_shovel_sweep_collision ? shovel_xyz_bits(output) : std::array<uint32_t, 3>{};
+    const auto initial_flag = trace_shovel_sweep_collision ? ld<uint8_t>(flag) : 0;
+    if (use_cpp_shovel_sweep_collision) {
+        GuestMemory memory;
+        ShovelSweepCollisionServices services{cpu};
+        cpu.x[0] = acnh::shovel_sweep_collision(main_base, query, memory, services);
+    } else {
+        original_shovel_step_cast(cpu);
+    }
+    if (trace_shovel_sweep_collision) {
+        const auto after = shovel_xyz_bits(output);
+        log("acnh shovel sweep collision %s entry=15ed290 call=15f2780 point=%x,%x,%x range=%x step=%x initial=%x,%x,%x,%x final=%x,%x,%x,%x out=%x",
+            use_cpp_shovel_sweep_collision ? "cpp" : "original",
+            std::bit_cast<uint32_t>(query.center.x), std::bit_cast<uint32_t>(query.center.y),
+            std::bit_cast<uint32_t>(query.center.z), std::bit_cast<uint32_t>(range), ld<uint32_t>(main_base + 0x5140234),
+            initial[0], initial[1], initial[2], unsigned(initial_flag), after[0], after[1], after[2], unsigned(ld<uint8_t>(flag)),
+            unsigned(cpu.x[0]));
+    }
+}
+
 void shovel_step_cast_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
+    if (resume == 0x15f2784 && acnh_shovel_sweep_frame(cpu.x[29])) {
+        shovel_sweep_collision_adapter(cpu);
+        return;
+    }
     const bool mixed = resume == 0x15f0fc8;
     const auto point = cpu.x[0];
     if ((!mixed && resume != 0x15f0f14 && resume != 0x15f0f4c) || cpu.x[1] || cpu.x[2] || cpu.x[3]
@@ -4837,7 +4908,11 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_MIXED_CAST");
     use_cpp_shovel_mixed_cast = !mode || std::string_view(mode) == "cpp";
     trace_shovel_mixed_cast = std::getenv("NX_ACNH_SHOVEL_MIXED_CAST_TRACE") != nullptr;
-    if (use_cpp_shovel_simple_cast || trace_shovel_simple_cast || use_cpp_shovel_mixed_cast || trace_shovel_mixed_cast)
+    mode = std::getenv("NX_ACNH_SHOVEL_SWEEP_COLLISION");
+    use_cpp_shovel_sweep_collision = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_sweep_collision = std::getenv("NX_ACNH_SHOVEL_SWEEP_COLLISION_TRACE") != nullptr;
+    if (use_cpp_shovel_simple_cast || trace_shovel_simple_cast || use_cpp_shovel_mixed_cast || trace_shovel_mixed_cast
+        || use_cpp_shovel_sweep_collision || trace_shovel_sweep_collision)
         wrap_function(entries, 0x15ed290, shovel_step_cast_adapter, original_shovel_step_cast);
 
     mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_PROBES");

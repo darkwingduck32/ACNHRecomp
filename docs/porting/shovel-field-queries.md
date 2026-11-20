@@ -241,9 +241,12 @@ segment sweep modes, and their height chains in the side-strip
 fixture. Both sweeps use the C++ stage-name, hash, and filter
 functions and the typed destination record and bounds queries.
 The outer traversal also calls typed C++ for five observed
-surface sites and two stage-height sites. The traversal parent,
-recursive traversal, the stage base and item resolver on that
-outer path, and the sweep's 16-sector collision callback still
-use generated code.
+surface sites and two stage-height sites. The sweep collision
+query and 16-sector scan run in C++ for the observed calls with
+separate outputs and no destination root. The traversal parent,
+recursive traversal, its stage base and item resolver, and the
+sweep collision's center and rim probe callbacks use generated
+code.
 
 [Traversal height verification](ledger.md#direct-heights-inside-outer-shovel-traversal)
+[Sweep collision verification](ledger.md#sixteen-sector-sweep-collision)

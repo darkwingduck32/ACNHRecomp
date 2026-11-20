@@ -25,6 +25,17 @@ uint32_t shovel_step_cast_stage_key(uint64_t base, bool center, const Memory& me
     return memory.template read<uint32_t>(stage + 0x38);
 }
 
+template<class Memory>
+ShovelTargetPoint shovel_cast_rim_offset(uint64_t trig, uint32_t heading, float radius, const Memory& memory) {
+    const auto read_float = [&](uint64_t address) {
+        return std::bit_cast<float>(memory.template read<uint32_t>(address));
+    };
+    const auto row = trig + 16 * (heading >> 24);
+    const float fraction = static_cast<float>(heading & 0xffffffu) * 0x1p-24f;
+    return {std::fma(read_float(row + 4), fraction, read_float(row)) * radius, radius * 0.f,
+            std::fma(read_float(row + 12), fraction, read_float(row + 8)) * radius};
+}
+
 template<class Memory, class Probe>
 uint32_t shovel_walk_step_cast(uint64_t base, ShovelStepCastQuery query, const Memory& memory, Probe probe) {
     if (const auto result = probe(query.center, true)) return result;
@@ -32,17 +43,9 @@ uint32_t shovel_walk_step_cast(uint64_t base, ShovelStepCastQuery query, const M
 
     const auto trig = memory.template read<uint64_t>(base + 0x4ab2d00);
     const auto step = memory.template read<uint32_t>(base + 0x5140230);
-    const auto read_float = [&](uint64_t address) {
-        return std::bit_cast<float>(memory.template read<uint32_t>(address));
-    };
-    const float dy = query.radius * 0.f;
     for (unsigned sector = 0; sector < 8; ++sector) {
-        const uint32_t heading = step * sector;
-        const auto row = trig + 16 * (heading >> 24);
-        const float fraction = static_cast<float>(heading & 0xffffffu) * 0x1p-24f;
-        const float dx = std::fma(read_float(row + 4), fraction, read_float(row)) * query.radius;
-        const float dz = std::fma(read_float(row + 12), fraction, read_float(row + 8)) * query.radius;
-        ShovelTargetPoint point{query.center.x + dx, query.center.y + dy, query.center.z + dz};
+        const auto offset = shovel_cast_rim_offset(trig, step * sector, query.radius, memory);
+        ShovelTargetPoint point{query.center.x + offset.x, query.center.y + offset.y, query.center.z + offset.z};
         if (const auto result = probe(point, false)) return result;
     }
     return 0;

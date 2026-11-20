@@ -67,3 +67,5 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 127cab0 # Gather the shovel survey records
 # dispatch 877130 # Test the shovel terrain for a complete tile
 # dispatch 862530 # Sample terrain records for the shovel terrain tests
+# dispatch 871f80 # Check elevation across a shovel terrain rectangle
+# dispatch 848e68 # Query the four shovel terrain materials

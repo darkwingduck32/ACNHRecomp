@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 16.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 18.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -567,3 +567,28 @@ $c = "$r/tree-shake-default-terraindispatch2/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_sample --live $o $c
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
 ```
+
+### Shovel rectangle height and quadrant materials
+
+`0x871f80` and `0x848e68` default to C++ under the shovel terrain
+dispatcher. The former checks cell flags and the height range. The
+latter selects all four quadrant materials, using the previously verified
+sampler and generated world-position fallbacks `0x87a980` and
+`0x87aa70`. Set `NX_ACNH_SHOVEL_TERRAIN_LEVEL=original` or
+`NX_ACNH_SHOVEL_TERRAIN_MATERIALS=original` to select the original.
+
+Each helper matched two original AArch64 executions on 224 independent
+cases, including overlay and fallback call order. The muted
+`terrainhelpers1` original and opt-in trials and the
+`terrainhelpers2` default trial captured two rectangle checks and
+eight quadrant checks each. Four focal shovel outcomes and their complete
+neighborhood records at (40, 69) matched. The Release suite passed all 13
+CTest tests.
+
+The whole-tile fixture `shovelclassify1` missed item classification.
+The smaller half-tile retry `shovelclassifyhalf1` captured 24 calls into
+`0x127d05c`, 24 calls to its first gate `0x267da10` at `0x127d074`,
+and 12 to `0x267e024` at `0x127d080`. Neither attempt observed the
+alternate terrain route. The whole-tile probe separately observed
+the stage predicate `0x16baf44` and one metadata predicate
+`0x19ee3b4` under the stock neighborhood gather.

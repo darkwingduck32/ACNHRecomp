@@ -1,4 +1,5 @@
 #include "../../../games/acnh/angle_difference.h"
+#include "../../../games/acnh/angular_cosine.h"
 #include "../../../games/acnh/approach_position.h"
 #include "../../../games/acnh/heading.h"
 
@@ -21,6 +22,9 @@ namespace {
 
 constexpr uint64_t heading_entry = 0x5f0400;
 constexpr uint64_t angle_difference_entry = 0x5f05f8;
+constexpr uint64_t angular_cosine_entry = 0x5f06dc;
+constexpr uint64_t cosine_table_offset = 0x4099798;
+constexpr uint64_t cosine_table_pointer = 0x4ab2d00;
 constexpr uint64_t approach_entry = 0x3db4b60;
 constexpr uint64_t heading_table = 0x409a7a8;
 constexpr uint64_t shake_return = 0x23e03dc;
@@ -36,6 +40,10 @@ bool trace_angle_difference = false;
 Fn original_approach = nullptr;
 bool use_cpp_approach = false;
 bool trace_approach = false;
+std::array<acnh::CosineSample, 129> cosine_table;
+Fn original_angular_cosine = nullptr;
+bool use_cpp_cosine = false;
+bool trace_cosine = false;
 
 void heading_adapter(CPU& cpu) {
     const float x = cpu.v[0].f32[0];
@@ -119,6 +127,38 @@ void approach_adapter(CPU& cpu) {
     }
 }
 
+void angular_cosine_adapter(CPU& cpu) {
+    const uint32_t a = static_cast<uint32_t>(cpu.x[0]);
+    const uint32_t b = static_cast<uint32_t>(cpu.x[1]);
+    const uint64_t caller = cpu.x[30] - main_base;
+    const bool replaced = use_cpp_cosine &&
+        ld<uint64_t>(main_base + cosine_table_pointer) == main_base + cosine_table_offset;
+    if (replaced) cpu.v[0].f32[0] = acnh::angular_cosine(a, b, cosine_table);
+    else original_angular_cosine(cpu);
+    if (trace_cosine) {
+        log("acnh angular cosine %s caller=%08x w0=%08x w1=%08x s0=%08x",
+            replaced ? "cpp" : "original", static_cast<uint32_t>(caller), a, b,
+            std::bit_cast<uint32_t>(cpu.v[0].f32[0]));
+    }
+}
+
+void install_angular_cosine(const ModuleInfo& module, std::span<FuncEntry> entries) {
+    const char* mode = std::getenv("NX_ACNH_ANGULAR_COSINE");
+    use_cpp_cosine = mode && std::string_view(mode) == "cpp";
+    trace_cosine = std::getenv("NX_ACNH_ANGULAR_COSINE_TRACE") != nullptr;
+    if (!use_cpp_cosine && !trace_cosine) return;
+
+    constexpr uint64_t table_bytes = 16 * std::tuple_size_v<decltype(cosine_table)>;
+    if (cosine_table_offset < module.ro || cosine_table_offset + table_bytes > module.ro + module.ro_size ||
+        cosine_table_pointer < module.data || cosine_table_pointer + 8 > module.data + module.data_size)
+        return;
+    if (!wrap_function(entries, angular_cosine_entry, angular_cosine_adapter, original_angular_cosine)) return;
+    for (size_t i = 0; i < cosine_table.size(); ++i) {
+        const uint64_t address = main_base + cosine_table_offset + 16 * i;
+        cosine_table[i] = {ld<float>(address + 8), ld<float>(address + 12)};
+    }
+}
+
 void install_heading(const ModuleInfo& module, std::span<FuncEntry> entries) {
     const char* mode = std::getenv("NX_ACNH_HEADING");
     use_cpp_heading = !mode || std::string_view(mode) == "cpp";
@@ -139,6 +179,7 @@ void install_math_adapters(const ModuleInfo& module, FuncEntry* functions) {
     main_base = module.base;
     std::span<FuncEntry> entries{functions, module.func_count};
     install_heading(module, entries);
+    install_angular_cosine(module, entries);
     const char* mode = std::getenv("NX_ACNH_ANGLE_DIFFERENCE");
     use_cpp_angle_difference = !mode || std::string_view(mode) == "cpp";
     trace_angle_difference = std::getenv("NX_ACNH_ANGLE_DIFFERENCE_TRACE") != nullptr;

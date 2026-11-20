@@ -32,14 +32,14 @@ the promoted default. Keep the original selectable.
 ## Active batch 2
 
 This batch targets ten verified ports on the same 3.0.3 build, starting
-with the [candidate queue](next-candidates.md). Verified so far, 1.
+with the [candidate queue](next-candidates.md). Verified so far, 4.
 
 | Main entry | Provisional function | Stage | Next action |
 | --- | --- | --- | --- |
 | `0x24699b8` | Initialize working action bits once | Verified | Original, opt-in, and default route validated in the notes below. |
-| `0x1218220` | Read a tile record's bit flag | Default validation | Replay the promoted default in the extended-field trial. |
-| `0x1146470` | Resolve a column using a 25-slot cache | Live trial | Compare traced output and cache writes with Unicorn. |
-| `0x113d890` | Test a bit in a cached record column | Live trial | Compare the slot-22 trace alongside the column lookup. |
+| `0x1218220` | Read a tile record's bit flag | Verified | The extended-field trial replayed the promoted default. |
+| `0x1146470` | Resolve a column using a 25-slot cache | Verified | The muted trial replayed the promoted default. |
+| `0x113d890` | Test a bit in a cached record column | Verified | The muted trial replayed the promoted default. |
 | `0x1632d80` | Initialize four inline string buffers and descriptors | Queued | Validate self-relative pointers and exact writes. |
 | `0x5bd550` | Hash a terminated byte string with a seed | Queued | Capture a field-key call and validate dispatch costs. |
 | `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Queued | Establish repeatable input state and compare ordered writes. |
@@ -79,8 +79,7 @@ Use `NX_ACNH_ACTION_MASK=original` for the stock path.
 The tile query's constant-false candidate failed case 1. All 242
 synthetic cases and 24 paired live snapshots passed against two fresh
 original executions. Both opt-in gameplay runs hit the query 12 times
-from `main+0x14c4a70`. The default is under test in the extended-field
-trial. `NX_ACNH_TILE_RECORD_FLAG=original` selects the original.
+from `main+0x14c4a70`. The default matched all 266 cases in the comparison with tree-shake-original-ext1/nx.log. `NX_ACNH_TILE_RECORD_FLAG=original` selects the original.
 The captures are `tree-shake-original-tile1/nx.log` and
 `tree-shake-cpp-tile1/nx.log` in the campaign artifact directory.
 
@@ -88,7 +87,13 @@ The shared cache helper now supports `main+0x1146470` and
 `main+0x113d890`. The no-op candidates failed on cold initialization.
 The replacements matched 241 and 242 synthetic cases including ordered
 writes, and the 14-slot query still passed all 321 synthetic cases.
-The runtime routes remain opt-in during their live trials.
+Each entry hit its replacement 12 times in the opt-in trial and 12 times
+through the default route. The muted comparison used
+`tree-shake-original-state2/nx.log` and `tree-shake-cpp-state2/nx.log`,
+where the latter did not set either extended-field override. All 265
+column lookup cases and 266 bit query cases matched two Unicorn runs,
+including the full cache state before and after each call. Switch back
+with `NX_ACNH_FIELD_COLUMN_25=original` and `NX_ACNH_CACHED_FIELD_BIT=original`.
 
 ```powershell
 & private/venv/Scripts/python -m private.heading.compare_leaf tile_record_flag

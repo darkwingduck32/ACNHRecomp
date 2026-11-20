@@ -402,7 +402,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     for (size_t i = 0; i < cached_field_routes.size(); ++i) {
         auto& route = cached_field_routes[i];
         mode = std::getenv(cache_modes[i]);
-        route.use_cpp = mode && std::string_view(mode) == "cpp";
+        route.use_cpp = !mode || std::string_view(mode) == "cpp";
         if (route.use_cpp || trace_cached_field)
             wrap_function(entries, route.entry, route.adapter, route.original);
     }

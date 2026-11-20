@@ -7,6 +7,7 @@
 #include "config.h"
 #include "hle_ldn.h"
 
+#include <array>
 #include <atomic>
 #include <cstdlib>
 
@@ -224,6 +225,17 @@ void select_buried_target(CPU& c) {
     }
 }
 
+std::array<char, 36 * 16 + 1> survey_records_hex(uint64_t table) {
+    constexpr char digits[] = "0123456789abcdef";
+    std::array<char, 36 * 16 + 1> result{};
+    for (size_t record = 0; record < 36; ++record) {
+        const uint64_t bits = ld<uint64_t>(table + 8 * record);
+        for (size_t digit = 0; digit < 16; ++digit)
+            result[16 * record + digit] = digits[(bits >> (60 - 4 * digit)) & 15];
+    }
+    return result;
+}
+
 void buried_target(CPU& c) {
     static const bool trace = std::getenv("NX_ACNH_SHOVEL_SURVEY_TRACE") != nullptr;
     static std::atomic<unsigned> samples{0};
@@ -235,8 +247,10 @@ void buried_target(CPU& c) {
     const auto stack = c.x[31];
     const auto x = static_cast<int32_t>(c.x[26]);
     const auto z = static_cast<int32_t>(c.x[27]);
-    const int64_t column = int64_t{x} - ld<int32_t>(stack + 0x210);
-    const int64_t row = int64_t{z} - ld<int32_t>(stack + 0x214);
+    const int32_t origin_x = ld<int32_t>(stack + 0x210);
+    const int32_t origin_z = ld<int32_t>(stack + 0x214);
+    const int64_t column = int64_t{x} - origin_x;
+    const int64_t row = int64_t{z} - origin_z;
     if (column < 0 || column >= 3 || row < 0 || row >= 3) {
         select_buried_target(c);
         return;
@@ -248,7 +262,11 @@ void buried_target(CPU& c) {
     const auto third = ld<uint64_t>(slots + 16);
     const auto fourth = ld<uint64_t>(slots + 24);
     const auto mask = ld<uint32_t>(stack + 0xc8);
+    const auto before = survey_records_hex(c.x[22]);
     select_buried_target(c);
+    log("acnh shovel neighborhood x=%d z=%d origin=%d,%d before=%x after=%x input=%s records=%s",
+        x, z, origin_x, origin_z, mask, ld<uint32_t>(stack + 0xc8),
+        before.data(), survey_records_hex(c.x[22]).data());
     log("acnh shovel survey x=%d z=%d before=%x after=%x records=%llx,%llx,%llx,%llx selected=%llx",
         x, z, mask, ld<uint32_t>(stack + 0xc8),
         static_cast<unsigned long long>(first), static_cast<unsigned long long>(second),

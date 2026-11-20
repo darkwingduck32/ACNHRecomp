@@ -46,6 +46,14 @@ class FunctionReplayTest(unittest.TestCase):
         self.assertEqual(result.registers[UC_ARM64_REG_X0], 42)
         self.assertEqual(result.calls, ((0x10004, 0x10100, 35),))
 
+    def test_replays_a_declared_tail_call(self):
+        code = bytes.fromhex("40000014")  # b 0x10100
+        callee = bytes.fromhex("001c0091c0035fd6")  # add x0, x0, #7; ret
+        result = function_replay.run(0x10000, code, {UC_ARM64_REG_X0: 35},
+                                     (UC_ARM64_REG_X0,), {}, callees={0x10000: (0x10100, callee)})
+        self.assertEqual(result.registers[UC_ARM64_REG_X0], 42)
+        self.assertEqual(result.calls, ((0x10000, 0x10100, 35),))
+
     def test_rejects_call_not_matching_declared_target(self):
         code = bytes.fromhex("fd7bbfa93f000094fd7bc1a8c0035fd6")
         callee = bytes.fromhex("c0035fd6")

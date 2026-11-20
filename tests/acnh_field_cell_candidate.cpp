@@ -46,8 +46,8 @@ struct CellServices {
 
 int main() {
     uint64_t base, layer, position, root, output, address;
-    uint32_t channel, count, value;
-    while (std::cin >> base >> layer >> channel >> position >> root >> output >> count) {
+    uint32_t operation, channel, count, value;
+    while (std::cin >> operation >> base >> layer >> channel >> position >> root >> output >> count) {
         CellMemory memory;
         for (uint32_t i = 0; i < count; ++i) {
             if (!(std::cin >> address >> value)) return 1;
@@ -55,7 +55,10 @@ int main() {
         }
         const nx::acnh::FieldQueries fields{base, memory};
         CellServices services{memory, fields, {}};
-        fields.read_cell({{layer}, {channel}, {position}}, {output}, {root}, services);
+        if (operation == 0)
+            fields.read_cell({{layer}, {channel}, {position}}, {output}, {root}, services);
+        else
+            fields.initialize_survey_items({output}, services);
         std::cout << services.calls.size();
         for (const auto& [entry, input] : services.calls) std::cout << ' ' << entry << ' ' << input;
         for (const auto& [place, size, bits] : memory.writes) std::cout << ' ' << place << ' ' << size << ' ' << bits;

@@ -3,6 +3,7 @@ import argparse
 import collections
 import hashlib
 import itertools
+import random
 import struct
 import subprocess
 from pathlib import Path
@@ -17,6 +18,7 @@ from tools.acnh_version import build_id
 
 BUILD = "FF1D1C05670DB6021C85B624A710B963"
 BASE, ENTRY, SIZE = 0x4000000000, 0x195033C, 0x10C
+PREPARE, PREPARE_SIZE = 0x127c524, 0x1c8
 LAYER, POINT, ROOT, OUTPUT = 0x20000, 0x21000, 0x22000, 0x23000
 OWNER_PTR, OWNER, NODE, PROVIDER = 0x24000, 0x25000, 0x26000, 0x27000
 
@@ -70,11 +72,31 @@ def live_cases(path, expected_route):
     return cases
 
 
+def live_prepared_items(path, expected_route):
+    raw = path.read_bytes()
+    entries = collections.Counter()
+    prefix = f"acnh shovel items {expected_route} "
+    for line in raw.decode(errors="replace").splitlines():
+        if not line.startswith("acnh shovel items "):
+            continue
+        if not line.startswith(prefix) or " caller=21f7574 " not in line:
+            raise ValueError(f"{path}: unexpected survey item route or caller")
+        after = line.rsplit(" after=", 1)[-1]
+        if len(bytes.fromhex(after)) != 36 * 8:
+            raise ValueError(f"{path}: incomplete survey item block")
+        entries[after] += 1
+    if not entries:
+        raise ValueError(f"{path}: no survey item initializer calls")
+    print(f"{path}: {entries.total()} survey item blocks, SHA-256 {hashlib.sha256(raw).hexdigest()}")
+    return entries
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--live-prep", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
@@ -89,25 +111,40 @@ def main():
     }
     if args.live and live_cases(args.live[0], "original") != live_cases(args.live[1], "cpp"):
         raise SystemExit("live field-cell inputs or outcomes differ")
-    inputs = list(fixtures())
+    if args.live_prep and live_prepared_items(args.live_prep[0], "original") != live_prepared_items(args.live_prep[1], "cpp"):
+        raise SystemExit("live survey item blocks differ")
+    inputs = [(0, channel, root, memory) for channel, root, memory in fixtures()]
+    rng = random.Random(303)
+    inputs.extend((1, 0, 0, {OUTPUT: rng.randbytes(36 * 8)}) for _ in range(32))
+    if ranges.get(PREPARE) != PREPARE_SIZE:
+        parser.error("unexpected survey item initializer boundary")
+    prepare_callees = {
+        BASE + address: (BASE + 0x267d4ac, SEED)
+        for address in (*range(0x127c53c, 0x127c6d8, 12), 0x127c6e8)
+    }
     lines = []
-    for channel, root, memory in inputs:
+    for operation, channel, root, memory in inputs:
         pairs = [(address + i, byte) for address, data in memory.items() for i, byte in enumerate(data)]
-        lines.append(f"{BASE} {LAYER} {channel} {POINT} {root} {OUTPUT} {len(pairs)} " +
+        lines.append(f"{operation} {BASE} {LAYER} {channel} {POINT} {root} {OUTPUT} {len(pairs)} " +
                      " ".join(f"{address} {value}" for address, value in pairs))
     actual = subprocess.run([str(args.candidate.resolve())], input="\n".join(lines) + "\n", text=True,
                             capture_output=True, check=True, timeout=30).stdout.splitlines()
     if len(actual) != len(inputs):
         raise SystemExit("candidate returned the wrong number of cases")
     code = bytes(module.image[ENTRY:ENTRY+SIZE])
+    prepare_code = bytes(module.image[PREPARE:PREPARE+PREPARE_SIZE])
     provider_hits = 0
-    for i, (channel, root, memory) in enumerate(inputs):
+    for i, (operation, channel, root, memory) in enumerate(inputs):
         regs = {
             UC_ARM64_REG_X0: LAYER, UC_ARM64_REG_X1: channel, UC_ARM64_REG_X2: POINT,
             UC_ARM64_REG_X3: root, UC_ARM64_REG_X8: OUTPUT,
         }
-        first = run(BASE + ENTRY, code, regs, (), memory, callees=callees)
-        if first != run(BASE + ENTRY, code, regs, (), memory, callees=callees):
+        entry, body, declared = ENTRY, code, callees
+        if operation == 1:
+            entry, body, declared = PREPARE, prepare_code, prepare_callees
+            regs = {UC_ARM64_REG_X0: OUTPUT}
+        first = run(BASE + entry, body, regs, (), memory, callees=declared)
+        if first != run(BASE + entry, body, regs, (), memory, callees=declared):
             raise SystemExit(f"unstable original in case {i}")
         expected = [len(first.calls)]
         for _, target, x0 in first.calls:
@@ -116,7 +153,8 @@ def main():
         expected.extend(value for write in first.writes for value in write)
         if list(map(int, actual[i].split())) != expected:
             raise SystemExit(f"case {i}: expected {expected[:16]}, got {actual[i]}")
-    print(f"{len(inputs)} cases match two independent reference runs, including {provider_hits} provider calls")
+    print(f"field cell: {len(inputs) - 32} cases match two reference runs, including {provider_hits} provider calls")
+    print("survey item initializer: 32 cases match two reference runs")
 
 
 if __name__ == "__main__":

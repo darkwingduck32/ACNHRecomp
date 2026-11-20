@@ -196,6 +196,15 @@ public:
         memory_.template write<uint32_t>(output.address + 4, upper);
     }
 
+    template<class Services>
+    void initialize_survey_items(FieldItem first, Services& services) const {
+        for (uint64_t offset = 0; offset < 36 * 8; offset += 8) {
+            const FieldItem item{first.address + offset};
+            memory_.template write<uint64_t>(item.address, 0xfffe);
+            services.initialize(item);
+        }
+    }
+
     void initialize_survey(SurveyScratch scratch) const {
         const uint64_t out = scratch.address;
         const uint64_t empty = base_ + 0x5486008;

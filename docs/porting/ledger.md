@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 5.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 7.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -408,4 +408,38 @@ initializer and provider in the disposable shovel scenario.
 ```powershell
 & private/venv/Scripts/python -m private.heading.compare_leaf field_bounds
 & private/venv/Scripts/python -m private.heading.compare_leaf field_cell
+```
+
+### Cell lookup and item block
+
+The field-cell lookup at `0x195033c` is verified on the shovel gather's four
+call sites. The paired `tree-shake-{original,cpp}-shovelcell1` runs
+and `tree-shake-default-shovelcell2` each captured 32 calls. Location,
+optional resolved-position output and item contents matched on all routes,
+and the focal shovel survey matched all four outcomes. The generated item
+initializer and virtual provider run through the typed runtime boundary.
+The original selector is `NX_ACNH_SHOVEL_FIELD_CELL=original`.
+
+The item block initializer at `0x127c524` is verified on the shovel survey
+call site. Its original body executes 35 initializer calls and one final
+tail call. The 32 independent cases compare each dependency call and its
+destination and every ordered store. Use `NX_ACNH_SHOVEL_SURVEY_ITEMS=original`
+to restore the generated path. The baseline in
+`tree-shake-default-shovelcell2` and opt-in and default runs
+`tree-shake-cpp-shovelprep1` and `tree-shake-default-shovelprep2` each
+captured five identical initialized item blocks. The four focal survey
+snapshots agreed on the complete 36-record neighborhood and occupancy mask.
+
+The generated neighborhood gather at `0x127cab0` remains the next
+dependency. The disposable shovel run in `tree-shake-default-shovelprep2`
+captures its complete scratch input and output around the call from
+`0x21f7614`. The new independent AArch64 reference runs 24 controlled
+cases covering empty, mismatched-anchor, actor-table, metadata and
+extent branches across negative and positive coordinates. The reference
+uses explicit dependency responses and checks the full 36 records and
+occupancy mask. The stage selection and live generated callbacks still
+need equivalence testing before this gather can become a default.
+
+```powershell
+& private/venv/Scripts/python -m tests.acnh_shovel_gather_reference H:/ACNH/ACNHRecomp/private/game/exefs/main
 ```

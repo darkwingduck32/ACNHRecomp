@@ -776,7 +776,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x194f798, field_bounds_adapter, original_field_bounds);
 
     mode = std::getenv("NX_ACNH_SHOVEL_FIELD_CELL");
-    use_cpp_field_cell = mode && std::string_view(mode) == "cpp";
+    use_cpp_field_cell = !mode || std::string_view(mode) == "cpp";
     trace_field_cell = std::getenv("NX_ACNH_SHOVEL_FIELD_CELL_TRACE") != nullptr;
     if (use_cpp_field_cell || trace_field_cell)
         wrap_function(entries, 0x195033c, field_cell_adapter, original_field_cell);

@@ -83,14 +83,22 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, cal
             return
         word = int.from_bytes(body[address - start:address - start + size], "little")
         last_instruction = word
-        if word & 0xfc000000 == 0x94000000:
+        opcode = word & 0xfc000000
+        linked = opcode == 0x94000000
+        if linked or (opcode == 0x14000000 and address in declared_calls):
             displacement = ((word & 0x3ffffff) ^ 0x2000000) - 0x2000000
             target = address + 4 * displacement
             declared = declared_calls.get(address)
             if not declared or target != declared[0]:
                 stop(machine, f"unexpected call at {address:#x}")
                 return
-            frames.append((target, address + size, machine.reg_read(UC_ARM64_REG_SP)))
+            if linked:
+                frames.append((target, address + size, machine.reg_read(UC_ARM64_REG_SP)))
+            else:
+                if machine.reg_read(UC_ARM64_REG_LR) != resume or machine.reg_read(UC_ARM64_REG_SP) != sp:
+                    stop(machine, "tail call did not restore the expected link register or stack pointer")
+                    return
+                frames[-1] = (target, resume, sp)
             calls.append((address, target, machine.reg_read(UC_ARM64_REG_X0)))
         elif word & 0xfffffc1f == 0xd63f0000:
             stop(machine, f"unexpected call at {address:#x}")

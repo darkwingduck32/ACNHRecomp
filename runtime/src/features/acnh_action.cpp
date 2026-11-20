@@ -284,6 +284,73 @@ void shovel_survey_init_adapter(CPU& cpu) {
         static_cast<unsigned long long>(cpu.x[0]));
 }
 
+struct SurveyItemServices {
+    const CPU& caller;
+    uint32_t index = 0;
+
+    void initialize(acnh::FieldItem item) {
+        CPU nested = caller;
+        // The last original initializer is a tail call with the caller's frame restored.
+        if (index < 35) {
+            nested.x[31] -= 0x20;
+            nested.x[29] = nested.x[31];
+            st<uint64_t>(nested.x[29], caller.x[29]);
+            st<uint64_t>(nested.x[29] + 8, caller.x[30]);
+            nested.x[30] = main_base + 0x127c540 + 12ull * index;
+        }
+        ++index;
+        nested.x[0] = item.address;
+        call(nested, main_base + 0x267d4ac);
+    }
+};
+
+Fn original_survey_items = nullptr;
+bool use_cpp_survey_items = false;
+bool trace_survey_items = false;
+std::atomic<unsigned> survey_items_samples{0};
+
+void survey_items_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    if (caller != 0x21f7574) {
+        original_survey_items(cpu);
+        return;
+    }
+
+    const acnh::FieldItem first{cpu.x[0]};
+    const bool trace = trace_survey_items && survey_items_samples.fetch_add(1, std::memory_order_relaxed) < 12;
+    const auto before = trace ? field_bytes(first.address, 36 * 8) : std::string{};
+    if (use_cpp_survey_items) {
+        GuestMemory memory;
+        SurveyItemServices services{cpu};
+        acnh::FieldQueries{main_base, memory}.initialize_survey_items(first, services);
+    } else {
+        original_survey_items(cpu);
+    }
+    if (trace)
+        log("acnh shovel items %s caller=%llx before=%s after=%s",
+            use_cpp_survey_items ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            before.c_str(), field_bytes(first.address, 36 * 8).c_str());
+}
+
+Fn original_shovel_gather = nullptr;
+std::atomic<unsigned> shovel_gather_samples{0};
+
+void shovel_gather_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    if (caller != 0x21f7618 || shovel_gather_samples.fetch_add(1, std::memory_order_relaxed) >= 12) {
+        original_shovel_gather(cpu);
+        return;
+    }
+
+    const acnh::SurveyScratch scratch{cpu.x[0]};
+    const auto before = field_bytes(scratch.address, 0x178);
+    original_shovel_gather(cpu);
+    log("acnh shovel gather original caller=%llx base=%llx scratch=%llx before=%s after=%s",
+        static_cast<unsigned long long>(caller), static_cast<unsigned long long>(main_base),
+        static_cast<unsigned long long>(scratch.address), before.c_str(),
+        field_bytes(scratch.address, 0x178).c_str());
+}
+
 void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -322,6 +389,15 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     trace_shovel_survey_init = std::getenv("NX_ACNH_SHOVEL_SURVEY_INIT_TRACE") != nullptr;
     if (use_cpp_shovel_survey_init || trace_shovel_survey_init)
         wrap_function(functions, 0x127c6ec, shovel_survey_init_adapter, original_shovel_survey_init);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_SURVEY_ITEMS");
+    use_cpp_survey_items = !mode || std::string_view(mode) == "cpp";
+    trace_survey_items = std::getenv("NX_ACNH_SHOVEL_SURVEY_ITEMS_TRACE") != nullptr;
+    if (use_cpp_survey_items || trace_survey_items)
+        wrap_function(functions, 0x127c524, survey_items_adapter, original_survey_items);
+
+    if (std::getenv("NX_ACNH_SHOVEL_GATHER_TRACE"))
+        wrap_function(functions, 0x127cab0, shovel_gather_adapter, original_shovel_gather);
 
     mode = std::getenv("NX_ACNH_TILE_CATEGORY_MASK");
     use_cpp_category_mask = !mode || std::string_view(mode) == "cpp";

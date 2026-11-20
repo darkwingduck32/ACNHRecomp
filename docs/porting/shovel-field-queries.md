@@ -7,7 +7,7 @@ The action engine continues to own item removal, inventory, and hole creation.
 
 | Survey call site | Target | Field-query responsibility | State |
 | --- | --- | --- | --- |
-| `0x21f7568` to `0x21f75a4` | `0x3f04450`, `0x127c524`, `0x127c6ec` | Prepare the survey scratch data | `0x127c6ec` verified C++ default. Other preparation is generated. |
+| `0x21f7568` to `0x21f75a4` | `0x3f04450`, `0x127c524`, `0x127c6ec` | Prepare the survey scratch data | `0x127c6ec` and `0x127c524` are verified C++ defaults. The generated item initializer remains. |
 | `0x21f7614` | `0x127cab0` | Gather the neighborhood records and occupancy flags | Generated, with the string hash already in C++ |
 | `0x21f76b0` | `0x267d6c4` | Resolve an item ID | Verified C++ default with original auxiliary fallback `0x1a03610` |
 | `0x21f7788` | `0x877130` | Test the selected terrain | Generated, with `0x880870` and `0x1285fe0` in C++ by default |
@@ -63,7 +63,7 @@ shovel survey consumes these outputs at `0x21f7618`.
 | `0x127cb2c` | Virtual stage lookup | Generated |
 | `0x127cb38` | Hash the stage key | Verified C++ default |
 | `0x127cb68` | `0x16baf44` stage predicate | Generated |
-| `0x127cc84`, `0x127cf84`, `0x127cfd0`, `0x127cff8` | `0x195033c` field-cell lookup | Generated |
+| `0x127cc84`, `0x127cf84`, `0x127cfd0`, `0x127cff8` | `0x195033c` field-cell lookup | Verified C++ default on these four call sites |
 | Five calls from `0x127ccb8` through `0x127ce50` | `0x267d6c4` item-ID resolution | Verified C++ default |
 | `0x127cd94`, `0x127cea0` | `0x19ee3b4`, `0x253fe7c` field predicates | Generated |
 
@@ -71,8 +71,7 @@ The field-cell lookup is the next common dependency. It checks layer
 and channel bounds through `0x194f798`, initializes an empty item through
 `0x267d4ac`, and invokes a provider through `0x11e4f58`. The provider uses
 virtual dispatch. The lookup returns the item into the caller's X8
-result buffer. Its X3 argument carries the resolved position. The typed bounds check is the verified default. The field-cell candidate
-moves provider selection and result handling behind the typed interface.
-The runtime boundary maintains the original routes and invokes the
-generated initializer and provider. The opt-in gameplay trial compares the
-result item and resolved position from all four gather call sites.
+result buffer. Its X3 argument carries the resolved position. The typed bounds and cell queries are verified defaults on the shovel path.
+The runtime boundary maintains the original routes and calls the generated
+initializer and provider. The original, opt-in and default trials matched
+the result item and resolved position at all four gather call sites.

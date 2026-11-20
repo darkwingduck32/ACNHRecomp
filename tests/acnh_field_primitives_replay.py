@@ -327,8 +327,8 @@ def live_items(path, expected_route, required_entries):
     return states, cases
 
 
-def survey_outcomes(path, tile=None):
-    prefix = "acnh shovel survey "
+def survey_outcomes(path, tile=None, kind="survey"):
+    prefix = f"acnh shovel {kind} "
     if tile is not None:
         x, z = tile
         prefix += f"x={x} z={z} "
@@ -358,6 +358,7 @@ def main():
                         help="allow extra repeats of identical initialized scratch states")
     parser.add_argument("--live-item", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     parser.add_argument("--item-entry", action="append", type=lambda s: int(s, 16), choices=(0x1a03610, 0x267d6c4))
+    parser.add_argument("--live-neighborhood", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
@@ -382,6 +383,9 @@ def main():
         cases.extend(replacement)
     if args.live_survey and survey_outcomes(args.live_survey[0], args.survey_tile) !=             survey_outcomes(args.live_survey[1], args.survey_tile):
         raise SystemExit("shovel survey outcomes differ")
+    if args.live_neighborhood and survey_outcomes(args.live_neighborhood[0], args.survey_tile, "neighborhood") != \
+            survey_outcomes(args.live_neighborhood[1], args.survey_tile, "neighborhood"):
+        raise SystemExit("shovel neighborhood records differ")
     if args.live_layer_flag:
         original_states, original = live_layer_flags(args.live_layer_flag[0], "original")
         replacement_states, replacement = live_layer_flags(args.live_layer_flag[1], "cpp")

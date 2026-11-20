@@ -1,5 +1,6 @@
-"""Compare the two simple 3.0.3 shovel step casts with the original body."""
+"""Compare the scoped 3.0.3 shovel step casts with the original body."""
 import argparse
+import math
 from collections import Counter, defaultdict
 from pathlib import Path
 import re
@@ -19,7 +20,13 @@ from unicorn.arm64_const import UC_ARM64_REG_X0
 BUILD = "FF1D1C05670DB6021C85B624A710B963"
 ENTRY, SIZE, FRAME = 0x15ed290, 0x283c, 0x140
 TRACE = re.compile(r"acnh shovel simple cast (original|cpp) entry=(15ed290) (call=.* out=[0-9a-f]+)")
-SITES = {0x15f0f14: 16, 0x15f0f4c: 4}
+SIMPLE_SITES = {0x15f0f14: 16, 0x15f0f4c: 4}
+MIXED_SITES = {0x15f0fc8: 0x67}
+MIXED_TRACE = re.compile(r"acnh shovel mixed cast (original|cpp) entry=(15ed290) (call=.* out=[0-9a-f]+)")
+MATERIAL_SITES = (0x15ed35c, 0x15ed370, 0x15ed80c, 0x15ed870, 0x15eed74, 0x15eed88, 0x15ef1e0, 0x15ef240)
+ROW_SITES = (0x15ed390, 0x15ed890, 0x15eeda8, 0x15ef260)
+COLUMN_SITES = (0x15ed3b0, 0x15ed8b0, 0x15eedc8, 0x15ef280)
+TILE_SITES = (0x15ed698, 0x15ef098)
 HEIGHT_PROBES = (0x15ede4c, 0x15ef5ac)
 ITEM_PROBES = (0x15edfd4, 0x15ef890)
 NAME_GETTERS = (0x15ef99c, 0x15ef674)
@@ -29,6 +36,10 @@ STAGE_CALL = (*ADDRESS, (1, "low", 4))
 FIELD_CALL = (*((0, i, 4) for i in range(0, 16, 4)), (0, 16, 1), (1, "low", 4),
               *((2, i, 4) for i in range(0, 16, 4)), *((3, i, 4) for i in range(0, 16, 4)))
 SHAPES = {
+    **{site: (*ADDRESS, (1, 0, 4), (1, 4, 4), (1, 8, 4), (2, 0, 4)) for site in MATERIAL_SITES},
+    **{site: (*ADDRESS, (1, "low", 4)) for site in ROW_SITES},
+    **{site: (*ADDRESS, (1, "low", 4), (2, "low", 4), (3, "low", 4), (3, "high", 4)) for site in COLUMN_SITES},
+    **{site: tuple((0, i, 4) for i in range(0, 16, 4)) for site in TILE_SITES},
     **{site: (*POINT, (1, "low", 4), (2, "low", 4)) for site in HEIGHT_PROBES},
     **{site: (*POINT, (1, "low", 4)) for site in ITEM_PROBES},
     **{site: STAGE_CALL for site in (*NAME_GETTERS, *(site + 0xc for site in NAME_GETTERS))},
@@ -38,7 +49,7 @@ SHAPES = {
 TAPE, STRIDE = 0x80000000, 64
 
 
-def captures(path):
+def captures(path, sites):
     result = {}
     for line in path.read_text(errors="replace").splitlines():
         if not line.startswith("HEIGHT_"):
@@ -49,7 +60,7 @@ def captures(path):
             continue
         if tag == "HEIGHT_BEGIN":
             base, resume, stack, *regs = (int(raw, 16) for raw in data)
-            if resume in SITES:
+            if resume in sites:
                 result[key] = Capture(ENTRY, base, stack, tuple(regs))
             continue
         if key not in result:
@@ -59,8 +70,13 @@ def captures(path):
             kind, slot, address, raw = data
             if kind == "arg":
                 cap.add(int(address, 16), bytes.fromhex(raw))
-            elif kind == "child" and int(slot, 16) in (*HEIGHT_PROBES, *ITEM_PROBES):
-                cap.calls[-1].outputs = (1, *struct.unpack("<3I", bytes.fromhex(raw)))
+            elif kind == "child":
+                site = int(slot, 16)
+                effect = bytes.fromhex(raw)
+                if site in MATERIAL_SITES:
+                    cap.calls[-1].outputs = (0, 0, 0, 0, int.from_bytes(effect, "little"))
+                elif site in (*HEIGHT_PROBES, *ITEM_PROBES):
+                    cap.calls[-1].outputs = (1, *struct.unpack("<3I", effect), 0)
         elif tag == "HEIGHT_LOAD":
             address, size, value = int(data[0], 16), int(data[1]), int(data[2], 16)
             if not cap.stack - FRAME <= address < cap.stack:
@@ -80,7 +96,7 @@ def captures(path):
             raise ValueError(f"incomplete cast capture {key:#x}")
         descriptor = bytes(cap.memory[cap.regs[0] + offset] for offset in range(28))
         radius, scale, mask, mode = struct.unpack_from("<2f2I", descriptor, 12)
-        if any(cap.regs[1:4]) or mask not in (4, 16) or mode != 1 or radius < 0:
+        if any(cap.regs[1:4]) or mask not in sites.values() or mode != 1 or radius < 0 or not math.isfinite(radius * scale):
             raise ValueError(f"capture {key:#x} falls outside the simple cast scope")
     return result
 
@@ -96,9 +112,12 @@ def callback_code(call, index):
             load = 0x3940000a if width == 1 else 0xb940000a
             code.append(load | ((offset // width) << 10) | (reg << 5))
         code.append(write_word(9, position * 4))
+    if call.site in MATERIAL_SITES:
+        code.extend((*immed(10, call.outputs[4]), write_word(2, 0)))
     if call.outputs[0]:
-        for offset, value in enumerate(call.outputs[1:]):
-            code.extend((*immed(10, value), write_word(0, 4 * offset)))
+        pointer = int(call.site in MATERIAL_SITES)
+        for offset, value in enumerate(call.outputs[1:4]):
+            code.extend((*immed(10, value), write_word(pointer, 4 * offset)))
     code.extend((*immed(9, TAPE), *immed(10, index + 1), write_word(9, 0),
                  *immed(0, call.result), RETURN))
     return code
@@ -109,7 +128,7 @@ def dependencies(cap):
     for index, call in enumerate(cap.calls):
         targets[call.target].append((call.site, index, callback_code(call, index)))
     result = {}
-    for target, calls in targets.items():
+    for index, (target, calls) in enumerate(targets.items()):
         code = [*immed(9, TAPE), 0xb9400128]  # ldr w8, [x9]
         branches = []
         for _, index, _ in calls:
@@ -119,8 +138,13 @@ def dependencies(cap):
         for branch, (_, _, body) in zip(branches, calls, strict=True):
             code[branch] = 0x54000000 | ((len(code) - branch) << 5)
             code.extend(body)
-        binary = words(*code)
-        result.update({cap.base + site: (cap.base + target, binary) for site, _, _ in calls})
+        # Neighboring game entries may be closer than their replay shims.
+        entry = cap.base + target
+        handler = cap.base + 0x6000000 + 0x4000 * index
+        trampoline = immed(11, handler)
+        result[entry + 4 * len(trampoline)] = (handler, words(*code))
+        trampoline.append(0xd61f0160)  # br x11
+        result.update({cap.base + site: (entry, words(*trampoline)) for site, _, _ in calls})
     return result
 
 
@@ -128,7 +152,7 @@ def payload(cap):
     data = [cap.base, cap.regs[0], len(cap.memory), len(cap.calls)]
     data.extend(value for pair in cap.memory.items() for value in pair)
     for call in cap.calls:
-        data.extend((call.site, call.result, *call.outputs))
+        data.extend((call.site, call.result, *call.outputs, *((0,) if len(call.outputs) == 4 else ())))
     return " ".join(map(str, data))
 
 
@@ -144,7 +168,8 @@ def expected(module, cap):
     returned = reference.registers[UC_ARM64_REG_X0]
     if cap.result is not None and cap.result != returned:
         raise ValueError(f"captured return {cap.result} differs from reference {returned}")
-    order = [(site - cap.base, target - cap.base) for site, target, _ in reference.calls]
+    order = [(site - cap.base, target - cap.base) for site, target, _ in reference.calls
+             if ENTRY <= site - cap.base < ENTRY + SIZE]
     if order != [(call.site, call.target) for call in cap.calls]:
         raise ValueError("original child order differs")
     tape = reference.memory[TAPE]
@@ -160,12 +185,12 @@ def expected(module, cap):
     return output
 
 
-def compare_cast_live(paths, tile):
+def compare_cast_live(paths, tile, sites, trace):
     if not paths:
         return
-    original, native = (live_cases(path, route, tile, (ENTRY,), TRACE)[ENTRY]
+    original, native = (live_cases(path, route, tile, (ENTRY,), trace)[ENTRY]
                         for path, route in zip(paths, ("original", "cpp"), strict=True))
-    for resume, mask in SITES.items():
+    for resume, mask in sites.items():
         prefix = f"call={resume-4:x} mask={mask:x} "
         before = Counter({state: n for state, n in original.items() if state.startswith(prefix)})
         after = Counter({state: n for state, n in native.items() if state.startswith(prefix)})
@@ -184,16 +209,22 @@ def main():
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     parser.add_argument("--survey-tile", nargs=2, type=int, metavar=("X", "Z"))
     parser.add_argument("--no-op", action="store_true")
+    parser.add_argument("--mixed", action="store_true")
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
     module = nso.load(args.module)
     if not any((fn.start, fn.size) == (ENTRY, SIZE) for fn in ehframe.parse(module)):
         parser.error("unexpected cast function boundary")
-    compare_cast_live(args.live, tuple(args.survey_tile) if args.survey_tile else None)
+    if args.mixed:
+        from tests.acnh_shovel_mixed_cast_fixtures import synthetic_cases
+
+    sites = MIXED_SITES if args.mixed else SIMPLE_SITES
+    trace = MIXED_TRACE if args.mixed else TRACE
+    compare_cast_live(args.live, tuple(args.survey_tile) if args.survey_tile else None, sites, trace)
     rows = synthetic_cases(Capture)
     if args.capture:
-        observed = captures(args.capture)
+        observed = captures(args.capture, sites)
         if not observed:
             parser.error("no simple cast captures")
         rows.update(observed)
@@ -211,7 +242,9 @@ def main():
             raise ValueError(f"case {key}: {error}") from error
         native = list(map(int, raw.split()))
         if reference != native:
-            raise SystemExit(f"case {key}: original {reference}; C++ {native}")
+            word = next((i for i, (ref, cpp) in enumerate(zip(reference, native)) if ref != cpp),
+                        min(len(reference), len(native)))
+            raise SystemExit(f"case {key}, word {word}: original {reference[word:word + 1]}; C++ {native[word:word + 1]}")
     print(f"{ENTRY:#x}: {len(rows)} cases match both original AArch64 runs and callback shapes")
 
 

@@ -19,7 +19,7 @@
 #include "../../../games/acnh/shovel_intermediate.h"
 #include "../../../games/acnh/shovel_marker.h"
 #include "../../../games/acnh/shovel_collision.h"
-#include "../../../games/acnh/shovel_simple_cast.h"
+#include "../../../games/acnh/shovel_mixed_cast.h"
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
@@ -2150,17 +2150,61 @@ void shovel_collision_probe_adapter(CPU& cpu) {
 }
 
 
-struct ShovelSimpleCastServices : HeightGuestFrame {
-    explicit ShovelSimpleCastServices(const CPU& caller) : HeightGuestFrame(caller, 0x140, 0xe0) {}
+struct ShovelStepCastServices : HeightGuestFrame {
+    explicit ShovelStepCastServices(const CPU& caller) : HeightGuestFrame(caller, 0x140, 0xe0) {}
 
     uint64_t stack(size_t offset) const { return cpu.x[31] + offset; }
+
+    void put_point(uint64_t address, acnh::ShovelTargetPoint point) const {
+        st<float>(address, point.x);
+        st<float>(address + 4, point.y);
+        st<float>(address + 8, point.z);
+    }
+
+
+    uint32_t cast_material(acnh::ShovelTargetPoint& point, acnh::ShovelCastMaterial use, bool center) const {
+        constexpr std::array center_resumes{0x15ed360u, 0x15ed374u, 0x15ed810u, 0x15ed874u};
+        constexpr std::array rim_resumes{0x15eed78u, 0x15eed8cu, 0x15ef1e4u, 0x15ef244u};
+        constexpr std::array outputs{0xa8u, 0x98u, 0x50u, 0xa8u};
+        const auto index = static_cast<size_t>(use);
+        const auto resume = center ? center_resumes[index] : rim_resumes[index];
+        const auto sample = stack(center ? 0x78 : 0x44);
+        const auto output = stack(outputs[index]);
+        const auto owner = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab27c8)) + 0x28;
+        put_point(sample, point);
+        st<uint32_t>(output, 0);
+        const auto entry = use == acnh::ShovelCastMaterial::base ? 0x83b024 : 0x83a950;
+        invoke_child(main_base + entry, resume, {owner, sample, output});
+        point = {ld<float>(sample), ld<float>(sample + 4), ld<float>(sample + 8)};
+        return ld<uint32_t>(output);
+    }
+
+    bool cast_tile_flag(acnh::HalfTile tile, bool center) const {
+        const auto query = stack(0x50);
+        st<uint64_t>(query, ld<uint64_t>(main_base + 0x4ab2018) + 0x10);
+        st<int32_t>(query + 8, tile.x);
+        st<int32_t>(query + 12, tile.z);
+        return (invoke_child(main_base + 0x1218220, center ? 0x15ed69c : 0x15ef09c, {query}).x[0] & 1) != 0;
+    }
+
+    bool material_flag(uint32_t kind, acnh::ShovelCastProperty property, bool center) const {
+        const bool base = property == acnh::ShovelCastProperty::base;
+        const auto database = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab46c8)) + 8;
+        const auto row_site = base ? (center ? 0x15ed394 : 0x15eedac) : (center ? 0x15ed894 : 0x15ef264);
+        const auto row = invoke_child(main_base + 0x8807cc, row_site, {database, kind}).x[0];
+        if (!row) return false;
+        const auto cache = ld<uint64_t>(ld<uint64_t>(main_base + (base ? 0x4ab5d10 : 0x4ab5d28)));
+        const auto col_site = base ? (center ? 0x15ed3b4 : 0x15eedcc) : (center ? 0x15ed8b4 : 0x15ef284);
+        const auto column = invoke_child(main_base + 0x8823a0, col_site,
+            {row, base ? 13u : 11u, base ? 0x58da05edu : 0xe7e965dbu, cache}).x[0];
+        return column && ld<uint8_t>(column) != 0;
+    }
+
 
     bool probe(acnh::ShovelTargetPoint& point, acnh::ShovelStepCastMask mask, bool center) const {
         const bool height = mask == acnh::ShovelStepCastMask::height;
         const auto address = stack(center ? 0x78 : 0x44);
-        st<float>(address, point.x);
-        st<float>(address + 4, point.y);
-        st<float>(address + 8, point.z);
+        put_point(address, point);
         const auto resume = height ? (center ? 0x15ede50 : 0x15ef5b0) : (center ? 0x15edfd8 : 0x15ef894);
         const auto result = invoke_child(main_base + (height ? 0x15e11a0 : 0x15ec764), resume, {address, 1, 0});
         point = {ld<float>(address), ld<float>(address + 4), ld<float>(address + 8)};
@@ -2194,41 +2238,47 @@ struct ShovelSimpleCastServices : HeightGuestFrame {
     }
 };
 
-Fn original_shovel_simple_cast = nullptr;
+Fn original_shovel_step_cast = nullptr;
 bool use_cpp_shovel_simple_cast = false;
 bool trace_shovel_simple_cast = false;
+bool use_cpp_shovel_mixed_cast = false;
+bool trace_shovel_mixed_cast = false;
 
-void shovel_simple_cast_adapter(CPU& cpu) {
+void shovel_step_cast_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
+    const bool mixed = resume == 0x15f0fc8;
     const auto point = cpu.x[0];
-    if ((resume != 0x15f0f14 && resume != 0x15f0f4c) || cpu.x[1] || cpu.x[2] || cpu.x[3]
+    if ((!mixed && resume != 0x15f0f14 && resume != 0x15f0f4c) || cpu.x[1] || cpu.x[2] || cpu.x[3]
         || !cpu.x[29] || ld<uint64_t>(cpu.x[29] + 8) != main_base + 0x15f4190
         || !is_shovel_point_classifier_frame(ld<uint64_t>(cpu.x[29]))) {
-        original_shovel_simple_cast(cpu);
+        original_shovel_step_cast(cpu);
         return;
     }
     const auto mask = ld<uint32_t>(point + 0x14);
     const auto mode = ld<uint32_t>(point + 0x18);
     const auto radius = ld<float>(point + 0xc);
     const auto range = radius * ld<float>(point + 0x10);
-    if (mode != 1 || (mask != 4 && mask != 16) || radius < 0.f || !std::isfinite(range)) {
-        original_shovel_simple_cast(cpu);
+    const bool valid_mask = mixed ? mask == 0x67 : mask == 4 || mask == 16;
+    if (mode != 1 || !valid_mask || radius < 0.f || !std::isfinite(range)) {
+        original_shovel_step_cast(cpu);
         return;
     }
-    if (use_cpp_shovel_simple_cast) {
+    const bool native = mixed ? use_cpp_shovel_mixed_cast : use_cpp_shovel_simple_cast;
+    if (native) {
         const acnh::ShovelStepCastQuery query{{ld<float>(point), ld<float>(point + 4), ld<float>(point + 8)},
             range, static_cast<acnh::ShovelStepCastMask>(mask)};
-        ShovelSimpleCastServices services{cpu};
-        cpu.x[0] = acnh::shovel_simple_step_cast(main_base, query, GuestMemory{}, services);
+        ShovelStepCastServices services{cpu};
+        cpu.x[0] = mixed ? acnh::shovel_mixed_step_cast(main_base, query, GuestMemory{}, services)
+                         : acnh::shovel_simple_step_cast(main_base, query, GuestMemory{}, services);
     } else {
-        original_shovel_simple_cast(cpu);
+        original_shovel_step_cast(cpu);
     }
-    if (trace_shovel_simple_cast)
-        log("acnh shovel simple cast %s entry=15ed290 call=%llx mask=%x range=%x out=%x",
-            use_cpp_shovel_simple_cast ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+    const bool trace = mixed ? trace_shovel_mixed_cast : trace_shovel_simple_cast;
+    if (trace)
+        log("acnh shovel %s cast %s entry=15ed290 call=%llx mask=%x range=%x out=%x",
+            mixed ? "mixed" : "simple", native ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
             mask, std::bit_cast<uint32_t>(range), unsigned(cpu.x[0]));
 }
-
 
 Fn original_shovel_point_classifier = nullptr;
 bool use_cpp_shovel_point_classifier = false;
@@ -4136,8 +4186,11 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_SIMPLE_CAST");
     use_cpp_shovel_simple_cast = !mode || std::string_view(mode) == "cpp";
     trace_shovel_simple_cast = std::getenv("NX_ACNH_SHOVEL_SIMPLE_CAST_TRACE") != nullptr;
-    if (use_cpp_shovel_simple_cast || trace_shovel_simple_cast)
-        wrap_function(entries, 0x15ed290, shovel_simple_cast_adapter, original_shovel_simple_cast);
+    mode = std::getenv("NX_ACNH_SHOVEL_MIXED_CAST");
+    use_cpp_shovel_mixed_cast = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_mixed_cast = std::getenv("NX_ACNH_SHOVEL_MIXED_CAST_TRACE") != nullptr;
+    if (use_cpp_shovel_simple_cast || trace_shovel_simple_cast || use_cpp_shovel_mixed_cast || trace_shovel_mixed_cast)
+        wrap_function(entries, 0x15ed290, shovel_step_cast_adapter, original_shovel_step_cast);
 
     mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_PROBES");
     use_cpp_shovel_collision_probes = !mode || std::string_view(mode) == "cpp";

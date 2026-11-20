@@ -16,7 +16,7 @@ def put(cap, address, value, width=8):
     cap.add(address, (value % (1 << (width * 8))).to_bytes(width, "little"))
 
 
-def fixture(capture, trig, mask, radius, scale, stop, scene, mutate, coordinate, odd_heading):
+def cast_state(capture, trig, mask, radius, scale, scene, coordinate, odd_heading):
     cap = capture(ENTRY, BASE, STACK, (POINT, 0, 0, 0, 0, 0))
     cap.add(POINT, struct.pack("<5fII", *coordinate, radius, scale, mask, 1))
     cap.add(TRIG, trig)
@@ -43,6 +43,11 @@ def fixture(capture, trig, mask, radius, scale, stop, scene, mutate, coordinate,
     put(cap, BASE + 0x54c04a0 + 0x38, 0x81f6, 4)
     put(cap, BASE + 0x4ac3a80, STAGE)
     put(cap, STAGE + 0x38, 0x72b5, 4)
+    return cap
+
+
+def fixture(capture, trig, mask, radius, scale, stop, scene, mutate, coordinate, odd_heading):
+    cap = cast_state(capture, trig, mask, radius, scale, scene, coordinate, odd_heading)
 
     def probe(site, target, index):
         hit = index == stop

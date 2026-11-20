@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 71.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 72.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -1830,3 +1830,42 @@ observed caller passes its own replay and gameplay gates. Its
 recorded child order puts the ground and overlay material tests
 before the tile flag and height check. Traversal fallback
 `0x15f10f0` still has portable original replay evidence only.
+
+### Mixed-material shovel step cast
+
+The remaining observed cast mask `0x67` at `0x15f0fc4` now
+defaults to C++. The query uses the same center and rim order as
+the simple casts. At each point it checks the base and overlay
+materials, the tile flag, the overlay code and property, and then
+the height difference. The boundary preserves sampler point edits,
+material result slots, and the stage field lookup on a height hit.
+Set `NX_ACNH_SHOVEL_MIXED_CAST=original` to select the generated
+form.
+
+Two original AArch64 runs matched the C++ result and ordered child
+arguments on all 198 mixed cases. This includes 36 original captures
+and 162 portable inputs covering all five result masks, missing rows
+and columns, point mutation, equal and unequal materials, and the
+radius cutoff. Large repeated sampler shims use separate replay
+addresses to keep the original neighboring game entry ranges intact.
+
+The original and opt-in mixedcast1 and default mixedcast2 runs
+matched 40 focal mixed calls apiece. The default run also repeated
+the two simple masks and matched 40 focal calls for each, plus all
+four whole-original classdeep2 outcomes. The 14 Release CTests and
+14 Python replay and profile checks passed. The 100-entry discovery
+queue is intact. Gameplay used one muted instance at a time.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-mixedcast1"
+$c = "$r/tree-shake-default-mixedcast2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_simple_cast --mixed --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+All three observed forms verify `0x15ed290` once. Other caller
+families keep the generated dispatch. The generated ground and
+overlay scopes inside the mixed cast and the generated traversal
+fallback `0x15f10f0` are the main remaining step dependencies.
+The flat fixture has zero traversal hits. A side-strip terrain
+fixture is queued for the traversal evidence.

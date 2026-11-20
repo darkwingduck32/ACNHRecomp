@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 1.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 4.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -329,9 +329,9 @@ $c = "$r/tree-shake-default-shovelqueries2/nx.log"
 
 | Main entry | Query | Stage |
 | --- | --- | --- |
-| `0x880870` | Read the diggable terrain property | 96 reference cases passed, live trial |
+| `0x880870` | Read the diggable terrain property | Verified |
 | `0x880a10` | Read the alternate terrain property | 96 reference cases passed, caller retry |
-| `0x127c6ec` | Initialize the survey scratch records | 40 reference cases passed, live trial |
+| `0x127c6ec` | Initialize the survey scratch records | Verified |
 
 The scratch initializer is called at `0x21f759c` and `0x21f75a4`.
 The replay checks the whole ordered write sequence, including when the
@@ -342,3 +342,43 @@ the verified packed row and column lookups. Their original switches are
 `NX_ACNH_SHOVEL_SURVEY_INIT=original` for the scratch initializer.
 The terrain captures include the parent return address so an ambient
 terrain call cannot be mistaken for a shovel-survey call.
+
+The scratch initializer ran from both survey call sites in the three
+muted `whole` fixture runs. The original, opt-in and default captures are
+`tree-shake-original-shovelgroup1`, `tree-shake-cpp-shovelgroup1` and
+`tree-shake-default-shovelgroup2`. Each comparison matched 58 reference
+cases. At the focal tile, all four survey outcomes matched, including the
+initial selected item, hole and empty states. Later movement in some runs
+caused an extra survey at the adjacent tile. The replay checks every
+scratch snapshot and compares the focal survey independently. The default
+terrain trace also reached `main+0x880870` under survey return site
+`main+0x21f778c`. The alternate property had no hit in these runs.
+
+The field item resolver and its auxiliary leaf have passed 960 and
+72 independent synthetic cases. The runner executes the actual declared
+AArch64 resolver-to-auxiliary BL target and still rejects undeclared
+calls. Both runtime replacements are opt-in. The live group captured the neighborhood gather's item resolution and the diggable terrain predicate.
+
+The item and terrain group used `tree-shake-{original,cpp}-shovelitems1`
+and `tree-shake-default-shovelitems2`. Both comparisons captured 19
+item-ID calls, including direct calls from the shovel survey and its
+neighborhood gather, and 24 terrain calls under the survey's return site
+`0x21f778c`. The 998 item-ID cases and 144 terrain cases matched two
+independent reference runs. The four focal survey outcomes matched.
+The original replay executed 135 declared auxiliary calls in the
+synthetic item cases. The auxiliary and alternate terrain entries were
+missed in gameplay, so both retain their original defaults and are
+queued for smaller targeted retries. Use `NX_ACNH_FIELD_ITEM_ID=original`
+for the original item resolver.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-shovelitems1/nx.log"
+$c = "$r/tree-shake-default-shovelitems2/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-item $o $c --item-entry 267d6c4 --live-terrain $o $c --terrain-entry 880870 --terrain-parent 21f778c --live-survey $o $c --survey-tile 40 69
+```
+
+The new layer-bounds candidate `main+0x194f798` is called by the generated
+field-cell lookup at `0x195036c`. Its 1,600 independent cases cover
+layer and channel fallback, unavailable layers, and inclusive signed
+bounds. Its opt-in trial is `tree-shake-{original,cpp}-shovelbounds1`.

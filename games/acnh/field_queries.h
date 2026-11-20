@@ -18,9 +18,22 @@ struct FieldLayer {
     uint32_t index;
 };
 
+struct FieldChannel {
+    uint32_t index;
+};
+
+struct FieldBounds {
+    uint64_t address;
+    explicit operator bool() const { return address != 0; }
+};
+
 struct FieldGrid {
     uint64_t address;
     explicit operator bool() const { return address != 0; }
+};
+
+struct FieldItem {
+    uint64_t address;
 };
 
 struct SurveyScratch {
@@ -47,11 +60,27 @@ class FieldQueries {
 public:
     FieldQueries(uint64_t base, Memory& memory) : base_(base), memory_(memory) {}
 
+    FieldBounds bounds_for(FieldLayer layer, FieldChannel channel) const {
+        const uint64_t owner_pointer = memory_.template read<uint64_t>(base_ + 0x4ab27a8);
+        const uint64_t owner = memory_.template read<uint64_t>(owner_pointer);
+        const uint64_t node = layer_node(owner, layer);
+        if (!node) return {};
+        const uint32_t slot = channel.index < 8 ? channel.index : 0;
+        if (!memory_.template read<uint64_t>(node + 0x60 + 8ull * slot)) return {};
+        return {node + 0x38};
+    }
+
+    bool contains(FieldBounds bounds, HalfTile tile) const {
+        return tile.x >= memory_.template read<int32_t>(bounds.address + 0x10) &&
+               tile.x <= memory_.template read<int32_t>(bounds.address + 0x20) &&
+               tile.z >= memory_.template read<int32_t>(bounds.address + 0x14) &&
+               tile.z <= memory_.template read<int32_t>(bounds.address + 0x24);
+    }
+
+
     FieldGrid grid_for(FieldLayer layer) const {
         const uint64_t owner = memory_.template read<uint64_t>(base_ + 0x509d040);
-        const uint64_t selector = layer.index == 0 ? 0x1f8
-            : 0x30 + 8ull * (layer.index < 57 ? layer.index : 0);
-        const uint64_t node = memory_.template read<uint64_t>(owner + selector);
+        const uint64_t node = layer_node(owner, layer);
         return {node ? memory_.template read<uint64_t>(node + 0xb0) : 0};
     }
 
@@ -80,6 +109,45 @@ public:
         const uint32_t hash = diggable ? 0x472724ed : 0x0254bd05;
         const uint64_t field = field_column(row, slot, hash, base_ + 0x4bfab80, memory_);
         return field && memory_.template read<uint8_t>(field) != 0;
+    }
+
+    uint32_t auxiliary_item_index(uint32_t kind) const {
+        const uint64_t table = base_ + 0x522a758;
+        for (uint32_t index = 0; index < 4; ++index) {
+            if (memory_.template read<uint32_t>(table + 4 * index) == kind && index != 0)
+                return index;
+        }
+        return 0;
+    }
+
+    uint32_t item_id(FieldItem item) const {
+        return item_id(item, [this](uint32_t kind) { return auxiliary_item_index(kind); });
+    }
+
+    template<class ResolveAuxiliary>
+    uint32_t item_id(FieldItem item, ResolveAuxiliary resolve_auxiliary) const {
+        const uint16_t id = memory_.template read<uint16_t>(item.address);
+        if (id == 0x16a1 || id == 0x3100) return id;
+
+        const uint8_t tag = memory_.template read<uint8_t>(item.address + 3);
+        const uint32_t selector = (tag >> 2) & 15;
+        switch (tag & 3) {
+            case 0:
+                return id;
+            case 1:
+                return memory_.template read<uint32_t>(base_ + 0x4077938 + 4 * selector);
+            case 2:
+                return 0x1180;
+            case 3:
+                if (selector == 15)
+                    return memory_.template read<uint32_t>(base_ + 0x4077938 + 4 * 16);
+                const uint32_t rank = resolve_auxiliary(selector);
+                if (rank)
+                    return memory_.template read<uint32_t>(base_ + 0x4001d00 + 4 * rank);
+                if (selector == 11) return 0x3a19;
+                return selector == 10 ? 0x306 : 0x1225;
+        }
+        return id;
     }
 
     void initialize_survey(SurveyScratch scratch) const {
@@ -119,6 +187,12 @@ public:
     }
 
 private:
+    uint64_t layer_node(uint64_t owner, FieldLayer layer) const {
+        const uint64_t selector = layer.index == 0 ? 0x1f8
+            : 0x30 + 8ull * (layer.index < 57 ? layer.index : 0);
+        return memory_.template read<uint64_t>(owner + selector);
+    }
+
     uint64_t base_;
     Memory& memory_;
 };

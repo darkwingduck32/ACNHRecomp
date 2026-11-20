@@ -1,4 +1,4 @@
-"""Replay a bounded AArch64 function with explicit memory and no external calls."""
+"""Replay bounded AArch64 code with explicit memory and declared direct callees."""
 from dataclasses import dataclass
 
 from unicorn import (
@@ -21,17 +21,25 @@ class Result:
     memory: dict[int, bytes]
     written_bytes: frozenset[int]
     writes: tuple[tuple[int, int, int | None], ...]
+    calls: tuple[tuple[int, int], ...]
 
 
-def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
+def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, callees=None):
     """Execute one independent copy of a fixture and snapshot caller-visible state."""
     if entry <= 0 or entry % 4 or not code or len(code) % 4 or instruction_limit < 1:
         raise ValueError("invalid function range or instruction limit")
     if {UC_ARM64_REG_PC, UC_ARM64_REG_SP, UC_ARM64_REG_LR} & registers.keys():
         raise ValueError("the runner supplies PC, SP, and LR")
 
-    end = entry + len(code)
-    regions = sorted([(entry, end), (STACK_BASE, STACK_END), (RETURN, RETURN + 4)]
+    declared_calls = callees or {}
+    blocks = {entry: code}
+    for site, (target, body) in declared_calls.items():
+        if site % 4 or target <= 0 or target % 4 or not body or len(body) % 4:
+            raise ValueError("invalid declared call")
+        if blocks.setdefault(target, body) != body:
+            raise ValueError("conflicting callee bodies")
+    regions = sorted([(STACK_BASE, STACK_END), (RETURN, RETURN + 4)]
+                     + [(address, address + len(body)) for address, body in blocks.items()]
                      + [(address, address + len(data)) for address, data in memory.items()])
     for index, (start, stop) in enumerate(regions):
         if start <= 0 or stop <= start or (index and regions[index - 1][1] > start):
@@ -44,7 +52,8 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
             if page not in mapped:
                 uc.mem_map(page, PAGE)
                 mapped.add(page)
-    uc.mem_write(entry, code)
+    for address, body in blocks.items():
+        uc.mem_write(address, body)
     for address, data in memory.items():
         uc.mem_write(address, data)
     for reg, value in registers.items():
@@ -55,6 +64,8 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
     accessible = [(address, address + len(data)) for address, data in memory.items()]
     written = set()
     writes = []
+    calls = []
+    frames = [(entry, RETURN, STACK_END)]
     failure = None
     last_instruction = None
 
@@ -65,13 +76,29 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
 
     def check_instruction(machine, address, size, _):
         nonlocal last_instruction
-        if not entry <= address <= end - size:
+        start, resume, sp = frames[-1]
+        body = blocks[start]
+        if not start <= address <= start + len(body) - size:
             stop(machine, f"execution outside function at {address:#x}")
             return
-        word = int.from_bytes(code[address - entry:address - entry + size], "little")
+        word = int.from_bytes(body[address - start:address - start + size], "little")
         last_instruction = word
-        if word & 0xfc000000 == 0x94000000 or word & 0xfffffc1f == 0xd63f0000:
+        if word & 0xfc000000 == 0x94000000:
+            displacement = ((word & 0x3ffffff) ^ 0x2000000) - 0x2000000
+            target = address + 4 * displacement
+            declared = declared_calls.get(address)
+            if not declared or target != declared[0]:
+                stop(machine, f"unexpected call at {address:#x}")
+                return
+            frames.append((target, address + size, machine.reg_read(UC_ARM64_REG_SP)))
+            calls.append((address, target))
+        elif word & 0xfffffc1f == 0xd63f0000:
             stop(machine, f"unexpected call at {address:#x}")
+        elif word == 0xd65f03c0:
+            if machine.reg_read(UC_ARM64_REG_LR) != resume or machine.reg_read(UC_ARM64_REG_SP) != sp:
+                stop(machine, "RET did not restore the expected link register or stack pointer")
+                return
+            frames.pop()
 
     def check_memory(machine, access, address, size, value, _):
         if STACK_BASE <= address and address + size <= STACK_END:
@@ -99,7 +126,7 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
         raise ValueError(failure)
     if uc.reg_read(UC_ARM64_REG_PC) != RETURN:
         raise ValueError("function did not reach the return sentinel within the instruction limit")
-    if last_instruction != 0xd65f03c0:  # RET X30
+    if frames or last_instruction != 0xd65f03c0:  # RET X30
         raise ValueError("function reached the sentinel without RET X30")
     if uc.reg_read(UC_ARM64_REG_SP) != STACK_END:
         raise ValueError("function did not restore SP")
@@ -108,4 +135,5 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
         {address: bytes(uc.mem_read(address, len(data))) for address, data in memory.items()},
         frozenset(written),
         tuple(writes),
+        tuple(calls),
     )

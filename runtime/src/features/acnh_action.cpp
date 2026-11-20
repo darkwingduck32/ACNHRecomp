@@ -318,7 +318,7 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
         wrap_function(functions, 0x1281c54, half_tile_adapter, original_half_tile);
 
     mode = std::getenv("NX_ACNH_SHOVEL_SURVEY_INIT");
-    use_cpp_shovel_survey_init = mode && std::string_view(mode) == "cpp";
+    use_cpp_shovel_survey_init = !mode || std::string_view(mode) == "cpp";
     trace_shovel_survey_init = std::getenv("NX_ACNH_SHOVEL_SURVEY_INIT_TRACE") != nullptr;
     if (use_cpp_shovel_survey_init || trace_shovel_survey_init)
         wrap_function(functions, 0x127c6ec, shovel_survey_init_adapter, original_shovel_survey_init);

@@ -59,3 +59,6 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 880870 # Test the shovel terrain record property
 # dispatch 880a10 # Test the alternate terrain record property
 # dispatch 127c6ec # Initialize the shovel neighborhood scratch records
+# dispatch 1a03610 # Find the auxiliary item selector index
+# dispatch 267d6c4 # Resolve a field record to an item ID
+# dispatch 194f798 # Check a half-tile against layer and channel bounds

@@ -18,7 +18,7 @@ from tools.acnh_version import build_id
 
 BUILD = "FF1D1C05670DB6021C85B624A710B963"
 BASE = 0x4000000000
-ROUTES = ((0x24642A8, 0x68), (0x1281C54, 0x15C), (0x3DB4ED0, 0x4C), (0x849898, 0x118), (0x1285FE0, 0x1C4), (0x880870, 0x19C), (0x880A10, 0x19C), (0x127C6EC, 0x278))
+ROUTES = ((0x24642A8, 0x68), (0x1281C54, 0x15C), (0x3DB4ED0, 0x4C), (0x849898, 0x118), (0x1285FE0, 0x1C4), (0x880870, 0x19C), (0x880A10, 0x19C), (0x127C6EC, 0x278), (0x1A03610, 0xEC), (0x267D6C4, 0xF0))
 
 
 def inputs():
@@ -88,6 +88,20 @@ def inputs():
                 pointers: struct.pack("<Q", row),
                 BASE + 0x4bfab80: struct.pack("<B3x14i", ready, *([cached] * 14)),
             }
+
+    for kind, auxiliary_values in itertools.product(
+            range(18), ((0, 10, 11, 12), (10, 10, 11, 10), (0, 8, 15, 1), (0, 0, 0, 0))):
+        yield 8, kind, 0, BASE, {BASE + 0x522a758: struct.pack("<4I", *auxiliary_values)}
+    for item, tag, auxiliary_values in itertools.product(
+            (0, 0x16a1, 0x3100, 0x6098, 0xffff), range(64),
+            ((0, 10, 11, 12), (5, 1, 2, 3), (10, 10, 10, 10)),
+    ):
+        yield 9, 0x24000, 0, BASE, {
+            0x24000: struct.pack("<HBB", item, 0xa5, tag | 0x80),
+            BASE + 0x522a758: struct.pack("<4I", *auxiliary_values),
+            BASE + 0x4077938: struct.pack("<17I", *range(0x100, 0x111)),
+            BASE + 0x4001d00: struct.pack("<4I", *range(0x200, 0x204)),
+        }
 
     rng = random.Random(303)
     defaults = BASE + 0x5486008
@@ -283,9 +297,43 @@ def live_scratch(path, expected_route):
     return states, cases
 
 
-def survey_outcomes(path):
+ITEM_TRACE = re.compile(
+    r"acnh shovel item (original|cpp) entry=([0-9a-f]+) caller=([0-9a-f]+) "
+    r"base=([0-9a-f]+) arg=([0-9a-f]+) out=([0-9a-f]+) reads=([0-9a-f:,]+)"
+)
+
+
+def live_items(path, expected_route, required_entries):
+    raw = path.read_bytes()
+    cases = []
+    states = collections.Counter()
+    reached = collections.Counter()
+    for route, entry, caller, base, arg, out, fields in ITEM_TRACE.findall(raw.decode(errors="replace")):
+        entry, caller, base, arg, out = (int(value, 16) for value in (entry, caller, base, arg, out))
+        if entry not in required_entries:
+            continue
+        if route != expected_route:
+            raise ValueError(f"{path}: expected {expected_route}, found {route}")
+        reads, memory = decode_reads(fields)
+        mode = 8 if entry == 0x1a03610 else 9
+        state = tuple((width, value) for _, width, value in reads)
+        states[(entry, caller, arg if mode == 8 else 0, out, state)] += 1
+        cases.append(((mode, arg, 0, base, memory), out))
+        reached[entry] += 1
+    missing = required_entries - reached.keys()
+    if missing:
+        raise ValueError(f"{path}: missing item entries {', '.join(map(hex, sorted(missing)))}")
+    print(f"{path}: item calls {dict(reached)}, SHA-256 {hashlib.sha256(raw).hexdigest()}")
+    return states, cases
+
+
+def survey_outcomes(path, tile=None):
+    prefix = "acnh shovel survey "
+    if tile is not None:
+        x, z = tile
+        prefix += f"x={x} z={z} "
     outcomes = collections.Counter(line for line in path.read_text(errors="replace").splitlines()
-                                   if line.startswith("acnh shovel survey "))
+                                   if line.startswith(prefix))
     if not outcomes:
         raise ValueError(f"{path}: no shovel survey snapshots")
     print(f"{path}: {outcomes.total()} shovel survey outcomes")
@@ -305,6 +353,11 @@ def main():
     parser.add_argument("--terrain-entry", action="append", type=lambda s: int(s, 16), choices=(0x880870, 0x880a10))
     parser.add_argument("--terrain-parent", type=lambda s: int(s, 16))
     parser.add_argument("--live-scratch", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--survey-tile", nargs=2, type=int, metavar=("X", "Z"))
+    parser.add_argument("--scratch-sampled", action="store_true",
+                        help="allow extra repeats of identical initialized scratch states")
+    parser.add_argument("--live-item", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--item-entry", action="append", type=lambda s: int(s, 16), choices=(0x1a03610, 0x267d6c4))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
@@ -327,7 +380,7 @@ def main():
             raise SystemExit("live tile category mask callers, inputs or outcomes differ")
         cases.extend(original)
         cases.extend(replacement)
-    if args.live_survey and survey_outcomes(args.live_survey[0]) != survey_outcomes(args.live_survey[1]):
+    if args.live_survey and survey_outcomes(args.live_survey[0], args.survey_tile) !=             survey_outcomes(args.live_survey[1], args.survey_tile):
         raise SystemExit("shovel survey outcomes differ")
     if args.live_layer_flag:
         original_states, original = live_layer_flags(args.live_layer_flag[0], "original")
@@ -353,8 +406,17 @@ def main():
     if args.live_scratch:
         original_states, original = live_scratch(args.live_scratch[0], "original")
         replacement_states, replacement = live_scratch(args.live_scratch[1], "cpp")
-        if original_states != replacement_states:
+        matched = original_states.keys() == replacement_states.keys() if args.scratch_sampled             else original_states == replacement_states
+        if not matched:
             raise SystemExit("shovel scratch callers or initialized contents differ")
+        cases.extend(original)
+        cases.extend(replacement)
+    if args.live_item:
+        required = set(args.item_entry or (0x1a03610, 0x267d6c4))
+        original_states, original = live_items(args.live_item[0], "original", required)
+        replacement_states, replacement = live_items(args.live_item[1], "cpp", required)
+        if original_states != replacement_states:
+            raise SystemExit("live item callers, inputs or outcomes differ")
         cases.extend(original)
         cases.extend(replacement)
     lines = []
@@ -366,14 +428,18 @@ def main():
     if len(actual) != len(cases):
         raise SystemExit("candidate returned the wrong number of cases")
     counts, failures = collections.Counter(), {}
+    item_dependency_calls = 0
     for i, ((mode, a, b, c, memory), observed) in enumerate(cases):
         entry, size = ROUTES[mode]
         code = bytes(module.image[entry:entry + size])
         regs = {UC_ARM64_REG_X0: a, UC_ARM64_REG_X1: b, UC_ARM64_REG_X2: c}
-        address = (c if mode in (1, 4, 5, 6, 7) else BASE) + entry
-        want = run(address, code, regs, (UC_ARM64_REG_X0,), memory)
-        if want != run(address, code, regs, (UC_ARM64_REG_X0,), memory):
+        base = c if mode in (1, 4, 5, 6, 7, 8, 9) else BASE
+        address = base + entry
+        callees = {base + 0x267d768: (base + 0x1a03610, bytes(module.image[0x1a03610:0x1a036fc]))} if mode == 9 else None
+        want = run(address, code, regs, (UC_ARM64_REG_X0,), memory, callees=callees)
+        if want != run(address, code, regs, (UC_ARM64_REG_X0,), memory, callees=callees):
             raise SystemExit(f"reference changed on repeat in case {i}")
+        item_dependency_calls += len(want.calls)
         expected = (want.registers[UC_ARM64_REG_X0], *(v for event in want.writes for v in event))
         if observed is not None:
             if mode in (5, 6, 7):
@@ -388,6 +454,7 @@ def main():
         counts[mode] += 1
     if failures:
         raise SystemExit("\n".join(failures.values()))
+    print(f"Original replay executed {item_dependency_calls} declared item helper calls")
     for mode, count in counts.items():
         print(f"entry {ROUTES[mode][0]:#x}: {count} cases match two reference runs")
 

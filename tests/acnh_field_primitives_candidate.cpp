@@ -48,6 +48,8 @@ int main() {
             result = queries.terrain_has({a}, static_cast<uint32_t>(b), property);
         }
         if (mode == 7) nx::acnh::FieldQueries{c, memory}.initialize_survey({a});
+        if (mode == 8) result = nx::acnh::FieldQueries{c, memory}.auxiliary_item_index(static_cast<uint32_t>(a));
+        if (mode == 9) result = nx::acnh::FieldQueries{c, memory}.item_id({a});
         std::cout << result;
         for (const auto& [addr, size, value] : memory.writes)
             std::cout << ' ' << addr << ' ' << size << ' ' << value;

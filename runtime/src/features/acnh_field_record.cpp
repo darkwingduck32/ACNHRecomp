@@ -443,7 +443,7 @@ struct TerrainRoute {
     Fn adapter;
     Fn original = nullptr;
     bool use_cpp = false;
-    std::atomic<unsigned> samples{0};
+    std::atomic<unsigned> samples[2]{};
 };
 
 std::array<TerrainRoute, 2> terrain_routes{{
@@ -467,13 +467,17 @@ void terrain_property_adapter(CPU& cpu) {
         }
     };
 
-    if (!trace_terrain || caller < route.first_caller || caller > route.last_caller ||
-        route.samples.fetch_add(1, std::memory_order_relaxed) >= 24) {
+    if (!trace_terrain || caller < route.first_caller || caller > route.last_caller) {
         apply();
         return;
     }
 
     const uint64_t parent = ld<uint64_t>(cpu.x[29] + 8) - main_base;
+    const bool shovel_parent = parent == 0x21f778c || parent == 0x21f7910 || parent == 0x21f7bbc;
+    if (route.samples[shovel_parent].fetch_add(1, std::memory_order_relaxed) >= 24) {
+        apply();
+        return;
+    }
     const uint64_t cache = main_base + column_cache_offset;
     const auto before = read_cache(cache);
     std::string reads;
@@ -487,6 +491,118 @@ void terrain_property_adapter(CPU& cpu) {
         static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(table.address), index,
         static_cast<unsigned long long>(cpu.x[0]), cache_hex(before).c_str(),
         cache_hex(read_cache(cache)).c_str(), reads.c_str());
+}
+
+Fn original_field_item_id = nullptr;
+Fn original_auxiliary_item = nullptr;
+bool use_cpp_field_item_id = false;
+bool use_cpp_auxiliary_item = false;
+bool trace_field_item = false;
+std::atomic<unsigned> field_item_samples[3]{};
+std::atomic<unsigned> auxiliary_item_samples{0};
+
+bool shovel_item_caller(uint64_t caller) {
+    return caller == 0x21f76b4 ||
+        (caller >= 0x127ccbc && caller <= 0x127ce54) ||
+        (caller >= 0x127d0a4 && caller <= 0x127d2ec);
+}
+
+void resolve_auxiliary_item(CPU& cpu, uint64_t item_caller) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint32_t kind = static_cast<uint32_t>(cpu.x[0]);
+    const bool trace = trace_field_item && caller == 0x267d76c && shovel_item_caller(item_caller) &&
+        auxiliary_item_samples.fetch_add(1, std::memory_order_relaxed) < 24;
+    if (!use_cpp_auxiliary_item && !trace) {
+        original_auxiliary_item(cpu);
+        return;
+    }
+
+    std::string reads;
+    const GuestMemory memory{trace ? &reads : nullptr};
+    const uint32_t result = acnh::FieldQueries{main_base, memory}.auxiliary_item_index(kind);
+    if (use_cpp_auxiliary_item) cpu.x[0] = result;
+    else original_auxiliary_item(cpu);
+    if (trace)
+        log("acnh shovel item %s entry=1a03610 caller=%llx base=%llx arg=%x out=%llx reads=%s",
+            use_cpp_auxiliary_item ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(main_base), kind,
+            static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
+}
+
+void auxiliary_item_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint64_t item_caller = trace_field_item && caller == 0x267d76c
+        ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
+    resolve_auxiliary_item(cpu, item_caller);
+}
+
+void field_item_id_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const size_t sample = caller == 0x21f76b4 ? 0 : caller < 0x127d0a4 ? 1 : 2;
+    const bool trace = trace_field_item && shovel_item_caller(caller) &&
+        field_item_samples[sample].fetch_add(1, std::memory_order_relaxed) < 16;
+    const acnh::FieldItem item{cpu.x[0]};
+    std::string reads;
+    if (trace) {
+        const GuestMemory snapshot{&reads};
+        acnh::FieldQueries{main_base, snapshot}.item_id(item);
+    }
+
+    if (use_cpp_field_item_id) {
+        const GuestMemory memory;
+        cpu.x[0] = acnh::FieldQueries{main_base, memory}.item_id(item, [&](uint32_t kind) {
+            CPU query = cpu;
+            query.x[0] = kind;
+            query.x[30] = main_base + 0x267d76c;
+            resolve_auxiliary_item(query, caller);
+            return static_cast<uint32_t>(query.x[0]);
+        });
+    } else {
+        original_field_item_id(cpu);
+    }
+
+    if (trace)
+        log("acnh shovel item %s entry=267d6c4 caller=%llx base=%llx arg=%llx out=%llx reads=%s",
+            use_cpp_field_item_id ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(item.address),
+            static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
+}
+
+Fn original_field_bounds = nullptr;
+bool use_cpp_field_bounds = false;
+bool trace_field_bounds = false;
+std::atomic<unsigned> field_bounds_samples{0};
+
+void field_bounds_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint64_t parent = trace_field_bounds && caller == 0x1950370
+        ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
+    const bool trace = (parent == 0x127cc88 || parent == 0x127cf88 ||
+        parent == 0x127cfd4 || parent == 0x127cffc) &&
+        field_bounds_samples.fetch_add(1, std::memory_order_relaxed) < 32;
+    if (!use_cpp_field_bounds && !trace) {
+        original_field_bounds(cpu);
+        return;
+    }
+
+    const uint64_t layer_address = cpu.x[0];
+    const acnh::FieldChannel channel{static_cast<uint32_t>(cpu.x[1])};
+    const uint64_t position = cpu.x[2];
+    std::string reads;
+    const GuestMemory memory{trace ? &reads : nullptr};
+    const acnh::FieldQueries fields{main_base, memory};
+    const acnh::FieldLayer layer{memory.read<uint32_t>(layer_address + 8)};
+    const auto bounds = fields.bounds_for(layer, channel);
+    const bool inside = bounds && fields.contains(bounds,
+        {memory.read<int32_t>(position + 8), memory.read<int32_t>(position + 12)});
+    if (use_cpp_field_bounds) cpu.x[0] = inside;
+    else original_field_bounds(cpu);
+    if (trace)
+        log("acnh shovel bounds %s caller=%llx parent=%llx base=%llx layer=%llx channel=%x position=%llx out=%llx reads=%s",
+            use_cpp_field_bounds ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(parent), static_cast<unsigned long long>(main_base),
+            static_cast<unsigned long long>(layer_address), channel.index, static_cast<unsigned long long>(position),
+            static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
 }
 
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
@@ -547,10 +663,28 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     for (size_t i = 0; i < terrain_routes.size(); ++i) {
         auto& route = terrain_routes[i];
         mode = std::getenv(terrain_modes[i]);
-        route.use_cpp = mode && std::string_view(mode) == "cpp";
+        route.use_cpp = (i == 0 && !mode) || (mode && std::string_view(mode) == "cpp");
         if (route.use_cpp || trace_terrain)
             wrap_function(entries, route.entry, route.adapter, route.original);
     }
+
+    mode = std::getenv("NX_ACNH_FIELD_ITEM_ID");
+    use_cpp_field_item_id = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_AUXILIARY_ITEM_INDEX");
+    use_cpp_auxiliary_item = mode && std::string_view(mode) == "cpp";
+    trace_field_item = std::getenv("NX_ACNH_FIELD_ITEM_TRACE") != nullptr;
+    if (use_cpp_auxiliary_item || use_cpp_field_item_id || trace_field_item) {
+        if (!wrap_function(entries, 0x1a03610, auxiliary_item_adapter, original_auxiliary_item))
+            use_cpp_field_item_id = false;
+    }
+    if (use_cpp_field_item_id || trace_field_item)
+        wrap_function(entries, 0x267d6c4, field_item_id_adapter, original_field_item_id);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS");
+    use_cpp_field_bounds = mode && std::string_view(mode) == "cpp";
+    trace_field_bounds = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS_TRACE") != nullptr;
+    if (use_cpp_field_bounds || trace_field_bounds)
+        wrap_function(entries, 0x194f798, field_bounds_adapter, original_field_bounds);
 
     mode = std::getenv("NX_ACNH_RECORD_CATEGORY");
     use_cpp_categories = !mode || std::string_view(mode) == "cpp";

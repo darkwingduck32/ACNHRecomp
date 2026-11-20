@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 33.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 34.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -743,3 +743,50 @@ neighborhoods and final decisions matched.
 The same runs observed stage-name accessor `0x5cb0a0` at the gather's
 virtual call `0x127cb2c`; every recorded call used stage index 1.
 That fixed-stride lookup is the next eligible stage dependency.
+
+### Stage-name lookup
+
+The gather's observed stage-name accessor `0x5cb0a0` now defaults to
+typed C++. `NX_ACNH_SHOVEL_STAGE_NAME=original` selects the stock body.
+The replay compared 24 synthetic cases and 10 live snapshots per
+comparison against two stock AArch64 runs. It covered signed W1 index
+bounds and multiple module bases. The original, opt-in and default
+runs `stagename1` and `stagename2` each captured five lookups.
+All returned the same signed-index displacement.
+
+The latest whole-tile default also matched the fully original baseline
+`shovelpathwhole1` at (40, 69). The four neighborhoods and final
+decisions matched there. The action engine still enters from
+`0x21f6fe0`. It calls typed stage and terrain queries, the neighborhood
+gather, cell and continuation lookups, and item classification through
+the runtime boundary.
+
+The `whole` and `half` disposable input fixtures each have 11 files.
+The fixture digests hash the sorted relative filenames, a tab and
+each file's SHA-256, with one line per file.
+
+| Fixture | SHA-256 |
+| --- | --- |
+| `whole` | `3f35453418024aa09f214b67321504ee0ffd5b3a90ab29b7350eaf50c4804b21` |
+| `half` | `dabb6fb127d8128947cea24c419da1065263397e5a8901d882a2789dc90956c5` |
+
+The final half-tile default `finalshovelhalf` matched all six
+neighborhoods and final decisions from `shovelpathhalf1` with the
+original route selected. All 13 Release CTest checks and 14 replay
+and profile tests passed. The discovery queue stays at 100 entries.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-stagename1"
+$c = "$r/tree-shake-default-stagename2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_stage_lookup --live "$o/nx.log" "$c/nx.log"
+$o = "$r/tree-shake-original-shovelpathwhole1"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+$o = "$r/tree-shake-original-shovelpathhalf1"
+$c = "$r/tree-shake-default-finalshovelhalf"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log"
+```
+
+Next implementation group is the observed provider-context pair
+`0x25ee660` and `0x25ee758`. Capture their active synchronization branches
+before selecting any lower-level calls to replace.

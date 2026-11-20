@@ -2,6 +2,7 @@
 #include "../../../games/acnh/field_primitives.h"
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/shovel_survey.h"
+#include "../../../games/acnh/shovel_stage_lookup.h"
 #include "../../../games/acnh/field_state.h"
 #include "../../../games/acnh/terminated_hash.h"
 
@@ -333,6 +334,27 @@ void survey_items_adapter(CPU& cpu) {
             before.c_str(), field_bytes(first.address, 36 * 8).c_str());
 }
 
+Fn original_stage_name = nullptr;
+bool use_cpp_stage_name = false;
+bool trace_stage_name = false;
+std::atomic<unsigned> stage_name_samples{0};
+
+void stage_name_adapter(CPU& cpu) {
+    if (cpu.x[30] != main_base + 0x127cb30 || ld<uint64_t>(cpu.x[29] + 8) != main_base + 0x21f7618) {
+        original_stage_name(cpu);
+        return;
+    }
+
+    const acnh::ShovelStageIndex index{static_cast<uint32_t>(cpu.x[1])};
+    if (use_cpp_stage_name) cpu.x[0] = acnh::shovel_stage_name_record(main_base, index).address;
+    else original_stage_name(cpu);
+
+    if (trace_stage_name && stage_name_samples.fetch_add(1, std::memory_order_relaxed) < 12)
+        log("acnh shovel stage name %s base=%llx index=%x out=%llx",
+            use_cpp_stage_name ? "cpp" : "original", static_cast<unsigned long long>(main_base),
+            index.value, static_cast<unsigned long long>(cpu.x[0]));
+}
+
 bool trace_shovel_stage_lookup = false;
 std::atomic<unsigned> shovel_stage_lookup_samples{0};
 
@@ -527,6 +549,12 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     trace_survey_items = std::getenv("NX_ACNH_SHOVEL_SURVEY_ITEMS_TRACE") != nullptr;
     if (use_cpp_survey_items || trace_survey_items)
         wrap_function(functions, 0x127c524, survey_items_adapter, original_survey_items);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_STAGE_NAME");
+    use_cpp_stage_name = !mode || std::string_view(mode) == "cpp";
+    trace_stage_name = std::getenv("NX_ACNH_SHOVEL_STAGE_NAME_TRACE") != nullptr;
+    if (use_cpp_stage_name || trace_stage_name)
+        wrap_function(functions, 0x5cb0a0, stage_name_adapter, original_stage_name);
 
     trace_shovel_stage_lookup = std::getenv("NX_ACNH_SHOVEL_STAGE_LOOKUP_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_SHOVEL_GATHER");

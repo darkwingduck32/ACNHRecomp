@@ -60,7 +60,7 @@ shovel survey consumes these outputs at `0x21f7618`.
 
 | Gather call site | Target | Status |
 | --- | --- | --- |
-| `0x127cb2c` | Virtual stage lookup, observed `0x5cb0a0` | Generated |
+| `0x127cb2c` | Virtual stage lookup, observed `0x5cb0a0` | Verified C++ default for the observed target |
 | `0x127cb38` | Hash the stage key | Verified C++ default |
 | `0x127cb68` | `0x16baf44` stage predicate | Verified C++ default with both stage-key helpers |
 | `0x127cc84`, `0x127cf84`, `0x127cfd0`, `0x127cff8` | `0x195033c` field-cell lookup | Verified C++ default on these four call sites |
@@ -141,16 +141,14 @@ The classifier and both entry checks now default to C++. The six
 half-tile outcomes exercised the two early rejections. Replay also
 covered accepted results and the remaining descriptor branches.
 
-## Stage filter and next dependencies
+## Stage and provider dispatch
 
-The neighborhood stage filter `0x16baf44` and both stage-key helpers
-`0x16f37d0` and `0x16f3a18` now default to C++. The virtual stage
-lookup still returns the runtime stage name. The continuation
-resolver and cleanup are also verified on the shovel path. The next
-stage group is the observed name lookup `0x5cb0a0`. The provider storage
-accessor `0x260bd50` and table resolver `0x1267360` default to C++. The provider calls the resolver through the
-runtime-loaded target in `0x11ac1e8`. The context dispatch thunks also
-default to C++, and forward to generated `0x25ee660` and `0x25ee758`.
+The stage-name lookup `0x5cb0a0`, stage filter `0x16baf44`, and
+stage-key helpers `0x16f37d0` and `0x16f3a18` default to C++ on the
+observed gather path. Provider storage `0x260bd50` and table binding
+`0x1267360` also default to C++. The provider reaches the binding
+through the runtime-loaded target in `0x11ac1e8`. The context dispatch
+thunks forward to generated `0x25ee660` and `0x25ee758`.
 
 ## Composed gameplay verification
 
@@ -158,6 +156,21 @@ The original and both C++ routes matched every captured neighborhood
 and final decision in the whole-tile and half-tile fixtures. See
 `shovelpathwhole1` and `shovelpathhalf1` in the ledger. Five decisions in
 the first fixture accepted the interaction. Six decisions in the
-second rejected it. Generated calls at the query boundary still
-supply stage state, provider binding and ownership, and descriptor
-metadata on deeper branches.
+second rejected it. The typed queries read live stage and provider
+state through the boundary. Generated calls still handle stateful
+context acquisition and release and deeper descriptor metadata.
+
+## Remaining generated dependencies
+
+The field provider's context dispatch selects `0x25ee660` and
+`0x25ee758` for stateful acquisition and release. They are the next
+priority because both appeared under normal record reads and under
+continuation handling. Preserve their synchronization calls at the guest
+boundary while comparing context selection, return values and effects.
+
+The generated boundary also retains the quadrant fallbacks
+`0x87a980` and `0x87aa70`, deeper item descriptor and category calls,
+the extent helper `0x253fe7c`, and the alternate terrain flow
+`0x8773f0` / `0x880a10`. The auxiliary item lookup `0x1a03610`
+remains original. The alternate terrain and auxiliary cases need a
+gameplay fixture that enters those branches.

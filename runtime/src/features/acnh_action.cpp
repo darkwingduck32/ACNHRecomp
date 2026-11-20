@@ -281,7 +281,7 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
         wrap_function(functions, 0x1281c54, half_tile_adapter, original_half_tile);
 
     mode = std::getenv("NX_ACNH_TILE_CATEGORY_MASK");
-    use_cpp_category_mask = mode && std::string_view(mode) == "cpp";
+    use_cpp_category_mask = !mode || std::string_view(mode) == "cpp";
     trace_category_mask = std::getenv("NX_ACNH_TILE_CATEGORY_MASK_TRACE") != nullptr;
     if (use_cpp_category_mask || trace_category_mask)
         wrap_function(functions, 0x849898, category_mask_adapter, original_category_mask);

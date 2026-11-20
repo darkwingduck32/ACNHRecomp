@@ -32,7 +32,7 @@ the promoted default. Keep the original selectable.
 ## Active batch 2
 
 This batch targets ten verified ports on the same 3.0.3 build, starting
-with the [candidate queue](next-candidates.md). Verified so far, 7.
+with the [candidate queue](next-candidates.md). Verified so far, 8.
 
 | Main entry | Provisional function | Stage | Next action |
 | --- | --- | --- | --- |
@@ -44,9 +44,9 @@ with the [candidate queue](next-candidates.md). Verified so far, 7.
 | `0x5bd550` | Hash a terminated byte string with a seed | Verified | The combined default trial matched 257 cases. |
 | `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Verified | The combined default trial matched 518 cases. |
 | `0x24642a8` | Set or clear an action-mask bit | Live scenario blocked | Retry when a player or NPC state reaches a known caller. |
-| `0x1281c54` | Look up a half-tile record | Default validation | Repeat the shovel survey through the promoted default. |
+| `0x1281c54` | Look up a half-tile record | Verified | The category-mask trial also exercised the promoted shovel lookup. |
 | `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Live scenario blocked | Retry when a scene reaches the matrix multiply at `main+0x3dafc64`. |
-| `0x849898` | Test a tile's category bytes against a bit mask | Live trial | Compare both routes at the island field callers. |
+| `0x849898` | Test a tile's category bytes against a bit mask | Default validation | Repeat the field callers through the promoted default. |
 | `0x1140fd0` | Pack four field category codes into a key | Live trial | Compare both routes at the field lookup caller. |
 
 The action-mask no-op candidate failed case 0. The C++ implementation
@@ -163,8 +163,7 @@ The paired shovel trial in `tree-shake-{original,cpp}-halve2/nx.log`
 captured 24 calls on each route. The 503 total cases matched two original
 executions with exact guest addresses, outputs and writes. The gameplay
 snapshots include the tile grid and all four slots in the selected record.
-C++ is undergoing default validation. Set
-`NX_ACNH_HALF_TILE_RECORD=original` to restore the stock route.
+Set `NX_ACNH_HALF_TILE_RECORD=original` to restore the stock route.
 
 ### Tile category masks
 
@@ -200,4 +199,16 @@ Use `NX_ACNH_FIELD_CASE_KEY=cpp` for the live trial.
 
 ```powershell
 & private/venv/Scripts/python -m private.heading.compare_leaf field_case_key
+```
+
+The category-mask opt-in and half-tile default comparison used
+`tree-shake-{original,cpp}-catmask1/nx.log`. The category calls matched all
+792 cases. The half-tile results again matched all 503 cases, with
+`NX_ACNH_HALF_TILE_RECORD` unset in the C++ process. The category mask's
+default remains under replay. Set `NX_ACNH_TILE_CATEGORY_MASK=original`
+to select the stock implementation.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-half-tile "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-cpp-catmask1/nx.log" --live-category-mask "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-cpp-catmask1/nx.log"
 ```

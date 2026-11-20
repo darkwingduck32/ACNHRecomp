@@ -96,6 +96,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 849ac8 # Match terrain corner materials against a mask
 # dispatch 8493f8 # Resolve terrain corner materials for marker checks
 # dispatch 87a980 # Resolve the primary fallback in marker terrain queries
+# dispatch 15ed290 # Route simple shovel height and stage-item collision casts
 # dispatch 15e11a0 # Compare surface and stage heights during shovel step collision
 # dispatch 15ec764 # Check the local stage item during shovel step collision
 # dispatch 15e9c80 # Validate the intermediate shovel point and its rim heights

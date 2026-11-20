@@ -1789,3 +1789,44 @@ original runs agreed on returned masks and child order for all
 height-only masks at `0x15f0f10` and `0x15f0f48`. The wider
 mixed-material cast at `0x15f0fc4` and traversal fallback
 `0x15f10f0` remain generated.
+
+### Simple shovel step casts
+
+The stage-item and height-only forms of `0x15ed290` now run in C++
+at their observed step callers. The typed query checks the center
+and up to eight rim points. The height-hit path resolves the same
+stage and invokes the field lookup before returning its mask.
+Set `NX_ACNH_SHOVEL_SIMPLE_CAST=original` for these two original
+forms.
+
+| Cast mask | Observed caller | Focal calls per route |
+| --- | --- | ---: |
+| `0x10` | `0x15f0f10` | 40 |
+| `0x4` | `0x15f0f48` | 40 |
+
+The independent whole-function replay used 24 scoped original
+captures and 218 portable fixtures. Both AArch64 runs and C++
+matched the returned mask, callback order, point coordinates, and
+stage descriptor words across all 242 cases. Portable fixtures cover
+early and late hits, zero and boundary radii, per-call point changes,
+and stage-name selection.
+
+The original and opt-in simplecast1 and default simplecast2 runs
+matched both focal traces and the four whole-original classdeep2
+outcomes. All 14 Release CTests and 14 Python replay and profile
+checks passed. Gameplay used one muted instance at a time. The
+discovery queue remains at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-simplecast1"
+$c = "$r/tree-shake-default-simplecast2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_simple_cast --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The mixed-material mask `0x67` at `0x15f0fc4` still uses the
+generated cast. Count `0x15ed290` once after this remaining
+observed caller passes its own replay and gameplay gates. Its
+recorded child order puts the ground and overlay material tests
+before the tile flag and height check. Traversal fallback
+`0x15f10f0` still has portable original replay evidence only.

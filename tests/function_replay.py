@@ -26,8 +26,8 @@ class Result:
     calls: tuple[tuple[int, int, int], ...]
 
 
-def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, callees=None):
-    """Execute one independent copy of a fixture and snapshot caller-visible state."""
+def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, callees=None, call_model=None):
+    """Execute a fixture and optionally model effects at declared linked calls."""
     if entry <= 0 or entry % 4 or not code or len(code) % 4 or instruction_limit < 1:
         raise ValueError("invalid function range or instruction limit")
     if {UC_ARM64_REG_PC, UC_ARM64_REG_SP, UC_ARM64_REG_LR} & registers.keys():
@@ -100,6 +100,12 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, cal
             if not declared or target != declared[0]:
                 stop(machine, f"unexpected call at {address:#x}")
                 return
+            argument = machine.reg_read(UC_ARM64_REG_X0)
+            if linked and call_model is not None and call_model(machine, address, target):
+                calls.append((address, target, argument))
+                machine.reg_write(UC_ARM64_REG_LR, address + size)
+                machine.reg_write(UC_ARM64_REG_PC, address + size)
+                return
             if linked:
                 frames.append((target, address + size, machine.reg_read(UC_ARM64_REG_SP)))
             else:
@@ -107,7 +113,7 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, cal
                     stop(machine, "tail call did not restore the expected link register or stack pointer")
                     return
                 frames[-1] = (target, resume, sp)
-            calls.append((address, target, machine.reg_read(UC_ARM64_REG_X0)))
+            calls.append((address, target, argument))
         elif word == 0xd65f03c0:
             if machine.reg_read(UC_ARM64_REG_LR) != resume or machine.reg_read(UC_ARM64_REG_SP) != sp:
                 stop(machine, "RET did not restore the expected link register or stack pointer")

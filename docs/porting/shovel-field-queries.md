@@ -236,7 +236,8 @@ anchor half tile in C++. The three observed step cast modes and
 both collision probes use typed C++ through their observed height,
 stage item, and provider calls. Stage-name dispatch and the newer
 stage filter call sites still use generated code. The traversal
-fallback `0x15f10f0` reaches the C++ peak sampler and its height
-chain in the side-strip gameplay fixture. Both sweep modes and
-the recursive traversal still run through generated code. See
-the [traversal verification](ledger.md#initial-peak-inside-the-shovel-traversal-fallback).
+fallback `0x15f10f0` reaches the C++ peak sampler, both C++
+segment sweep modes, and their height chains in the side-strip
+fixture. The traversal parent, recursive traversal, and
+sweep stage and collision callbacks still use generated code.
+See the [sweep verification](ledger.md#segment-sweeps-inside-shovel-traversal).

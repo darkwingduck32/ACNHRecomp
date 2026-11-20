@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 76.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 77.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -2180,3 +2180,53 @@ captured six sweeps per mode. Those captures reproduced the
 original sweep body's ordered callbacks and unchanged outputs
 in AArch64 using recorded child replies. The sweeps are the
 next implementation group.
+
+### Segment sweeps inside shovel traversal
+
+Both modes of `0x15f23b0` now default to C++ at the original
+traversal parent's calls `0x15f2140` and `0x15f215c`. Both
+test up to 19 positions along the segment. Mode 1 first chooses
+the nearest half-tile edges and samples their surface heights
+through the existing C++ height chain. A collision that accepts
+without blocking stops the sweep and, when supplied, writes
+the output's Z word before its X/Y pair. Set
+`NX_ACNH_SHOVEL_TRAVERSAL_SWEEP=original` to select the generated
+sweep and its height chain in this scope.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x15f23b0` | 114 | 18 |
+| `0x15e026c` | 768 | 18 |
+| `0x83b024` | 128 | 18 |
+| `0x83a950` | 128 | 18 |
+| `0x241e98c` | 30 | 36 |
+| `0x60cba4` | 3 | 54 |
+| `0x862700` | 672 | 36 |
+| `0x22688e4` | 180 | 36 |
+
+The sweep replay includes 96 portable cases and 18 original
+gameplay inputs. The portable cases exercise both modes,
+nullable output, empty and populated destination records,
+blocked hits, and hits at the first and last probes. The live
+cases reached nine sweeps in each mode. Each returned W0=1
+with unchanged XYZ after 19 misses. The original and opt-in
+traversalsweep1 runs and the default traversalsweep2 run matched
+234 scoped calls, all 342 ordered collision inputs and outputs,
+nine traversal results, ten surveys and neighborhoods, and
+12 final decisions. All 14 Release CTests and 14 Python profile
+and replay checks passed. The sweep counts once, so the ledger
+is at 77 and the discovery queue stays at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-traversalsweep1"
+$c = "$r/tree-shake-default-traversalsweep2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_traversal_sweep --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m tests.acnh_shovel_height_chain_live "$o/nx.log" "$c/nx.log"
+```
+
+The traversal parent and recursive calls still use generated
+code. The sweep retains generated stage-name selection,
+stage filtering, record selection, and the collision cast
+at its guest boundary. The observed stage-name and filter
+callbacks are the next group.

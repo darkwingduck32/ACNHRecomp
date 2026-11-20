@@ -32,7 +32,7 @@ the promoted default. Keep the original selectable.
 ## Active batch 2
 
 This batch targets ten verified ports on the same 3.0.3 build, starting
-with the [candidate queue](next-candidates.md). Verified so far, 4.
+with the [candidate queue](next-candidates.md). Verified so far, 7.
 
 | Main entry | Provisional function | Stage | Next action |
 | --- | --- | --- | --- |
@@ -40,9 +40,9 @@ with the [candidate queue](next-candidates.md). Verified so far, 4.
 | `0x1218220` | Read a tile record's bit flag | Verified | The extended-field trial replayed the promoted default. |
 | `0x1146470` | Resolve a column using a 25-slot cache | Verified | The muted trial replayed the promoted default. |
 | `0x113d890` | Test a bit in a cached record column | Verified | The muted trial replayed the promoted default. |
-| `0x1632d80` | Initialize four inline string buffers and descriptors | Default validation | Replay the default on the same tree-shake fixture. |
-| `0x5bd550` | Hash a terminated byte string with a seed | Default validation | Replay the default through the combined generated library. |
-| `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Default validation | Compare the default with the original for each captured seed. |
+| `0x1632d80` | Initialize four inline string buffers and descriptors | Verified | The combined default trial matched 42 cases. |
+| `0x5bd550` | Hash a terminated byte string with a seed | Verified | The combined default trial matched 257 cases. |
+| `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Verified | The combined default trial matched 518 cases. |
 | `0x24642a8` | Set or clear an action-mask bit | Synthetic comparison | Find a player or NPC state that reaches a known caller. |
 | `0x1281c54` | Look up a half-tile record | Live trial | Compare both routes during the shovel survey. |
 | `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Synthetic comparison | Find a scene that reaches the matrix multiply at `main+0x3dafc64`. |
@@ -120,7 +120,7 @@ and lengths around four-byte boundaries. Redirecting the 9,107 static
 hash call sites added about 75 KiB to the full generated DLL. Both routes
 completed the live scenario. The Release build passed all 13 CTest tests,
 and the dispatch, hook profile and replay suites passed nine tests.
-The three defaults are undergoing replay through the combined DLL.
+The single-instance default trial in `tree-shake-default-hash3/nx.log` hit all three replacements without route overrides and matched the original captures.
 
 The `treewhole` fixture's `main.dat` SHA-256 is
 `070c4b0ea8cb6078fa1e1132b7e3106860d67db6c66fdd4089ca261728e6b0d3`.
@@ -143,8 +143,8 @@ cases. The offline vector cases cover input and output aliasing.
 A muted shovel survey using the disposable `half` fixture recorded 12
 calls to `main+0x1281c54` from `main+0x21f787c` in
 `tree-shake-original-shovel1/console.log`. Its `main.dat` SHA-256 is
-`5e2c0538fdd036a28d6fbe733723002a7ad75cb7e37134cdb7a8cfaF9c34fe4f`.
-The test runner sets `NX_MUTE=1`. The paired shovel trial uses
+`5e2c0538fdd036a28d6fbe733723002a7ad75cb7e37134cdb7a8cfaf9c34fe4f`.
+The test runner sets `NX_MUTE=1` and serializes game launches. The paired shovel trial uses
 `PORT_FIXTURE=half`, `PORT_SCENARIO=shovel` and `PORT_TRACE_HALF_TILE=1`.
 The opt-in path is `NX_ACNH_HALF_TILE_RECORD=cpp`.
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "field_provider_context_pair.h"
 
 namespace nx::acnh {
 
@@ -28,16 +28,8 @@ bool acquire_provider_context(ProviderContextOwner owner, Memory& memory, Servic
     if (!first) return true;
     const auto second = memory.template read<uint64_t>(address + 0x310);
     if (!second) return true;
-    if (memory.template read<int32_t>(second) >= 2) {
-        const auto counter = services.counter(second);
-        auto count = memory.template read<int32_t>(counter + 0xc);
-        if (count <= 0) {
-            services.prepare_counter(second + 0x58);
-            count = 0;
-        }
-        memory.template write<uint32_t>(counter + 0xc, static_cast<uint32_t>(count) + 1);
+    if (increment_provider_counter(second, false, memory, services))
         first = memory.template read<uint64_t>(address + 0x308);
-    }
     services.enter_first(first);
     return true;
 }

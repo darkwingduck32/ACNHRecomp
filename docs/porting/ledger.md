@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 37.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 38.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -856,3 +856,31 @@ $c = "$r/tree-shake-default-providerflag2"
 Next, exercise the paired-handle helper `0x262e9bc`. The live mode-1
 acquire route with a clear flag and guard reaches it after thread
 resolution. The intermediate target `0x3f033a0` is a guest import thunk.
+
+
+### Paired provider-handle acquisition
+
+The helper at `0x262e9bc` defaults to C++ under native shovel context
+acquisition. `NX_ACNH_PROVIDER_CONTEXT_PAIR=original` selects the
+generated body. It updates the second handle first, reloads the first
+handle after a counter callback, and then updates the first handle.
+The nested acquisition route shares the same counter update logic.
+
+The replay matched both AArch64 executions in each of 288 cases,
+including absent handles, a callback that replaces the first handle,
+and signed counter bounds. Original and opt-in `providerpair1` and
+default `providerpair2` each captured 24 acquisitions, with both
+handles of kind 2. All four focal neighborhoods and shovel decisions
+matched. All 13 Release CTest checks and 14 replay and profile tests
+passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-providerpair1"
+$c = "$r/tree-shake-default-providerpair2"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_context_pair --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+Both live mode-2 handles reach record selection at `0x37567d0` inside the
+mode-1 pair. It precedes the release helper `0x37568c0` on this path.

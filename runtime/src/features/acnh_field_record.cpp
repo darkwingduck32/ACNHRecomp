@@ -1740,6 +1740,9 @@ bool trace_provider_context = false;
 bool use_cpp_provider_context_flag = false;
 bool trace_provider_context_flag = false;
 std::atomic<unsigned> provider_context_flag_samples{0};
+bool use_cpp_provider_context_pair = false;
+bool trace_provider_context_pair = false;
+std::atomic<unsigned> provider_context_pair_samples{0};
 
 struct ProviderContextFlagServices {
     CPU frame;
@@ -1810,14 +1813,47 @@ struct ProviderContextServices {
     void enter_guard(uint64_t guard) { invoke(0x3f03880, 0x25ee6bc, guard); }
     bool try_guard(uint64_t guard) { return (invoke(0x3f04c70, 0x25ee6c4, guard) & 1) != 0; }
     void leave_guard(uint64_t guard) { invoke(0x3f038c0, 0x25ee790, guard); }
-    void enter_pair(uint64_t pair) { invoke(0x262e9bc, 0x25ee6e4, pair); }
+    void enter_pair(uint64_t pair) {
+        const bool trace = trace_provider_context_pair &&
+            provider_context_pair_samples.fetch_add(1, std::memory_order_relaxed) < 24;
+        if (trace) {
+            const auto first = ld<uint64_t>(pair);
+            const auto second = ld<uint64_t>(pair + 8);
+            log("acnh shovel context pair %s caller=%llx handles=%u,%u kinds=%d,%d out=void",
+                use_cpp_provider_context_pair ? "cpp" : "original",
+                static_cast<unsigned long long>(caller.x[30] - main_base),
+                unsigned(first != 0), unsigned(second != 0),
+                first ? ld<int32_t>(first) : 0, second ? ld<int32_t>(second) : 0);
+        }
+        if (!use_cpp_provider_context_pair) {
+            invoke(0x262e9bc, 0x25ee6e4, pair);
+            return;
+        }
 
-    uint64_t counter(uint64_t handle) {
+        CPU nested = frame;
+        nested.x[0] = pair;
+        nested.x[30] = main_base + 0x25ee6e4;
+        ProviderContextServices paired{nested, true};
+        struct PairCallbacks {
+            ProviderContextServices& paired;
+            uint64_t counter(uint64_t handle, bool first) {
+                paired.frame.x[1] = 1;
+                return paired.invoke(0x37567d0, first ? 0x262ea38 : 0x262e9f8, handle);
+            }
+            void prepare_counter(uint64_t counters, bool first) {
+                paired.invoke(0x37e2e80, first ? 0x262ea50 : 0x262ea10, counters);
+            }
+        } callbacks{paired};
+        GuestMemory memory;
+        acnh::acquire_provider_pair({pair}, memory, callbacks);
+    }
+
+    uint64_t counter(uint64_t handle, bool) {
         frame.x[1] = 1;
         return invoke(0x37567d0, 0x25ee714, handle);
     }
 
-    void prepare_counter(uint64_t counters) { invoke(0x37e2e80, 0x25ee72c, counters); }
+    void prepare_counter(uint64_t counters, bool) { invoke(0x37e2e80, 0x25ee72c, counters); }
     void enter_first(uint64_t handle) { invoke(0x37569c0, 0x25ee744, handle); }
     void leave_second(uint64_t handle, bool nested) {
         invoke(0x37568c0, nested ? 0x25ee7d8 : 0x25ee7b4, handle);
@@ -2039,6 +2075,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_provider_binding || trace_provider_binding)
         for (auto& route : provider_binding_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_CONTEXT_PAIR");
+    use_cpp_provider_context_pair = !mode || std::string_view(mode) == "cpp";
+    trace_provider_context_pair = std::getenv("NX_ACNH_PROVIDER_CONTEXT_PAIR_TRACE") != nullptr;
 
     mode = std::getenv("NX_ACNH_PROVIDER_CONTEXT_FLAG");
     use_cpp_provider_context_flag = !mode || std::string_view(mode) == "cpp";

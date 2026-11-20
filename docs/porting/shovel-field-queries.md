@@ -164,9 +164,11 @@ descriptor metadata.
 
 On the verified shovel path, context acquisition and release are typed
 C++. The context-flag lookup `0x2601110` also uses C++. Its imported thread
-resolver and virtual name refresh calls stay at the guest boundary. The paired-handle helper `0x262e9bc` and release
-helper `0x37568c0` remain behind the runtime boundary. The live fixture
-exercised mode 1 with both handles set and the guard disabled.
+resolver and virtual name refresh calls stay at the guest boundary.
+Paired-handle acquisition `0x262e9bc` also defaults to C++. The live
+fixture exercised acquire mode 1 with two kind-2 handles and the guard
+disabled. The next generated candidate is record selection `0x37567d0`,
+which precedes the release helper `0x37568c0` on the observed path.
 
 The generated boundary also retains the quadrant fallbacks
 `0x87a980` and `0x87aa70`, deeper item descriptor and category calls,

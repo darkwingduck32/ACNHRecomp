@@ -44,8 +44,8 @@ struct Services {
     bool try_guard(uint64_t guard) { call(0x3f04c70, guard); return allowed; }
     void leave_guard(uint64_t guard) { call(0x3f038c0, guard); }
     void enter_pair(uint64_t pair) { call(0x262e9bc, pair); }
-    uint64_t counter(uint64_t handle) { call(0x37567d0, handle); return selected; }
-    void prepare_counter(uint64_t counters) { call(0x37e2e80, counters); }
+    uint64_t counter(uint64_t handle, bool) { call(0x37567d0, handle); return selected; }
+    void prepare_counter(uint64_t counters, bool) { call(0x37e2e80, counters); }
     void enter_first(uint64_t handle) { call(0x37569c0, handle); }
     void leave_second(uint64_t handle, bool) { call(0x37568c0, handle); }
     void leave_first(uint64_t handle, bool nested) { call(nested ? 0x3756a80 : 0x37568c0, handle); }

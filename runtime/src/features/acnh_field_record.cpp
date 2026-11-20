@@ -18,6 +18,7 @@
 #include "../../../games/acnh/shovel_step.h"
 #include "../../../games/acnh/shovel_intermediate.h"
 #include "../../../games/acnh/shovel_marker.h"
+#include "../../../games/acnh/shovel_collision.h"
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
@@ -2049,6 +2050,105 @@ void shovel_marker_primary_adapter(CPU& cpu) {
 }
 
 
+struct ShovelCollisionServices : HeightGuestFrame {
+    ShovelCollisionServices(const CPU& caller, bool compare_height)
+        : HeightGuestFrame(caller, compare_height ? 0x50 : 0x90, compare_height ? 0x20 : 0x58) {}
+
+    float scalar = 0.f;
+
+    float surface_height(uint64_t point, acnh::ShovelCollisionProbe probe) {
+        const auto resume = probe == acnh::ShovelCollisionProbe::height_difference ? 0x15e11d4 : 0x15ec7b8;
+        scalar = invoke_child(main_base + 0x15e026c, resume, {point, 0, 0}).v[0].f32[0];
+        return scalar;
+    }
+
+    uint32_t stage_hash(uint64_t owner, uint32_t index, acnh::ShovelCollisionProbe probe) {
+        const auto resume = probe == acnh::ShovelCollisionProbe::height_difference ? 0x15e1214 : 0x15ec860;
+        const auto getter = ld<uint64_t>(ld<uint64_t>(owner) + 0x18);
+        const auto name = invoke_child(getter, resume, {owner, index}, scalar);
+        const auto hash = invoke_child(main_base + 0x5bd550, resume + 0xc, {ld<uint64_t>(name.x[0]), 0}, name.v[0].f32[0]);
+        scalar = hash.v[0].f32[0];
+        return uint32_t(hash.x[0]);
+    }
+
+    float stage_height(uint64_t point, bool alternate, uint16_t ordinal) const {
+        const auto context = cpu.x[31] + 8;
+        st<uint16_t>(context, ordinal);
+        st<uint16_t>(context + 2, 0);
+        st<uint8_t>(context + 4, 1);
+        return invoke_child(main_base + 0x15e06d0, 0x15e12c0, {point, 0, alternate, context, 0}, scalar).v[0].f32[0];
+    }
+
+    uint32_t stage_item_id(acnh::HalfTile tile, uint32_t key) const {
+        const auto root = cpu.x[31] + 8;
+        const auto point = cpu.x[31] + 0x18;
+        const auto query = cpu.x[31] + 0x28;
+        const auto coordinate_type = ld<uint64_t>(main_base + 0x4ab2010) + 0x10;
+        st<uint64_t>(root, coordinate_type);
+        st<uint64_t>(root + 8, 0);
+        st<uint64_t>(point, coordinate_type);
+        st<int32_t>(point + 8, tile.x);
+        st<int32_t>(point + 12, tile.z);
+        st<uint64_t>(query, ld<uint64_t>(main_base + 0x4abfe68) + 0x10);
+        st<uint32_t>(query + 8, 0);
+        st<uint32_t>(query + 12, key);
+        const auto permitted = invoke_child(main_base + 0x16baf44, 0x15ec89c, {key}).x[0] & 1;
+        st<uint8_t>(query + 16, uint8_t(permitted));
+        const auto record = invoke_child(main_base + 0x195190c, 0x15ec8b8, {query, 0, point, root}).x[0];
+        return uint32_t(invoke_child(main_base + 0x267d6c4, 0x15ec8bc, {record}).x[0]);
+    }
+};
+
+constexpr std::array<uint64_t, 2> shovel_collision_probe_entries{0x15e11a0, 0x15ec764};
+std::array<Fn, 2> original_shovel_collision_probes{};
+bool use_cpp_shovel_collision_probes = false;
+bool trace_shovel_collision_probes = false;
+
+bool is_shovel_step_cast_frame(uint64_t frame) {
+    if (!frame) return false;
+    const auto site = ld<uint64_t>(frame + 8) - main_base;
+    if (site != 0x15f0f14 && site != 0x15f0f4c && site != 0x15f0fc8) return false;
+    const auto step = ld<uint64_t>(frame);
+    return step && ld<uint64_t>(step + 8) == main_base + 0x15f4190
+        && is_shovel_point_classifier_frame(ld<uint64_t>(step));
+}
+
+template<size_t Index>
+void shovel_collision_probe_adapter(CPU& cpu) {
+    constexpr std::array<std::array<uint64_t, 2>, 2> resumes{{
+        {0x15ede50, 0x15ef5b0}, {0x15edfd8, 0x15ef894},
+    }};
+    const auto resume = cpu.x[30] - main_base;
+    const auto frame = cpu.x[29];
+    if (std::find(resumes[Index].begin(), resumes[Index].end(), resume) == resumes[Index].end()
+        || !is_shovel_step_cast_frame(frame)) {
+        original_shovel_collision_probes[Index](cpu);
+        return;
+    }
+
+    const auto call = ld<uint64_t>(frame + 8) - main_base - 4;
+    const auto one = bool(cpu.x[1] & 1);
+    const auto two = bool(cpu.x[2] & 1);
+    if (use_cpp_shovel_collision_probes) {
+        GuestMemory memory;
+        ShovelCollisionServices services{cpu, Index == 0};
+        if constexpr (Index == 0)
+            cpu.x[0] = acnh::shovel_collision_height_difference(main_base, {cpu.x[0], one, two}, memory, services);
+        else
+            cpu.x[0] = acnh::shovel_collision_stage_item(main_base, {cpu.x[0], one}, memory, services);
+    } else {
+        original_shovel_collision_probes[Index](cpu);
+    }
+    if (!trace_shovel_collision_probes) return;
+    const auto flags = unsigned(one) | (Index == 0 ? unsigned(two) << 1 : 0u);
+    log("acnh shovel collision probe %s entry=%llx call=%llx cast=%llx flags=%x out=%x",
+        use_cpp_shovel_collision_probes ? "cpp" : "original",
+        static_cast<unsigned long long>(shovel_collision_probe_entries[Index]),
+        static_cast<unsigned long long>(resume - 4), static_cast<unsigned long long>(call),
+        flags, unsigned(cpu.x[0]));
+}
+
+
 Fn original_shovel_point_classifier = nullptr;
 bool use_cpp_shovel_point_classifier = false;
 bool trace_shovel_point_classifier = false;
@@ -3951,6 +4051,15 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_shovel_intermediate = std::getenv("NX_ACNH_SHOVEL_INTERMEDIATE_TRACE") != nullptr;
     if (use_cpp_shovel_intermediate || trace_shovel_intermediate)
         wrap_function(entries, 0x15e9c80, shovel_intermediate_adapter, original_shovel_intermediate);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_PROBES");
+    use_cpp_shovel_collision_probes = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_collision_probes = std::getenv("NX_ACNH_SHOVEL_COLLISION_PROBES_TRACE") != nullptr;
+    if (use_cpp_shovel_collision_probes || trace_shovel_collision_probes) {
+        constexpr std::array<Fn, 2> probes{shovel_collision_probe_adapter<0>, shovel_collision_probe_adapter<1>};
+        for (size_t i = 0; i < probes.size(); ++i)
+            wrap_function(entries, shovel_collision_probe_entries[i], probes[i], original_shovel_collision_probes[i]);
+    }
 
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_CONTEXT");
     use_cpp_shovel_stage_context = !mode || std::string_view(mode) == "cpp";

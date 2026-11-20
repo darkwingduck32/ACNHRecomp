@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 54.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 71.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -1741,3 +1741,51 @@ item setup that reaches the stage descriptor height branch. The step
 cast `0x15ed290` and traversal fallback `0x15f10f0` still cross the
 guest boundary. The next replay group follows the cast's height
 difference and stage-item probes.
+
+### Height and stage-item collision probes
+
+The shovel step's collision query now uses C++ to compare the
+surface and stage heights and to check the field item in the
+selected stage. The generated collision query remains the caller.
+Set `NX_ACNH_SHOVEL_COLLISION_PROBES=original` for both original
+probe bodies.
+
+| Entry | Function | Independent AArch64 cases | Focal calls per route |
+| --- | --- | ---: | ---: |
+| `0x15e11a0` | Compare surface and selected-stage heights | 968 | 720 |
+| `0x15ec764` | Check the selected stage item and its distance | 352 | 168 |
+
+The replay compared 864 height and 256 stage-item captures with
+two independent original runs of each case. It also checked 104
+and 96 portable cases respectively, including threshold boundaries,
+scene selection, alternate terrain height, negative coordinates,
+and item checks from both sides of the distance threshold. The
+callback comparisons cover the stage descriptor, initial root
+descriptor, resolved record, and height argument words.
+
+Live coverage reached the height comparison through
+`0x15ede4c` and `0x15ef5ac`, and the stage-item probe through
+`0x15edfd4` and `0x15ef890`. The other static sites
+`0x15ee934` and `0x15eebf0` had zero hits. Their generated
+routes are retained for a smaller follow-up fixture.
+
+The original and opt-in collisionprobe1 and default
+collisionprobe2 runs matched all focal traces and all four
+whole-original classdeep2 outcomes. All 14 Release CTests and 14
+Python replay and profile checks passed. The 100-entry discovery
+queue is intact. Gameplay used one muted instance at a time.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-collisionprobe1"
+$c = "$r/tree-shake-default-collisionprobe2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_collision_probes --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The default run also captured 12 generated casts for each of the
+three observed step callers of `0x15ed290`. Two independent
+original runs agreed on returned masks and child order for all
+36 captures. The next cast milestone covers the stage-item and
+height-only masks at `0x15f0f10` and `0x15f0f48`. The wider
+mixed-material cast at `0x15f0fc4` and traversal fallback
+`0x15f10f0` remain generated.

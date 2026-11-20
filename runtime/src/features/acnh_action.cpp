@@ -133,6 +133,8 @@ bool use_cpp_hash = false;
 bool trace_hash = false;
 bool use_cpp_shovel_sweep_stage = false;
 bool trace_shovel_sweep_stage = false;
+bool use_cpp_shovel_traversal_stage_helpers = false;
+bool trace_shovel_traversal_stage_helpers = false;
 std::atomic<unsigned> hash_samples{0};
 
 void terminated_hash_adapter(CPU& cpu) {
@@ -140,7 +142,9 @@ void terminated_hash_adapter(CPU& cpu) {
     const uint32_t seed = static_cast<uint32_t>(cpu.x[1]);
     const uint64_t caller = cpu.x[30] - main_base;
     const bool sweep = caller == 0x15f2624 && acnh_shovel_sweep_frame(cpu.x[29]);
-    const bool trace = (sweep && trace_shovel_sweep_stage) || (trace_hash && (caller == 0x5bd7a8 ||
+    const bool traversal = acnh_shovel_traversal_stage_name_scope(caller - 0xc, cpu.x[29]);
+    const bool trace = (sweep && trace_shovel_sweep_stage) || (traversal && trace_shovel_traversal_stage_helpers)
+        || (trace_hash && (caller == 0x5bd7a8 ||
         (caller >= 0x15dec40 && caller < 0x15e026c)) &&
         hash_samples.fetch_add(1, std::memory_order_relaxed) < 48);
     std::string bytes;
@@ -149,12 +153,18 @@ void terminated_hash_adapter(CPU& cpu) {
         while (length < 512 && ld<uint8_t>(address + length)) ++length;
         if (length < 512) bytes = field_bytes(address, length + 1);
     }
-    const bool native = use_cpp_hash && (!sweep || use_cpp_shovel_sweep_stage);
+    const auto scalar = cpu.v[0].u32[0];
+    const bool native = use_cpp_hash && (!sweep || use_cpp_shovel_sweep_stage)
+        && (!traversal || use_cpp_shovel_traversal_stage_helpers);
     if (native) cpu.x[0] = acnh::terminated_hash(address, seed, GuestMemory{});
     else original_terminated_hash(cpu);
     if (sweep && trace_shovel_sweep_stage)
         log("acnh shovel sweep stage %s entry=5bd550 call=15f2620 seed=%x bytes=%s out=%x",
             native ? "cpp" : "original", seed, bytes.c_str(), uint32_t(cpu.x[0]));
+    else if (traversal && trace_shovel_traversal_stage_helpers)
+        log("acnh shovel traversal stage helper %s entry=5bd550 call=%llx seed=%x bytes=%s scalar=%x,%x out=%x",
+            native ? "cpp" : "original", static_cast<unsigned long long>(caller - 4), seed, bytes.c_str(),
+            scalar, cpu.v[0].u32[0], uint32_t(cpu.x[0]));
     else if (!bytes.empty())
         log("acnh terminated hash %s caller=%llx seed=%x w0=%x bytes=%s",
             native ? "cpp" : "original", static_cast<unsigned long long>(caller), seed,
@@ -353,18 +363,25 @@ void stage_name_adapter(CPU& cpu) {
     const bool survey = resume == 0x127cb30 && frame
         && ld<uint64_t>(frame + 8) == main_base + 0x21f7618;
     const bool sweep = resume == 0x15f2618 && acnh_shovel_sweep_frame(frame);
-    if (!survey && !sweep) {
+    const bool traversal = acnh_shovel_traversal_stage_name_scope(resume, frame);
+    if (!survey && !sweep && !traversal) {
         original_stage_name(cpu);
         return;
     }
 
     const acnh::ShovelStageIndex index{static_cast<uint32_t>(cpu.x[1])};
-    const bool native = use_cpp_stage_name && (!sweep || use_cpp_shovel_sweep_stage);
+    const auto scalar = cpu.v[0].u32[0];
+    const bool native = use_cpp_stage_name && (!sweep || use_cpp_shovel_sweep_stage)
+        && (!traversal || use_cpp_shovel_traversal_stage_helpers);
     if (native) cpu.x[0] = acnh::shovel_stage_name_record(main_base, index).address;
     else original_stage_name(cpu);
     if (sweep && trace_shovel_sweep_stage)
         log("acnh shovel sweep stage %s entry=5cb0a0 call=15f2614 index=%x out=%llx",
             native ? "cpp" : "original", index.value, static_cast<unsigned long long>(cpu.x[0] - main_base));
+    if (traversal && trace_shovel_traversal_stage_helpers)
+        log("acnh shovel traversal stage helper %s entry=5cb0a0 call=%llx index=%x scalar=%x,%x out=%llx",
+            native ? "cpp" : "original", static_cast<unsigned long long>(resume - 4), index.value,
+            scalar, cpu.v[0].u32[0], static_cast<unsigned long long>(cpu.x[0] - main_base));
     if (survey && trace_stage_name && stage_name_samples.fetch_add(1, std::memory_order_relaxed) < 12)
         log("acnh shovel stage name %s base=%llx index=%x out=%llx",
             native ? "cpp" : "original", static_cast<unsigned long long>(main_base),
@@ -542,6 +559,10 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     if (use_cpp_percent || trace_field_state)
         wrap_function(functions, 0x112b8ec, gameplay_percent_adapter, original_gameplay_percent);
 
+    mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_STAGE_HELPERS");
+    use_cpp_shovel_traversal_stage_helpers = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_traversal_stage_helpers = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_STAGE_HELPERS_TRACE") != nullptr;
+
     mode = std::getenv("NX_ACNH_SHOVEL_SWEEP_STAGE");
     use_cpp_shovel_sweep_stage = !mode || std::string_view(mode) == "cpp";
     trace_shovel_sweep_stage = std::getenv("NX_ACNH_SHOVEL_SWEEP_STAGE_TRACE") != nullptr;
@@ -549,7 +570,7 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     mode = std::getenv("NX_ACNH_TERMINATED_HASH");
     use_cpp_hash = !mode || std::string_view(mode) == "cpp";
     trace_hash = std::getenv("NX_ACNH_TERMINATED_HASH_TRACE") != nullptr;
-    if (use_cpp_hash || trace_hash || trace_shovel_sweep_stage)
+    if (use_cpp_hash || trace_hash || trace_shovel_sweep_stage || trace_shovel_traversal_stage_helpers)
         wrap_function(functions, 0x5bd550, terminated_hash_adapter, original_terminated_hash);
 
     mode = std::getenv("NX_ACNH_HALF_TILE_RECORD");
@@ -573,7 +594,7 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_NAME");
     use_cpp_stage_name = !mode || std::string_view(mode) == "cpp";
     trace_stage_name = std::getenv("NX_ACNH_SHOVEL_STAGE_NAME_TRACE") != nullptr;
-    if (use_cpp_stage_name || trace_stage_name || trace_shovel_sweep_stage)
+    if (use_cpp_stage_name || trace_stage_name || trace_shovel_sweep_stage || trace_shovel_traversal_stage_helpers)
         wrap_function(functions, 0x5cb0a0, stage_name_adapter, original_stage_name);
 
     trace_shovel_stage_lookup = std::getenv("NX_ACNH_SHOVEL_STAGE_LOOKUP_TRACE") != nullptr;

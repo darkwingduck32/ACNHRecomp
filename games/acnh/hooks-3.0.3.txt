@@ -75,6 +75,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 127d05c # Classify a field item for the shovel survey
 # dispatch 267da10 # Check whether the shovel classifier recognizes an item
 # dispatch 267e024 # Check the alternate item flags for the shovel classifier
+# dispatch 16baf44 # Select stage rules for the shovel field query
 # dispatch 16f37d0 # Check primary stage keys under the shovel stage rule
 # dispatch 16f3a18 # Check secondary stage keys under the shovel stage rule
 # dispatch 267f248 # Finalize empty item slots for the shovel survey

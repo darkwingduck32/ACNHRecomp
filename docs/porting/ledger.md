@@ -2742,3 +2742,35 @@ $c = "$r/tree-shake-default-traversalrect2"
 
 Next are the stage-name and rule callbacks reached by the
 outer traversal, sweep probes, and stage-item resolution.
+
+### Stage helpers in traversal and rim contact
+
+The traversal now uses the typed stage-name getter, terminated
+hash, stage rule, and its two predicates on the observed
+call paths. The getter and hash are scoped to eight paired sites
+under the outer traversal, stage base, item resolver, height
+probe, stage height, and rim contact. Rule dispatch covers the
+resolver and rim contact, with ancestry checked for both predicates.
+Set `NX_ACNH_SHOVEL_TRAVERSAL_STAGE_HELPERS=original` to restore
+those callbacks. The fixture missed the optional center contact
+getter and rule, so their route remains generated.
+
+The standalone replays matched both original AArch64 executions
+for each of 2,043 cases. Original and opt-in
+`traversalstagehelper1` and default `traversalstagehelper2` matched
+67,218 ordered calls. Each getter and hash ran 24,204 times, with
+matching index or input bytes, result, and carried scalar. The
+rule and both predicates ran 6,270 times each, from 6,051 resolver
+calls and 219 rim contact calls.
+
+The callback comparison kept the enclosing stage queries typed.
+A separate original AArch64 control carried nonzero S0 into the
+optional base and resolver getter calls. The typed parent supplies
++0.0 at those sites. The control matched the record pointer
+and hash, which are the values those callers consume.
+
+The nine direct traversals, 2,412 leg records, 342 sweep casts,
+ten surveys, ten neighborhoods, and 12 final decisions matched
+across routes. All 14 Release CTests and 14 profile and replay
+checks passed. These helpers retain their prior entries. Batch 4
+has one newly verified function and 100 discovery candidates.

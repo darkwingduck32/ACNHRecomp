@@ -4382,6 +4382,24 @@ bool use_cpp_shovel_stage = false;
 bool trace_shovel_stage = false;
 bool use_cpp_shovel_sweep_stage = false;
 bool trace_shovel_sweep_stage = false;
+bool use_cpp_shovel_traversal_stage_helpers = false;
+bool trace_shovel_traversal_stage_helpers = false;
+
+bool is_traversal_stage_item_frame(uint64_t frame) {
+    return frame && is_shovel_stage_item_resume(ld<uint64_t>(frame + 8) - main_base)
+        && is_shovel_traversal_stage_height_frame(ld<uint64_t>(frame));
+}
+
+bool is_traversal_sweep_cast_frame(uint64_t frame) {
+    return frame && ld<uint64_t>(frame + 8) == main_base + 0x15f2784
+        && acnh_shovel_sweep_frame(ld<uint64_t>(frame));
+}
+
+bool is_traversal_stage_rule_scope(uint64_t resume, uint64_t frame) {
+    if (resume == 0x15e7bd8) return is_traversal_stage_item_frame(frame);
+    if (resume == 0x15ef6ec) return is_traversal_sweep_cast_frame(frame);
+    return false;
+}
 
 struct ShovelStageServices {
     CPU cpu;
@@ -4424,13 +4442,15 @@ void shovel_stage_adapter(CPU& cpu) {
     const bool survey = resume == 0x127cb6c && frame
         && ld<uint64_t>(frame + 8) == main_base + 0x21f7618;
     const bool sweep = resume == 0x15f2658 && acnh_shovel_sweep_frame(frame);
-    if (!survey && !sweep) {
+    const bool traversal = is_traversal_stage_rule_scope(resume, frame);
+    if (!survey && !sweep && !traversal) {
         route.original(cpu);
         return;
     }
 
     const acnh::ShovelStageKey key{static_cast<uint32_t>(cpu.x[0])};
-    const bool native = use_cpp_shovel_stage && (!sweep || use_cpp_shovel_sweep_stage);
+    const bool native = use_cpp_shovel_stage && (!sweep || use_cpp_shovel_sweep_stage)
+        && (!traversal || use_cpp_shovel_traversal_stage_helpers);
     if (native) {
         if constexpr (Index == 0) cpu.x[0] = acnh::shovel_stage_primary(key);
         if constexpr (Index == 1) cpu.x[0] = acnh::shovel_stage_secondary(key);
@@ -4446,6 +4466,11 @@ void shovel_stage_adapter(CPU& cpu) {
         log("acnh shovel sweep stage %s entry=%llx call=%llx key=%x out=%u",
             native ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
             static_cast<unsigned long long>(caller - 4), key.hash, unsigned(cpu.x[0] & 1));
+    if (traversal && trace_shovel_traversal_stage_helpers)
+        log("acnh shovel traversal stage helper %s entry=%llx call=%llx from=%llx key=%x out=%u",
+            native ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+            static_cast<unsigned long long>(caller - 4), static_cast<unsigned long long>(resume - 4),
+            key.hash, unsigned(cpu.x[0] & 1));
     if (survey && trace_shovel_stage && route.samples.fetch_add(1, std::memory_order_relaxed) < 24)
         log("acnh shovel stage %s entry=%llx key=%x out=%u",
             native ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
@@ -5570,6 +5595,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         for (auto& route : shovel_item_queries)
             wrap_function(entries, route.entry, route.adapter, route.original);
 
+    mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_STAGE_HELPERS");
+    use_cpp_shovel_traversal_stage_helpers = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_traversal_stage_helpers = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_STAGE_HELPERS_TRACE") != nullptr;
+
     mode = std::getenv("NX_ACNH_SHOVEL_SWEEP_STAGE");
     use_cpp_shovel_sweep_stage = !mode || std::string_view(mode) == "cpp";
     trace_shovel_sweep_stage = std::getenv("NX_ACNH_SHOVEL_SWEEP_STAGE_TRACE") != nullptr;
@@ -5577,7 +5606,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE");
     use_cpp_shovel_stage = !mode || std::string_view(mode) == "cpp";
     trace_shovel_stage = std::getenv("NX_ACNH_SHOVEL_STAGE_TRACE") != nullptr;
-    if (use_cpp_shovel_stage || trace_shovel_stage || trace_shovel_sweep_stage)
+    if (use_cpp_shovel_stage || trace_shovel_stage || trace_shovel_sweep_stage || trace_shovel_traversal_stage_helpers)
         for (auto& route : shovel_stage_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
 
@@ -5636,6 +5665,29 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
 bool acnh_shovel_sweep_frame(uint64_t frame) {
     return main_base && frame && is_shovel_traversal_sweep_resume(ld<uint64_t>(frame + 8) - main_base)
         && is_shovel_traversal_frame(ld<uint64_t>(frame));
+}
+
+bool acnh_shovel_traversal_stage_name_scope(uint64_t resume, uint64_t frame) {
+    if (!main_base || !frame) return false;
+    switch (resume) {
+    case 0x15f1c10:
+    case 0x15f1e80:
+        return is_shovel_traversal_frame(frame);
+    case 0x15e815c:
+        return ld<uint64_t>(frame + 8) == main_base + 0x15e0724
+            && is_shovel_traversal_stage_height_frame(ld<uint64_t>(frame));
+    case 0x15e79f4:
+    case 0x15e7adc:
+        return is_traversal_stage_item_frame(frame);
+    case 0x15e0ae8:
+        return is_shovel_traversal_stage_height_frame(frame);
+    case 0x15e1214:
+        return is_shovel_sweep_probe_frame(frame);
+    case 0x15ef678:
+        return is_traversal_sweep_cast_frame(frame);
+    default:
+        return false;
+    }
 }
 
 void register_acnh_field_record(Registry& registry) {

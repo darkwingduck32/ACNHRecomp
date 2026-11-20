@@ -251,8 +251,9 @@ traversal fallback coordinates the height, rectangle, and sweep
 decisions in C++. The two observed first-axis recursive calls
 also use the typed coordinator, peak sampler, height chain, and
 rectangle height-break checks. The alternate recursion axis,
-other rectangle callers, and stage-name and filter callbacks
-outside verified scopes still use generated code.
+and other rectangle callers still use generated code. The two outer
+stage reads, their reached stage subtrees, and the rim contact path
+also use the typed stage-name and rule helpers.
 
 [Traversal height verification](ledger.md#direct-heights-inside-outer-shovel-traversal)
 [Sweep collision verification](ledger.md#sixteen-sector-sweep-collision)
@@ -261,3 +262,4 @@ outside verified scopes still use generated code.
 [Direct traversal verification](ledger.md#direct-shovel-traversal-fallback)
 [First-axis recursion verification](ledger.md#first-axis-shovel-traversal-legs)
 [Rectangle height-break verification](ledger.md#rectangle-height-breaks-in-traversal-legs)
+[Traversal stage helper verification](ledger.md#stage-helpers-in-traversal-and-rim-contact)

@@ -1425,3 +1425,44 @@ replayed their original bodies twice against the captured child
 effects. The next group starts with the stage-specific height
 decision and its two principal callbacks `0x15e80f0` and
 `0x15e7980`.
+
+### Stage-specific height under the classifier
+
+The stage-specific height decision at `0x15e06d0` now defaults to
+C++ under the point classifier. It samples the base height, looks
+up the relevant field item, and applies catalog and stage rules
+for its height and material. The boundary retains the base sampler,
+record lookup, and the generated descriptor and stage callbacks.
+Set `NX_ACNH_SHOVEL_STAGE_HEIGHT=original` for the original route.
+
+The independent replay matched 104 captured invocations across
+three call sequences and 20 portable synthetic cases. It compared
+exact float results, output material, ordered writes and child calls.
+The no-op trial failed its first captured height and call sequence.
+The synthetic cases exercise output material retention, distance
+checks, the descriptor column lookup, and the primary and secondary
+stage overrides.
+
+The original and opt-in stageheight1 runs and the default stageheight2
+run matched 40 focal calls each at `0x15f3ff8`. The gameplay call uses
+stage 1, forces the near-item check, and omits the material output.
+All four neighborhoods, surveys and final decisions matched the
+whole-original classdeep2 route. Gameplay used one muted instance at
+a time. All 14 Release CTest checks and 14 replay and profile tests
+passed. Discovery remains at 100 entries.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-stageheight1"
+$c = "$r/tree-shake-default-stageheight2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_stage_height --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The synthetic cases run without the capture argument. The default
+trial also captured the generated child calls `0x15e80f0` and
+`0x15e7980` in the private stage lookup overlay. Fifty-two paired
+captures shared the same caller frame and stage context. Both
+child bodies reproduced their captured results and ordered calls
+in two independent AArch64 runs. The base sampler reaches the
+current-stage overlay through a tail call, and the record lookup
+reaches `0x195190c`. Start the next group with those dependencies.

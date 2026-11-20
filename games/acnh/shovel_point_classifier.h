@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shovel_item_queries.h"
+#include "shovel_stage_lookup.h"
 #include "shovel_target.h"
 #include "shovel_terrain.h"
 
@@ -32,7 +33,7 @@ public:
             memory_.template write<uint32_t>(address + 0x2c + offset,
                 memory_.template read<uint32_t>(query.point + offset));
         const auto sample_stage = stage(ShovelPointStage::height_sample);
-        const float terrain = services_.terrain_height(query.point, stage_index(sample_stage));
+        const float terrain = services_.terrain_height(query.point, shovel_stage_ordinal(base_, sample_stage, memory_));
         const float surface = services_.surface_height(query.point);
         const float limit = read_float(address + 0x24);
         if (services_.point_blocked(query.point)) return result(address, 14);
@@ -88,18 +89,6 @@ private:
                 return memory_.template read<uint64_t>(base_ + 0x4ac3a80);
         }
         return base_ + 0x54c04a0;
-    }
-
-    uint16_t stage_index(uint64_t stage_address) const {
-        const uint64_t head = base_ + 0x54c1b58;
-        auto node = memory_.template read<uint64_t>(head + 8);
-        if (node == head) return 0;
-        const auto key = memory_.template read<uint32_t>(stage_address + 0x38);
-        uint16_t index = 0;
-        for (; node != head; node = memory_.template read<uint64_t>(node + 8), ++index) {
-            if (memory_.template read<uint32_t>(node - 8) == key) return index == 0xffff ? 0 : index;
-        }
-        return 0;
     }
 
     FieldItem lookup(HalfTile tile, ShovelPointStage phase) {

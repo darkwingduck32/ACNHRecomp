@@ -13,6 +13,7 @@
 #include "../../../games/acnh/shovel_target.h"
 #include "../../../games/acnh/shovel_point_classifier.h"
 #include "../../../games/acnh/shovel_obstacle.h"
+#include "../../../games/acnh/shovel_stage_height.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -898,6 +899,13 @@ struct HeightGuestFrame {
         nested.x[30] = main_base + resume;
         call(nested, target);
     }
+    CPU invoke_child(uint64_t entry, uint64_t resume, std::initializer_list<uint64_t> args, float input = 0.f) const {
+        CPU nested = cpu;
+        std::copy(args.begin(), args.end(), nested.x);
+        nested.v[0].f32[0] = input;
+        invoke(nested, entry, resume);
+        return nested;
+    }
 };
 
 struct ShovelHeightServices : HeightGuestFrame {
@@ -1255,6 +1263,145 @@ void shovel_obstacle_adapter(CPU& cpu) {
             native ? "cpp" : "original", std::bit_cast<uint32_t>(query.radius), unsigned(cpu.x[0]));
 }
 
+Fn original_shovel_stage_height = nullptr;
+bool use_cpp_shovel_stage_height = false;
+bool trace_shovel_stage_height = false;
+
+struct ShovelStageHeightServices : HeightGuestFrame {
+    explicit ShovelStageHeightServices(const CPU& caller) : HeightGuestFrame(caller, 0xb0, 0x50) {}
+
+    uint64_t stack(size_t offset) const { return cpu.x[31] + offset; }
+    uint64_t local_material() const { return stack(0x68); }
+
+    void put_tile(uint64_t address, acnh::HalfTile tile) const {
+        st<uint64_t>(address, ld<uint64_t>(main_base + 0x4ab2010) + 0x10);
+        st<int32_t>(address + 8, tile.x);
+        st<int32_t>(address + 12, tile.z);
+    }
+
+    float base_height(uint64_t point, uint64_t material, uint64_t stage) const {
+        return invoke_child(main_base + 0x15e80f0, 0x15e0724, {point, material, stage}, cpu.v[0].f32[0]).v[0].f32[0];
+    }
+
+    acnh::FieldItem field_item(acnh::HalfTile tile, uint64_t stage, acnh::StageHeightLayer layer) const {
+        const bool first = layer == acnh::StageHeightLayer::primary;
+        put_tile(stack(8), tile);
+        put_tile(stack(0x20), {});
+        return {invoke_child(main_base + 0x15e7980, first ? 0x15e0798 : 0x15e0c54,
+                             {stack(8), stack(0x20), !first, stage}).x[0]};
+    }
+
+    uint32_t item_id(acnh::FieldItem item, acnh::StageHeightItemId use) const {
+        constexpr std::array resumes{0x15e07f0u, 0x15e0828u, 0x15e0948u, 0x15e09dcu, 0x15e0a28u, 0x15e0c6cu};
+        return uint32_t(invoke_child(main_base + 0x267d6c4, resumes[static_cast<size_t>(use)], {item.address}).x[0]);
+    }
+
+    acnh::ItemDescriptor describe_item(acnh::FieldItem item) const {
+        invoke_child(main_base + 0x114c030, 0x15e0820, {stack(8), item.address});
+        return {stack(8)};
+    }
+
+    uint32_t height_variant(acnh::FieldItem item) const {
+        return uint32_t(invoke_child(main_base + 0x267ebd0, 0x15e0834, {item.address}).x[0]);
+    }
+
+    float surface_height(uint64_t point) const {
+        return invoke_child(main_base + 0x15e026c, 0x15e08c4, {point, 0, 0}).v[0].f32[0];
+    }
+
+    float descriptor_height(acnh::ItemDescriptor descriptor) const {
+        const auto metadata = ld<uint64_t>(descriptor.address + 0x10);
+        if (!metadata) return 0.f;
+        const auto owner = ld<uint64_t>(ld<uint64_t>(main_base + 0x4abbca8));
+        const auto value = invoke_child(main_base + 0x1146470, 0x15e0924, {metadata, 0, 0x0c315945, owner}).x[0];
+        return value ? ld<float>(value) : 0.f;
+    }
+
+    bool alternate_blocked(acnh::FieldItem item) const {
+        return invoke_child(main_base + 0x267e024, 0x15e0988, {item.address}).x[0] & 1;
+    }
+
+    bool item_supported(acnh::FieldItem item, acnh::StageHeightLayer layer) const {
+        const auto resume = layer == acnh::StageHeightLayer::primary ? 0x15e0994 : 0x15e0cac;
+        return invoke_child(main_base + 0x267e294, resume, {item.address}).x[0] & 1;
+    }
+
+    acnh::ItemDescriptor copy_item(acnh::FieldItem item) const {
+        st<uint64_t>(stack(8), main_base + 0x4936b50);
+        st<uint64_t>(stack(0x10), ld<uint64_t>(item.address));
+        st<uint64_t>(stack(0x18), 0);
+        return {stack(8)};
+    }
+
+    bool alternate_enabled(acnh::ItemDescriptor descriptor, acnh::StageHeightLayer layer) const {
+        const auto resume = layer == acnh::StageHeightLayer::primary ? 0x15e0a58 : 0x15e0cc4;
+        return invoke_child(main_base + 0x19e6020, resume, {descriptor.address}).x[0] & 1;
+    }
+
+    uint32_t stage_hash(uint64_t owner, uint32_t index) const {
+        const auto getter = ld<uint64_t>(ld<uint64_t>(owner) + 0x18);
+        const auto name = invoke_child(getter, 0x15e0ae8, {owner, index}).x[0];
+        return uint32_t(invoke_child(main_base + 0x5bd550, 0x15e0af4, {ld<uint64_t>(name), 0}).x[0]);
+    }
+
+    bool special_item(acnh::FieldItem item, acnh::StageHeightLayer layer) const {
+        const auto resume = layer == acnh::StageHeightLayer::primary ? 0x15e0b1c : 0x15e0d78;
+        return invoke_child(main_base + 0x15e8ee0, resume, {item.address}).x[0] & 1;
+    }
+
+    float alternate_height(acnh::ItemDescriptor descriptor, acnh::StageHeightLayer layer, bool stage_matched) const {
+        const auto resume = layer == acnh::StageHeightLayer::secondary ? 0x15e0de0 : stage_matched ? 0x15e0be4 : 0x15e0b28;
+        return invoke_child(main_base + 0x19e8c70, resume, {descriptor.address}).v[0].f32[0];
+    }
+
+    bool terrain_here(acnh::HalfTile tile, acnh::StageHeightLayer layer) const {
+        put_tile(stack(0x20), tile);
+        const auto resume = layer == acnh::StageHeightLayer::primary ? 0x15e0bac : 0x15e0da8;
+        return invoke_child(main_base + 0x87b830, resume, {stack(0x20)}).x[0] & 1;
+    }
+
+    uint32_t mapped_stage(uint16_t index, acnh::StageHeightLayer layer) const {
+        const auto resume = layer == acnh::StageHeightLayer::primary ? 0x15e0bbc : 0x15e0db8;
+        return uint32_t(invoke_child(main_base + 0x12837d0, resume, {index}).x[0]);
+    }
+
+    bool terrain_elsewhere(uint32_t mapped, acnh::HalfTile tile, acnh::StageHeightLayer layer) const {
+        put_tile(stack(0x20), tile);
+        const auto resume = layer == acnh::StageHeightLayer::primary ? 0x15e0bd0 : 0x15e0dcc;
+        return invoke_child(main_base + 0x87bc40, resume, {mapped, stack(0x20)}).x[0] & 1;
+    }
+
+    acnh::ItemDescriptor describe_secondary(acnh::FieldItem item) const {
+        invoke_child(main_base + 0x19d5d04, 0x15e0cbc, {stack(8), item.address});
+        return {stack(8)};
+    }
+
+    uint64_t secondary_stage() const {
+        return invoke_child(main_base + 0x28156e0, 0x15e0d1c, {}).x[0];
+    }
+};
+
+void shovel_stage_height_adapter(CPU& cpu) {
+    if (cpu.x[30] != main_base + 0x15f3ffc || !is_shovel_point_classifier_frame(cpu.x[29])) {
+        original_shovel_stage_height(cpu);
+        return;
+    }
+    const acnh::ShovelStageHeightQuery query{cpu.x[0], cpu.x[1], cpu.x[3], uint32_t(cpu.x[2]), (cpu.x[4] & 1) != 0};
+    if (use_cpp_shovel_stage_height) {
+        GuestMemory memory;
+        ShovelStageHeightServices services{cpu};
+        cpu.v[0].f32[0] = acnh::ShovelStageHeight{main_base, memory, services}.sample(query);
+    } else {
+        original_shovel_stage_height(cpu);
+    }
+    if (trace_shovel_stage_height)
+        log("acnh shovel stage height %s entry=15e06d0 call=15f3ff8 flags=%x stage=%x extra=%u material=%x out=%x",
+            use_cpp_shovel_stage_height ? "cpp" : "original", query.flags, unsigned(ld<uint16_t>(query.stage)),
+            unsigned(query.include_special_items), query.material ? ld<uint32_t>(query.material) : 0,
+            std::bit_cast<uint32_t>(cpu.v[0].f32[0]));
+}
+
+
 Fn original_shovel_point_classifier = nullptr;
 bool use_cpp_shovel_point_classifier = false;
 bool trace_shovel_point_classifier = false;
@@ -1263,14 +1410,6 @@ struct ShovelPointServices : HeightGuestFrame {
     explicit ShovelPointServices(const CPU& caller) : HeightGuestFrame(caller, 0xf0, 0xb8) {}
 
     uint64_t stack(size_t offset) const { return cpu.x[31] + offset; }
-
-    CPU invoke_child(uint64_t entry, uint64_t resume, std::initializer_list<uint64_t> args, float input = 0.f) const {
-        CPU nested = cpu;
-        std::copy(args.begin(), args.end(), nested.x);
-        nested.v[0].f32[0] = input;
-        invoke(nested, entry, resume);
-        return nested;
-    }
 
     void put_point(uint64_t address, acnh::ShovelTargetPoint point) const {
         st<float>(address, point.x);
@@ -3126,6 +3265,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
     if (use_cpp_shovel_grid_height || trace_shovel_grid_height)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_STAGE_HEIGHT");
+    use_cpp_shovel_stage_height = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_stage_height = std::getenv("NX_ACNH_SHOVEL_STAGE_HEIGHT_TRACE") != nullptr;
+    if (use_cpp_shovel_stage_height || trace_shovel_stage_height)
+        wrap_function(entries, 0x15e06d0, shovel_stage_height_adapter, original_shovel_stage_height);
 
     mode = std::getenv("NX_ACNH_SHOVEL_POINT_HEIGHT");
     use_cpp_shovel_point_height = !mode || std::string_view(mode) == "cpp";

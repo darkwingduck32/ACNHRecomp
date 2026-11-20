@@ -4,6 +4,13 @@ This discovery queue tracks 100 entries on build
 `FF1D1C05670DB6021C85B624A710B963`. The [ledger](ledger.md#active-batch-4)
 tracks candidates selected for implementation.
 
+The alternate shovel traversal leg is queued for a fixture that reaches
+its two recursive calls at `0x15f1fe4` and `0x15f202c`. Both still
+route to generated code. These sites reuse the already tracked
+`0x15f10f0` body, so they leave the 100 unique entries intact.
+See the [gameplay coverage baseline](gameplay-coverage.md) for the
+shared dependency group scheduled first.
+
 The scan followed direct calls up to seven levels from 123 gameplay caller
 roots. Roots include call sites observed in the disposable shovel probe.
 The scanner checked unwind ranges, complete instruction decoding, a return,

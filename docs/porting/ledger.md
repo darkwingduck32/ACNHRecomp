@@ -223,6 +223,12 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 
 ## Completed batch 3
 
+The historical checkpoint `cc7f0e7` had 59 verified functions
+before the callback ports. Since `54af5a8`, grid height, height
+parameter type, point classification, obstruction, and stage height
+each added one function. Expanding sampler fallback and dispatcher
+coverage to more callers added zero unique functions.
+
 Batch 3 verified 100 functions on main build
 `FF1D1C05670DB6021C85B624A710B963`. The rolling discovery queue
 continues in [batch 4](#active-batch-4).
@@ -2664,7 +2670,8 @@ The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
 two promoted material queries. Verified so far, 24.
 
-Implementation continues on the typed shovel traversal path.
+The next implementation group is selected using [gameplay coverage](gameplay-coverage.md)
+across shovel, tree shaking, and movement.
 
 ### First-axis shovel traversal legs
 

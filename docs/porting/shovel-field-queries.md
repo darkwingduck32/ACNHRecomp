@@ -227,6 +227,8 @@ predicate. The height parameter object's type check also runs in
 handwritten C++. Locking, stage-specific material overrides, and the
 base-type fallback stay at the guest boundary. The selector also uses the
 typed point classifier, which checks stage height and item metadata.
-Its boundary still calls the stage-specific height query, obstruction
-and step geometry, and field-record lookup. See the
-[point-classifier verification](ledger.md#shovel-point-classifier).
+The classifier uses the C++ surface height and obstruction checks.
+The stage-specific height query, step geometry, overlay sampler
+for the obstruction check, and field-record lookup still cross the
+guest boundary. See the
+[classifier height checks](ledger.md#surface-and-obstruction-checks-under-the-classifier).

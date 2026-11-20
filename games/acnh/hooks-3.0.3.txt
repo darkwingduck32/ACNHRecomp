@@ -86,3 +86,4 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 862700 # Sample the grid height at a world position
 # dispatch 22688e4 # Check the shovel height parameter type
 # dispatch 15f3ed0 # Classify a target point for the shovel field query
+# dispatch 15ea82c # Check shovel point obstruction materials

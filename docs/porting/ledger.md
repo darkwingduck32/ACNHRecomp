@@ -1373,3 +1373,55 @@ stage lookups and filters, field-record lookup `0x195190c`, and
 descriptor metadata on some paths. Classifier-origin verification
 of the height group would remove the main dependency before the
 record lookup and deeper classification.
+
+### Surface and obstruction checks under the classifier
+
+The point classifier uses the existing handwritten surface height
+dispatcher `0x15e026c` at `0x15f4010`. Its obstruction check
+`0x15ea82c` at `0x15f4024` also defaults to C++. The obstacle query
+checks the center material and, when the radius is larger than
+float epsilon, samples eight points in order. It retains the
+overlay sampler at the guest boundary.
+
+| Entry | Independent AArch64 cases | Focal calls per route |
+| --- | ---: | ---: |
+| `0x15e026c` | 768 | 40 |
+| `0x15ea82c` | 840 | 40 |
+
+The dispatcher replay now compares ordered writes. It includes
+192 cases for the classifier's null output, zero flags and zero
+bias, independently checked first on k3s at
+`3a61aa2c1a2ca3f8b710beb373586e8f5b5edce5`.
+The obstacle replay checks the sampled positions and incoming
+material at each call. The no-op candidate failed on the first
+center obstruction. Gameplay exercised radius zero. The synthetic
+replay includes positive and negative radii and each angular probe.
+
+The original and opt-in pointheight1 runs and the default
+pointheight2 run matched both focal traces. All four neighborhoods,
+surveys and final decisions matched the whole-original classdeep2
+route. Gameplay used one muted instance at a time. All 14 Release
+CTest checks and 14 replay and profile tests passed. The discovery
+queue remains at 100. The existing dispatcher retains its earlier
+verified ledger entry.
+
+Set `NX_ACNH_SHOVEL_POINT_HEIGHT=original` for both original calls
+under the classifier, or `NX_ACNH_SHOVEL_POINT_OBSTACLE=original`
+for the obstacle check alone. The existing dispatcher switch also
+applies at the classifier call.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-pointheight1"
+$c = "$r/tree-shake-default-pointheight2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_height --classifier-live --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_obstacle --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+Original stage-specific height `0x15e06d0` and step geometry
+`0x15f0c64` remain the main height dependencies. The private
+pointheightcapture1 run captured 104 invocations of each and
+replayed their original bodies twice against the captured child
+effects. The next group starts with the stage-specific height
+decision and its two principal callbacks `0x15e80f0` and
+`0x15e7980`.

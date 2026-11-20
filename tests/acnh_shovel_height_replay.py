@@ -23,6 +23,7 @@ SCENE, FLAGS, ENV_SLOT, ENV, AREA, ACTOR, LINK, HOLDER, PARAMETERS, VT, DB = (
 ACCESSOR = 0x60cba4
 CACHE = BASE + 0x4bfab80
 ROW_TABLE, ROW_HEADER, ROW_DATA = 0x35000, 0x36000, 0x37000
+CLASSIFIER_TRACE = re.compile(r"acnh shovel point height (original|cpp) entry=(15e026c) (call=.* out=[0-9a-f]+)")
 TRACE = re.compile(r"acnh shovel height (original|cpp) entry=([0-9a-f]+) (call=.* out=[0-9a-f]+)")
 
 
@@ -106,6 +107,7 @@ def main():
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--classifier-live", action="store_true")
     parser.add_argument("--survey-tile", nargs=2, type=int, metavar=("X", "Z"))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
@@ -114,18 +116,21 @@ def main():
     sizes = {f.start: f.size for f in ehframe.parse(module)}
     if sizes.get(ENTRY) != SIZE:
         parser.error("unexpected shovel height boundary")
-    compare_height_live(args.live, args.survey_tile, (ENTRY,))
+    if args.classifier_live:
+        compare_live(args.live, tuple(args.survey_tile) if args.survey_tile else None, (ENTRY,), CLASSIFIER_TRACE)
+    else:
+        compare_height_live(args.live, args.survey_tile, (ENTRY,))
     field_record = bytes(module.image[0x8807cc:0x8807cc + sizes[0x8807cc]])
     field_column = bytes(module.image[0x8823a0:0x8823a0 + sizes[0x8823a0]])
     cases = []
     for types, flags, stage, mode, controls in itertools.product(
-            ((3,8),(4,8),(3,9),(3,3)), (0,2,8,10), (0,1,2,3), (0,1,2), (0,1,2)):
-        use_output = controls != 0
+            ((3,8),(4,8),(3,9),(3,3)), (0,2,8,10), (0,1,2,3), (0,1,2), range(4)):
+        use_output = controls in (1, 2)
         query_flags = int(controls == 2)
         wet = controls == 2
         memory, callees = fixture(module, field_record, field_column, types, flags, stage, wet, mode)
         regs = {UC_ARM64_REG_X0: POINT, UC_ARM64_REG_X1: OUT if use_output else 0,
-                UC_ARM64_REG_X2: query_flags, UC_ARM64_REG_S0: bits(1.25)}
+                UC_ARM64_REG_X2: query_flags, UC_ARM64_REG_S0: 0 if controls == 3 else bits(1.25)}
         cases.append((types, controls, memory, callees, regs))
     payload = []
     for types, controls, memory, _, _ in cases:
@@ -143,7 +148,8 @@ def main():
             raise SystemExit(f"unstable height case {i}")
         expected = [reference.registers[UC_ARM64_REG_S0], *struct.unpack("<I", reference.memory[OUT]),
                     *struct.unpack("<15I", reference.memory[CACHE]),
-                    *(site-BASE for site,_,_ in reference.calls)]
+                    *(site-BASE for site,_,_ in reference.calls),
+                    *(value for write in reference.writes for value in write)]
         actual = list(map(int,line.split()))
         if actual != expected:
             raise SystemExit(f"case {i}: original {expected}, C++ {actual}")

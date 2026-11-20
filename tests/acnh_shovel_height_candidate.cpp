@@ -3,6 +3,7 @@
 
 #include <array>
 #include <iostream>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -11,10 +12,13 @@ constexpr uint64_t base = 0x4000000000;
 constexpr uint64_t point = 0x20000, output = 0x21000;
 
 struct Memory : FixtureMemory {
+    std::vector<std::array<uint64_t, 3>> writes;
     template<class T>
     void write(uint64_t address, T value) {
+        const uint64_t bits = static_cast<std::make_unsigned_t<T>>(value);
+        writes.push_back({address, sizeof(T), bits});
         for (size_t i = 0; i < sizeof(T); ++i)
-            bytes.at(address + i) = static_cast<uint64_t>(value) >> (8 * i) & 0xff;
+            bytes.at(address + i) = (bits >> (8 * i)) & 0xff;
     }
 };
 
@@ -63,13 +67,15 @@ int main() {
             memory.bytes.emplace(address, value);
         }
         Services services{memory, ground, overlay};
-        const auto query = nx::acnh::ShovelHeightQuery{point, controls ? output : 0,
-                                                       uint32_t(controls == 2), 1.25f};
+        const auto query = nx::acnh::ShovelHeightQuery{point, controls == 1 || controls == 2 ? output : 0,
+                                                       uint32_t(controls == 2), controls == 3 ? 0.f : 1.25f};
         std::cout << std::bit_cast<uint32_t>(shovel_height(base, query, memory, services))
                   << ' ' << memory.read<uint32_t>(output);
         for (uint64_t i = 0; i < 60; i += 4)
             std::cout << ' ' << memory.read<uint32_t>(base + shovel_height_column_cache + i);
         for (auto site : services.calls) std::cout << ' ' << site;
+        for (const auto& write : memory.writes)
+            for (const auto value : write) std::cout << ' ' << value;
         std::cout << '\n';
     }
 }

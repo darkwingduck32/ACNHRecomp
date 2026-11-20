@@ -1252,3 +1252,40 @@ in this new scope, including the secondary fallback's material test
 `0x1285040`, then handle the generated parameter type check
 `0x22688e4`. The target selector still calls the generated point
 classifier `0x15f3ed0`.
+
+### Terrain fallbacks under the height samplers
+
+The ground and overlay height samplers now use the same typed C++
+material fallbacks as the quadrant helper. Each original function
+matched its independent replay and then exercised the new scope in
+the original and opt-in samplerterrain1 runs and the default
+samplerterrain2 run.
+
+| Entry | AArch64 cases | Focal calls per route | Call sites |
+| --- | ---: | ---: | --- |
+| `0x87a980` | 80 | 20 | `0x83b0e0`, `0x83ab0c` |
+| `0x87aa70` | 480 | 10 | `0x83ab28` |
+| `0x1285040` | 42 | 10 | `0x87aae4` under the overlay sampler |
+
+Both fallbacks returned material 7 and retained their input positions.
+The field predicate returned false on the captured half tiles. The
+default matched the whole original classdeep2 route on all four
+neighborhoods, surveys and final decisions. The runs used one muted
+instance at a time. All 14 Release CTest checks and 14 replay and
+profile tests passed. The discovery queue remains at 100. These three
+entries were already verified in the quadrant scope and are counted once.
+
+Set `NX_ACNH_SHOVEL_SAMPLER_TERRAIN=original` to select the original
+sampler fallbacks. The individual fallback switches also apply on
+the sampler route. Virtual stage lookup and stage-specific material
+overrides remain at the guest boundary. The next verified caller
+reaches the generated parameter type check `0x22688e4` 26 times in
+the default run. The generated point classifier `0x15f3ed0` is next
+in the target selector.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-samplerterrain1"
+$c = "$r/tree-shake-default-samplerterrain2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_fallbacks --sampler-live --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```

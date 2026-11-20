@@ -12,6 +12,7 @@ from unicorn.arm64_const import UC_ARM64_REG_X0
 
 from recomp import ehframe, nso
 from tests.acnh_provider_cell_replay import address_words, words, RETURN
+from tests.acnh_shovel_target_replay import live_cases as calls_before_survey
 from tests.function_replay import run
 from tools.acnh_version import build_id
 
@@ -131,12 +132,37 @@ def live_cases(path, entry, expected_route, tile):
     return counts
 
 
+SAMPLER_TRACE = re.compile(
+    r"acnh shovel sampler terrain fallback (original|cpp) entry=([0-9a-f]+) "
+    r"(?:point=[0-9a-f,]+ after=[0-9a-f,]+ )?(call=[0-9a-f]+ .* out=[0-9a-f]+)"
+)
+SAMPLER_CALLERS = {0x87a980: {"83b0e0", "83ab0c"}, 0x87aa70: {"83ab28"}, 0x1285040: {"87aae4"}}
+
+
+def compare_sampler_calls(paths, tile, entries):
+    original, native = (
+        calls_before_survey(path, route, tile, entries, SAMPLER_TRACE)
+        for path, route in zip(paths, ("original", "cpp"))
+    )
+    for entry in entries:
+        states = original[entry]
+        if any("moved=1" in state for state in (*states, *native[entry])):
+            raise SystemExit(f"{entry:#x}: expected the sampler fixture to leave the input position unchanged")
+        callers = {state.split()[0].removeprefix("call=") for state in states}
+        if callers != SAMPLER_CALLERS[entry]:
+            raise SystemExit(f"{entry:#x}: expected call sites {SAMPLER_CALLERS[entry]}, found {callers}")
+        if states != native[entry]:
+            raise SystemExit(f"{entry:#x}: original only {states - native[entry]}, "
+                             f"C++ only {native[entry] - states}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--entry", type=lambda text: int(text, 16), choices=[address for address, _ in ENTRIES])
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--sampler-live", action="store_true")
     parser.add_argument("--survey-tile", nargs=2, type=int, metavar=("X", "Z"))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
@@ -145,11 +171,16 @@ def main():
     sizes = {f.start: f.size for f in ehframe.parse(module)}
     if any(sizes.get(entry) != size for entry, size in ENTRIES):
         parser.error("unexpected terrain fallback boundary")
+    if args.sampler_live:
+        if not args.live:
+            parser.error("--sampler-live requires --live")
+        entries = tuple(entry for entry, _ in ENTRIES if args.entry in (None, entry))
+        compare_sampler_calls(args.live, tuple(args.survey_tile) if args.survey_tile else None, entries)
     rows = []
     for number, (entry, _) in enumerate(ENTRIES):
         if args.entry not in (None, entry):
             continue
-        if args.live:
+        if args.live and not args.sampler_live:
             tile = tuple(args.survey_tile) if args.survey_tile else None
             original = live_cases(args.live[0], entry, "original", tile)
             native = live_cases(args.live[1], entry, "cpp", tile)

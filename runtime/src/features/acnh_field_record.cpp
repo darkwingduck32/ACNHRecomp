@@ -665,6 +665,10 @@ bool use_cpp_terrain_primary = false;
 bool use_cpp_terrain_secondary = false;
 bool use_cpp_terrain_field_material = false;
 bool trace_terrain_fallbacks = false;
+bool trace_sampler_terrain = false;
+bool use_cpp_sampler_terrain = false;
+
+bool is_shovel_sampler_frame(uint64_t frame, uint64_t expected_resume);
 
 constexpr std::array terrain_primary_resumes{0x848fe8u, 0x849044u, 0x84909cu, 0x8490f4u};
 constexpr std::array terrain_secondary_resumes{0x849004u, 0x849060u, 0x8490b8u, 0x849110u};
@@ -675,23 +679,26 @@ void terrain_field_material_adapter(CPU& cpu) {
     const bool from_quadrants = std::find(terrain_secondary_resumes.begin(),
                                          terrain_secondary_resumes.end(), parent) != terrain_secondary_resumes.end();
     const auto quadrant_frame = from_quadrants ? ld<uint64_t>(cpu.x[29]) : 0;
-    if (!quadrant_frame || ld<uint64_t>(quadrant_frame + 8) != main_base + 0x877330 ||
-        ld<uint64_t>(ld<uint64_t>(quadrant_frame) + 8) != main_base + shovel_terrain_caller) {
+    const bool shovel_quadrants = quadrant_frame && ld<uint64_t>(quadrant_frame + 8) == main_base + 0x877330
+        && ld<uint64_t>(ld<uint64_t>(quadrant_frame) + 8) == main_base + shovel_terrain_caller;
+    const bool shovel_sampler = parent == 0x83ab2c && is_shovel_sampler_frame(ld<uint64_t>(cpu.x[29]), 0x15e02f8);
+    if (!shovel_quadrants && !shovel_sampler) {
         original_terrain_field_material(cpu);
         return;
     }
     const acnh::HalfTile point{ld<int32_t>(cpu.x[0] + 8), ld<int32_t>(cpu.x[0] + 12)};
-    if (use_cpp_terrain_field_material) {
+    const bool native = use_cpp_terrain_field_material && (!shovel_sampler || use_cpp_sampler_terrain);
+    if (native) {
         GuestMemory memory;
         cpu.x[0] = acnh::terrain_has_field_material(main_base, point, memory);
     } else {
         trace_shovel_dependency(0x1285040, 0x87aae8);
         original_terrain_field_material(cpu);
     }
-    if (trace_terrain_fallbacks)
-        log("acnh shovel terrain fallback %s entry=1285040 call=87aae4 pos=%d,%d out=%x",
-            use_cpp_terrain_field_material ? "cpp" : "original", point.x, point.z,
-            static_cast<unsigned>(cpu.x[0]));
+    if (shovel_sampler ? trace_sampler_terrain : trace_terrain_fallbacks)
+        log("acnh shovel %sterrain fallback %s entry=1285040 call=87aae4 pos=%d,%d out=%x",
+            shovel_sampler ? "sampler " : "", native ? "cpp" : "original",
+            point.x, point.z, static_cast<unsigned>(cpu.x[0]));
 }
 
 struct TerrainFallbackServices {
@@ -751,6 +758,21 @@ struct TerrainFallbackServices {
     }
 };
 
+uint32_t route_terrain_fallback(CPU& cpu, acnh::TerrainFallback fallback, bool native) {
+    const auto point_address = cpu.x[0];
+    if (native) {
+        const bool secondary = fallback == acnh::TerrainFallback::secondary;
+        acnh::TerrainWorldPoint point{ld<float>(point_address), ld<float>(point_address + 8)};
+        GuestMemory memory;
+        TerrainFallbackServices services{cpu, point_address, secondary};
+        return acnh::terrain_fallback_kind(main_base, point, fallback, memory, services);
+    }
+    const uint64_t entry = fallback == acnh::TerrainFallback::secondary ? 0x87aa70 : 0x87a980;
+    trace_shovel_dependency(entry, cpu.x[30] - main_base);
+    call(cpu, main_base + entry);
+    return static_cast<uint32_t>(cpu.x[0]);
+}
+
 Fn original_shovel_target = nullptr;
 Fn original_shovel_terrain_setup = nullptr;
 Fn original_shovel_layer_one = nullptr;
@@ -779,6 +801,13 @@ bool is_shovel_target_frame(uint64_t frame) {
     return frame && ld<uint64_t>(frame + 8) == main_base + shovel_target_resume;
 }
 
+bool is_shovel_sampler_frame(uint64_t frame, uint64_t expected_resume) {
+    if (!frame || ld<uint64_t>(frame + 8) != main_base + expected_resume) return false;
+    const auto height_frame = ld<uint64_t>(frame);
+    return height_frame && is_shovel_height_call(ld<uint64_t>(height_frame + 8))
+        && is_shovel_target_frame(ld<uint64_t>(height_frame));
+}
+
 Fn original_shovel_grid_height = nullptr;
 bool use_cpp_shovel_grid_height = false;
 bool trace_shovel_grid_height = false;
@@ -787,12 +816,8 @@ bool is_shovel_grid_height_call(const CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
     if (resume != 0x83b0cc && resume != 0x83aa78 && resume != 0x83aad8)
         return false;
-    const auto sampler_frame = cpu.x[29];
     const auto expected = resume == 0x83b0cc ? 0x15e02e0 : 0x15e02f8;
-    if (!sampler_frame || ld<uint64_t>(sampler_frame + 8) != main_base + expected) return false;
-    const auto height_frame = ld<uint64_t>(sampler_frame);
-    return height_frame && is_shovel_height_call(ld<uint64_t>(height_frame + 8))
-        && is_shovel_target_frame(ld<uint64_t>(height_frame));
+    return is_shovel_sampler_frame(cpu.x[29], expected);
 }
 
 void shovel_grid_height_adapter(CPU& cpu) {
@@ -954,9 +979,20 @@ struct ShovelSamplerServices : HeightGuestFrame {
         nested.x[0] = point;
         const uint64_t entry = secondary ? 0x87aa70 : 0x87a980;
         const uint64_t resume = ground ? 0x83b0e4 : (secondary ? 0x83ab2c : 0x83ab10);
-        trace_shovel_dependency(entry, resume);
-        invoke(nested, main_base + entry, resume);
-        return static_cast<uint32_t>(nested.x[0]);
+        nested.x[30] = main_base + resume;
+        const bool native = use_cpp_sampler_terrain && (secondary ? use_cpp_terrain_secondary : use_cpp_terrain_primary);
+        const auto before_x = trace_sampler_terrain ? ld<uint32_t>(point) : 0;
+        const auto before_z = trace_sampler_terrain ? ld<uint32_t>(point + 8) : 0;
+        const auto kind = route_terrain_fallback(nested, route, native);
+        if (trace_sampler_terrain) {
+            const auto after_x = ld<uint32_t>(point);
+            const auto after_z = ld<uint32_t>(point + 8);
+            log("acnh shovel sampler terrain fallback %s entry=%llx point=%x,%x after=%x,%x call=%llx moved=%u out=%x",
+                native ? "cpp" : "original", static_cast<unsigned long long>(entry),
+                before_x, before_z, after_x, after_z, static_cast<unsigned long long>(resume - 4),
+                unsigned(before_x != after_x || before_z != after_z), kind);
+        }
+        return kind;
     }
 };
 
@@ -1263,18 +1299,9 @@ struct TerrainHelperServices {
         const bool secondary = target == 0x87aa70;
         const bool native = secondary ? use_cpp_terrain_secondary : use_cpp_terrain_primary;
         const auto before = point;
-        uint32_t kind;
-        if (native) {
-            GuestMemory memory;
-            TerrainFallbackServices services{nested, vector, secondary};
-            kind = acnh::terrain_fallback_kind(main_base, point,
-                secondary ? acnh::TerrainFallback::secondary : acnh::TerrainFallback::primary, memory, services);
-        } else {
-            trace_shovel_dependency(target, resume);
-            call(nested, main_base + target);
-            point = {ld<float>(vector), ld<float>(vector + 8)};
-            kind = static_cast<uint32_t>(nested.x[0]);
-        }
+        const auto fallback = secondary ? acnh::TerrainFallback::secondary : acnh::TerrainFallback::primary;
+        const auto kind = route_terrain_fallback(nested, fallback, native);
+        point = {ld<float>(vector), ld<float>(vector + 8)};
         if (trace_terrain_fallbacks)
             log("acnh shovel terrain fallback %s entry=%llx call=%llx point=%x,%x after=%x,%x out=%x",
                 native ? "cpp" : "original", static_cast<unsigned long long>(target),
@@ -2799,7 +2826,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_FIELD_MATERIAL");
     use_cpp_terrain_field_material = !mode || std::string_view(mode) == "cpp";
     trace_terrain_fallbacks = std::getenv("NX_ACNH_SHOVEL_TERRAIN_FALLBACK_TRACE") != nullptr;
-    if (use_cpp_terrain_field_material || trace_terrain_fallbacks)
+    trace_sampler_terrain = std::getenv("NX_ACNH_SHOVEL_SAMPLER_TERRAIN_TRACE") != nullptr;
+    mode = std::getenv("NX_ACNH_SHOVEL_SAMPLER_TERRAIN");
+    use_cpp_sampler_terrain = !mode || std::string_view(mode) == "cpp";
+    if (use_cpp_terrain_field_material || trace_terrain_fallbacks || trace_sampler_terrain)
         wrap_function(entries, 0x1285040, terrain_field_material_adapter, original_terrain_field_material);
 
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_MATERIALS");

@@ -7,7 +7,7 @@ The action engine continues to own item removal, inventory, and hole creation.
 
 | Survey call site | Target | Field-query responsibility | State |
 | --- | --- | --- | --- |
-| `0x21f70d4` | `0x15f36e0` | Select the survey target | C++ selector with generated height and point-classification callbacks |
+| `0x21f70d4` | `0x15f36e0` | Select the survey target | C++ selector and height dispatch with a generated point-classification callback |
 | `0x21f74fc` | `0x87b460`, `0x1284ee0` | Check terrain before gathering items | C++ terrain gate and layer-one predicate on the observed route |
 | `0x21f7568` to `0x21f75a4` | `0x3f04450`, `0x127c524`, `0x127c6ec` | Prepare the survey scratch data | `0x127c6ec` and `0x127c524` are verified C++ defaults. The empty-item initialization path also defaults to C++. |
 | `0x21f7614` | `0x127cab0` | Gather the neighborhood records and occupancy flags | Verified C++ default at the shovel call site |

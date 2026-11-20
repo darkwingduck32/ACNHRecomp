@@ -79,3 +79,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 15f36e0 # Select a target for the shovel survey
 # dispatch 87b460 # Check terrain before gathering the shovel neighborhood
 # dispatch 1284ee0 # Read the layer-one material flag
+# dispatch 15e026c # Resolve height at the shovel target
+# dispatch 83b024 # Sample the ground height and material
+# dispatch 83a950 # Sample the overlay height and material
+# dispatch 241e98c # Resolve the height parameter object

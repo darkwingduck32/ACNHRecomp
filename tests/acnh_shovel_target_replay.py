@@ -27,11 +27,11 @@ TRACE = re.compile(r"acnh shovel target (original|cpp) entry=([0-9a-f]+) (call=.
 SURVEY = re.compile(r"acnh shovel survey x=(-?\d+) z=(-?\d+) ")
 
 
-def live_cases(path, route, tile, entries):
+def live_cases(path, route, tile, entries, pattern=TRACE):
     results = {entry: Counter() for entry in entries}
     pending = {entry: Counter() for entry in entries}
     for line in path.read_text(errors="replace").splitlines():
-        if match := TRACE.fullmatch(line):
+        if match := pattern.fullmatch(line):
             found_route, target, state = match.groups()
             entry = int(target, 16)
             if entry in results:
@@ -51,10 +51,10 @@ def live_cases(path, route, tile, entries):
     return results
 
 
-def compare_live(paths, tile, entries):
+def compare_live(paths, tile, entries, pattern=TRACE):
     if paths:
-        original = live_cases(paths[0], "original", tile, entries)
-        native = live_cases(paths[1], "cpp", tile, entries)
+        original = live_cases(paths[0], "original", tile, entries, pattern)
+        native = live_cases(paths[1], "cpp", tile, entries, pattern)
         for entry in entries:
             if original[entry] != native[entry]:
                 raise SystemExit(f"{entry:#x}: original only {original[entry] - native[entry]}, "

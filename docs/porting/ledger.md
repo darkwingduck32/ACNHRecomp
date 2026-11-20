@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 49.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 54.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -1151,3 +1151,59 @@ encountered the height calls first. It reached the samplers
 `0x83b024` and `0x83a950`, the parameter accessor `0x241e98c`, and
 the virtual float accessor `0x60cba4`, in that order. This is the
 next group for moving height sampling off the generated path.
+
+### Shovel height sampling
+
+The height dispatcher, ground sampler, overlay sampler, and two
+parameter accessors default to C++ under the shovel target selector.
+Other callers keep their generated routes. The overlay retains the
+original lock and unlock imports. The parameter accessor retains
+its guest virtual type check and static initialization routines.
+
+| Entry | Original route switch | Independent AArch64 cases | Calls per route at (40, 69) |
+| --- | --- | ---: | ---: |
+| `0x15e026c` | `NX_ACNH_SHOVEL_HEIGHT=original` | 576 | 10 |
+| `0x83b024` | `NX_ACNH_SHOVEL_GROUND_HEIGHT=original` | 128 | 10 |
+| `0x83a950` | `NX_ACNH_SHOVEL_OVERLAY_HEIGHT=original` | 128 | 10 |
+| `0x241e98c` | `NX_ACNH_SHOVEL_HEIGHT_PARAMETERS=original` | 30 | 20 |
+| `0x60cba4` | `NX_ACNH_SHOVEL_HEIGHT_FLOAT=original` | 3 | 30 |
+
+The first trial captured heights from other target-selector callers.
+The adapters now verify the shovel survey's saved return address.
+The first scoped opt-in run faulted in column lookup because the
+port treated the value in X3 as the cache address. The
+original helper uses the fixed cache at `main+0x4bfab80`. The corrected
+replay executes the actual AArch64 row and column routines and checks
+the resulting cache bytes with that register set to zero.
+
+The original `heightport2`, opt-in `heightport3`, and default
+`heightport4` runs matched each function's focal trace. The four
+neighborhoods, surveys, and final decisions also matched, including the
+default against the whole original `classdeep2` route. The runs used
+one muted instance at a time. All 14 Release CTest checks and 14
+replay and profile tests passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-heightport2"
+$c = "$r/tree-shake-default-heightport4"
+foreach ($group in 'shovel_height', 'shovel_height_dependencies') {
+    & private/venv/Scripts/python -m private.heading.compare_leaf $group --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+}
+$o = "$r/tree-shake-original-classdeep2"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The first generated dependency in the tightened default trace is
+the grid-height routine `0x862700`. Both samplers call it, at
+`0x83b0c8` and through virtual dispatch at `0x83aa74`. Start the
+next group there. The height samplers also call generated copies of
+the world-position fallbacks `0x87a980` and `0x87aa70`, whose C++
+routes are already verified under the quadrant helper. The original
+parameter type test `0x22688e4` and point classifier `0x15f3ed0`
+remain at the guest boundary.
+
+The private `shovel-grid-height-reference.json` contains 336 stable
+AArch64 fixtures for `0x862700`, including both sampler modes,
+ground and overlay materials, tile edges, and out-of-bounds points.
+The source fixture is `private.heading.shovel_grid_height_reference`.

@@ -2668,7 +2668,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 24.
+two promoted material queries. Verified so far, 26.
 
 The next implementation group is selected using [gameplay coverage](gameplay-coverage.md)
 across shovel, tree shaking, and movement.
@@ -3006,5 +3006,48 @@ $o = "$r/tree-shake-default-workergrid-original3/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf shovel_grid_height --worker
 foreach ($run in 'cpp3', 'default4') {
     & private/venv/Scripts/python -m tests.acnh_worker_grid_height_live $o "$r/tree-shake-default-workergrid-$run/nx.log" --sites 11fca98 11fcac0 11fd70c
+}
+```
+
+### Terrain worker cull predicates
+
+| Entry | Size | Observed call | Portable original cases | Captured original cases |
+| --- | --- | --- | ---: | ---: |
+| `0x63e274` | `0x120` | `0x146a660` at `0x146a8ac` | 550 | 384 |
+| `0x14e9d34` | `0x6c` | `0x146a660` at `0x146ab38` | 462 | 384 |
+
+The two read-only predicates now default to typed C++ at these calls.
+The adapter checks FP=SP+0x60 and the exact stack-backed arguments.
+The volume preserves S0. The plane returns the original scalar bits
+alongside W0. Two independent AArch64 executions for each of 1,780
+cases matched both outputs and had zero writes and no callbacks.
+Portable cases cover both boolean outcomes, signed zero, unordered
+comparisons, and the adjacent floats around the cutoffs.
+
+The same fresh-dispatch DLL ran the original, opt-in, and default
+routes on the fixed tree fixture. Both C++ routes matched 413
+same-input original checks each, split 208 volume and 205 plane.
+The separate runs had no exact input-key overlap; each C++ sample
+was compared with the original guest body on that invocation. All
+three routes matched the boolean outcome sets and five ordered
+tree-shake heading records. The plane's W0=0 result was verified in
+portable replay. All 14 Release CTests and 14 profile/replay checks
+passed. The trace thresholds establish at least 9,437,184 typed
+calls in the complete default fixture, including field loading.
+This is a call-count lower bound.
+
+Set `NX_ACNH_WORKER_CULL=original` to restore the generated
+predicates at these sites. The parent culler, enqueue helper, worker
+claim and publication paths remain generated. These are two new
+verified functions selected from coverage, so Batch 4 has 26
+verified and the discovery queue still contains 100 entries.
+
+```powershell
+$r = 'private/heading/coverage-runs'
+$o = "$r/tree-shake-default-worker-cull-gate-original1/nx.log"
+$a = "$r/tree-shake-default-worker-cull-original1/console.log"
+$b = "$r/tree-shake-default-worker-cull-original2/console.log"
+foreach ($route in 'cpp', 'default') {
+    & private/venv/Scripts/python -m private.heading.compare_leaf worker_cull_predicates --live $a $b --gameplay $o "$r/tree-shake-default-worker-cull-gate-${route}1/nx.log"
 }
 ```

@@ -152,8 +152,9 @@ Private typed candidates matched two original AArch64 executions
 per case for 1,012 portable controls and 768 captured inputs,
 including exact S0 bits and zero external writes. The portable
 controls reached both boolean outcomes for both functions.
-The predicates and atomic worker paths remain generated in gameplay.
-The next group can start at these two observed calls.
+[The verified port](ledger.md#terrain-worker-cull-predicates) now uses
+typed C++ at these two calls. The full worker culler, enqueue and
+atomic worker paths remain generated.
 
 The private runs are `worker-cull-original1` and
 `worker-cull-original2` under `coverage-runs`. Both use the same

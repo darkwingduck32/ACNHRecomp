@@ -34,6 +34,7 @@
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
+#include "../../../games/acnh/terrain_cull_predicates.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1762,6 +1763,83 @@ bool is_shovel_height_child_frame(uint64_t frame, uint64_t expected_resume) {
     const auto height_frame = ld<uint64_t>(frame);
     return height_frame && is_shovel_height_call(ld<uint64_t>(height_frame + 8))
         && is_shovel_target_frame(ld<uint64_t>(height_frame));
+}
+
+Fn original_worker_cull_volume = nullptr;
+Fn original_worker_cull_plane = nullptr;
+bool use_cpp_worker_cull = false;
+bool trace_worker_cull = false;
+
+template<bool Plane>
+void worker_cull_adapter(CPU& cpu) {
+    constexpr uint64_t resume = Plane ? 0x146ab3c : 0x146a8b0;
+    const Fn original = Plane ? original_worker_cull_plane : original_worker_cull_volume;
+    const auto sp = cpu.x[31];
+    if (cpu.x[30] - main_base != resume || !cpu.x[0] || !sp || (sp & 15)
+        || cpu.x[29] != sp + 0x60 || cpu.x[1] != sp + 8
+        || (Plane && cpu.x[2] != sp + 0x18)) {
+        original(cpu);
+        return;
+    }
+
+    bool trace = false;
+    if (trace_worker_cull) {
+        static std::atomic<uint64_t> samples{0};
+        const auto count = samples.fetch_add(1, std::memory_order_relaxed) + 1;
+        trace = count <= 192 || std::has_single_bit(count);
+    }
+    if (!trace && !use_cpp_worker_cull) {
+        original(cpu);
+        return;
+    }
+    uint64_t input = 0;
+    uint32_t expected_w0 = 0, expected_s0 = 0;
+    if (trace) {
+        input = 14695981039346656037ull;
+        const auto mix = [&](uint32_t word) { input = (input ^ word) * 1099511628211ull; };
+        const auto point = cpu.x[1], config = cpu.x[0];
+        mix(ld<uint32_t>(point));
+        mix(ld<uint32_t>(point + 4));
+        mix(ld<uint32_t>(point + 8));
+        if constexpr (Plane) {
+            mix(ld<uint32_t>(point + 12));
+            mix(ld<uint32_t>(cpu.x[2] + 4));
+            for (uint64_t offset : {0x3c, 0x58, 0x60, 0x64, 0x68, 0x6c})
+                mix(ld<uint32_t>(config + offset));
+        } else {
+            mix(cpu.v[0].u32[0]);
+            for (uint64_t offset = 0; offset < 0x30; offset += 4)
+                mix(ld<uint32_t>(config + offset));
+            mix(ld<uint32_t>(config + 0xe0));
+            mix(ld<uint32_t>(config + 0xe4));
+            for (uint64_t offset = 0x104; offset <= 0x140; offset += 4)
+                mix(ld<uint32_t>(config + offset));
+        }
+        CPU reference = cpu;
+        original(reference);
+        expected_w0 = uint32_t(reference.x[0]);
+        expected_s0 = reference.v[0].u32[0];
+        if (!use_cpp_worker_cull) cpu = reference;
+    }
+    if (use_cpp_worker_cull) {
+        const GuestMemory memory;
+        if constexpr (Plane) {
+            const auto result = acnh::passes_terrain_cull_plane({cpu.x[0]}, {cpu.x[1]}, {cpu.x[2]}, memory);
+            cpu.x[0] = result.visible;
+            cpu.v[0] = {};
+            cpu.v[0].f32[0] = result.scalar;
+        } else {
+            cpu.x[0] = acnh::intersects_terrain_cull_volume({cpu.x[0]}, {cpu.x[1]}, cpu.v[0].f32[0], memory);
+        }
+    }
+    if (trace) {
+        const bool match = uint32_t(cpu.x[0]) == expected_w0 && cpu.v[0].u32[0] == expected_s0;
+        log("acnh worker cull %s same_input=%s call=%llx input=%llx w0=%x s0=%x",
+            use_cpp_worker_cull ? "cpp" : "original",
+            use_cpp_worker_cull ? (match ? "match" : "mismatch") : "stock",
+            static_cast<unsigned long long>(resume - 4), static_cast<unsigned long long>(input),
+            uint32_t(cpu.x[0]), cpu.v[0].u32[0]);
+    }
 }
 
 Fn original_shovel_grid_height = nullptr;
@@ -5860,6 +5938,13 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT");
     use_cpp_shovel_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
+    mode = std::getenv("NX_ACNH_WORKER_CULL");
+    use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
+    trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;
+    if (use_cpp_worker_cull || trace_worker_cull) {
+        wrap_function(entries, 0x63e274, worker_cull_adapter<false>, original_worker_cull_volume);
+        wrap_function(entries, 0x14e9d34, worker_cull_adapter<true>, original_worker_cull_plane);
+    }
     mode = std::getenv("NX_ACNH_WORKER_GRID_HEIGHT");
     use_cpp_worker_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_worker_grid_height = std::getenv("NX_ACNH_WORKER_GRID_HEIGHT_TRACE") != nullptr;

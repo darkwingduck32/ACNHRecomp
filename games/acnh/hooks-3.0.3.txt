@@ -106,6 +106,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 15e9c80 # Validate the intermediate shovel point and its rim heights
 # dispatch 15f0c64 # Check the candidate shovel step and intermediate points
 # dispatch 15f10f0 # Resolve the shovel step's traversal fallback
+# dispatch 8721a0 # Check height breaks in a shovel traversal rectangle
 # dispatch 15f27e0 # Sample the highest point near a shovel traversal position
 # dispatch 15f23b0 # Sweep positions along a shovel traversal segment
 # dispatch 11eb21c # Read a record and anchor from the selected field provider view

@@ -18,6 +18,7 @@
 #include "../../../games/acnh/shovel_stage_context.h"
 #include "../../../games/acnh/shovel_step.h"
 #include "../../../games/acnh/shovel_traversal_peak.h"
+#include "../../../games/acnh/shovel_traversal_rectangle.h"
 #include "../../../games/acnh/shovel_traversal.h"
 #include "../../../games/acnh/shovel_traversal_sweep.h"
 #include "../../../games/acnh/shovel_intermediate.h"
@@ -1173,6 +1174,76 @@ bool is_shovel_traversal_leg_resume(uint64_t resume) {
 bool is_shovel_traversal_leg_frame(uint64_t frame) {
     return frame && is_shovel_traversal_leg_resume(ld<uint64_t>(frame + 8) - main_base)
         && is_shovel_traversal_frame(ld<uint64_t>(frame));
+}
+
+Fn original_shovel_traversal_rectangle = nullptr;
+bool use_cpp_shovel_traversal_rectangle = false;
+bool trace_shovel_traversal_rectangle = false;
+
+void shovel_traversal_rectangle_adapter(CPU& cpu) {
+    constexpr std::array<uint64_t, 16> resumes{
+        0x15f1400, 0x15f1428, 0x15f1474, 0x15f149c, 0x15f1504, 0x15f152c, 0x15f1574, 0x15f159c,
+        0x15f19e4, 0x15f1a0c, 0x15f1a58, 0x15f1a80, 0x15f1af0, 0x15f1b18, 0x15f1b64, 0x15f1b8c,
+    };
+    const auto resume = cpu.x[30] - main_base;
+    if (std::find(resumes.begin(), resumes.end(), resume) == resumes.end()
+        || !is_shovel_traversal_leg_frame(cpu.x[29])
+        || uint32_t(cpu.x[2]) != 0 || !cpu.x[0] || !cpu.x[1]
+        || (!use_cpp_shovel_traversal_rectangle && !trace_shovel_traversal_rectangle)) {
+        original_shovel_traversal_rectangle(cpu);
+        return;
+    }
+    const auto grid = cpu.x[0];
+    const auto descriptor = cpu.x[1];
+    const acnh::TraversalRectangleQuery query{{grid},
+        {{ld<int32_t>(descriptor + 0x10), ld<int32_t>(descriptor + 0x14)},
+         {ld<int32_t>(descriptor + 0x20), ld<int32_t>(descriptor + 0x24)}}, false};
+    const bool native = use_cpp_shovel_traversal_rectangle;
+    const bool typed = acnh::shovel_traversal_rectangle_has_height_break(query, GuestMemory{});
+    uint64_t expected = typed;
+    if (!native) {
+        original_shovel_traversal_rectangle(cpu);
+        expected = cpu.x[0];
+    } else {
+        if (trace_shovel_traversal_rectangle) {
+            // Neither the original check nor its sampler writes outside the guest frame.
+            CPU probe = cpu;
+            original_shovel_traversal_rectangle(probe);
+            expected = probe.x[0];
+        }
+        cpu.x[0] = typed;
+    }
+    if (!trace_shovel_traversal_rectangle) return;
+
+    const auto [low, high] = query.bounds;
+    const auto width = ld<uint32_t>(grid + 0x38);
+    const auto depth = ld<uint32_t>(grid + 0x3c);
+    const auto threshold = ld<uint32_t>(grid + 0x30);
+    const auto ground_count = ld<uint32_t>(grid + 0x48);
+    const auto overlay_count = ld<uint32_t>(grid + 0x58);
+    const auto ground = ld<uint64_t>(grid + 0x50);
+    const auto overlay = ld<uint64_t>(grid + 0x60);
+    const auto rows = [&](uint64_t table, uint32_t count) {
+        std::string result;
+        if (!table) return result;
+        for (int64_t z = std::max(0, low.z); z <= high.z && z < depth; ++z) {
+            for (int64_t x = std::max(0, low.x); x <= std::max(low.x, high.x) && x < width; ++x) {
+                const uint32_t cell = width * uint32_t(z) + uint32_t(x);
+                if (cell >= count) continue;
+                if (!result.empty()) result += '/';
+                result += std::to_string(cell) + ':';
+                const auto bytes = reinterpret_cast<const uint8_t*>(table + 0x34ll * std::bit_cast<int32_t>(cell));
+                result += cache_hex(std::span<const uint8_t>{bytes, 0x34});
+            }
+        }
+        return result;
+    };
+    log("acnh shovel traversal rectangle %s entry=8721a0 call=%llx bounds=%d,%d,%d,%d "
+        "grid=%u,%u threshold=%08x count=%u,%u ground=%s overlay=%s same_input=%s out=%u",
+        native ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+        low.x, low.z, high.x, high.z, width, depth, threshold, ground_count, overlay_count,
+        rows(ground, ground_count).c_str(), rows(overlay, overlay_count).c_str(),
+        expected == uint64_t(typed) ? "match" : "mismatch", unsigned(cpu.x[0]));
 }
 
 std::array<uint32_t, 3> shovel_xyz_bits(uint64_t point) {
@@ -5169,6 +5240,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_STAGE");
     use_cpp_shovel_collision_stage = !mode || std::string_view(mode) == "cpp";
     trace_shovel_collision_stage = std::getenv("NX_ACNH_SHOVEL_COLLISION_STAGE_TRACE") != nullptr;
+
+    mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_RECTANGLE");
+    use_cpp_shovel_traversal_rectangle = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_traversal_rectangle = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_RECTANGLE_TRACE") != nullptr;
+    if (use_cpp_shovel_traversal_rectangle || trace_shovel_traversal_rectangle)
+        wrap_function(entries, 0x8721a0, shovel_traversal_rectangle_adapter, original_shovel_traversal_rectangle);
 
     mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_LEGS");
     use_cpp_shovel_traversal_legs = !mode || std::string_view(mode) == "cpp";

@@ -2662,7 +2662,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 0.
+two promoted material queries. Verified so far, 1.
 
 Implementation continues on the typed shovel traversal path.
 
@@ -2702,3 +2702,43 @@ $c = "$r/tree-shake-default-traversalleg3"
 The live original legs reached 144 rectangle checks at 16 caller sites.
 Those checks go next. The alternate recursion axis and stage-name and
 rule calls outside the verified scopes remain generated.
+
+### Rectangle height breaks in traversal legs
+
+| Entry | Unwind size | Runtime scope | Stage |
+| --- | --- | --- | --- |
+| `0x8721a0` | `0x75c` | 16 observed rectangle calls in the two first-axis legs | Verified |
+
+The typed rectangle query checks height changes across adjacent
+triangle edges. It reads terrain rows and chooses the overlay per
+triangle. The runtime unpacks the inclusive rectangle and follows
+the two first-axis leg frames back to the direct shovel traversal.
+The scoped calls all pass mode zero. Set
+`NX_ACNH_SHOVEL_TRAVERSAL_RECTANGLE=original` to restore the generated
+rectangle function and its sampler. Other callers, including direct
+or alternate-axis traversal checks, keep that route.
+
+Two AArch64 executions per input matched 562 portable cases and
+16 distinct gameplay inputs. The original replay runs the actual
+terrain sampler at `0x862530` when the mode selects it, and checks
+the rectangle result and absence of caller-visible writes. There
+were 372 true portable results. All 144 rectangle calls per live
+route returned false, with matching bounds, terrain rows, and
+results across all 16 call sites.
+
+Original and opt-in `traversalrect1` and default `traversalrect2`
+also matched the 2,412 leg records, nine direct traversals, 342
+sweep casts, ten surveys, ten neighborhoods, and 12 final
+decisions. All 14 Release CTests and 14 profile and replay
+checks passed. Batch 4 has one verified function and 100
+discovery candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-traversalrect1"
+$c = "$r/tree-shake-default-traversalrect2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_traversal_rectangle --capture "$o/nx.log" --live "$o/nx.log" "$c/nx.log"
+```
+
+Next are the stage-name and rule callbacks reached by the
+outer traversal, sweep probes, and stage-item resolution.

@@ -53,4 +53,36 @@ void multiply_vector3(uint64_t out, uint64_t matrix, uint64_t point, Memory& mem
     }
 }
 
+template<class Memory>
+uint64_t tile_category_record(uint64_t owner, int32_t x, int32_t z, const Memory& memory) {
+    if (x < 0 || z < 0) return 0;
+    const uint64_t grid = memory.template read<uint64_t>(owner + 0x80);
+    const uint32_t width = memory.template read<uint32_t>(grid + 0x38);
+    const uint32_t height = memory.template read<uint32_t>(grid + 0x3c);
+    if (static_cast<uint32_t>(x) >= width || static_cast<uint32_t>(z) >= height) return 0;
+    const uint32_t index = width * static_cast<uint32_t>(z) + static_cast<uint32_t>(x);
+    const uint32_t count = memory.template read<uint32_t>(grid + 0x48);
+    const uint64_t records = memory.template read<uint64_t>(grid + 0x50);
+    if (index >= count || !records) return 0;
+    return records + 0x34ll * static_cast<int32_t>(index);
+}
+
+template<class Memory>
+bool tile_category_mask(uint64_t owner, uint64_t query, uint64_t mask, const Memory& memory) {
+    const int32_t x = memory.template read<int32_t>(query + 8);
+    if (x < 0) return false;
+    const int32_t z = memory.template read<int32_t>(query + 12);
+    const uint64_t record = tile_category_record(owner, x, z, memory);
+    if (!record) return false;
+    const uint8_t categories[] = {
+        memory.template read<uint8_t>(record + 0x30), memory.template read<uint8_t>(record + 0x31),
+        memory.template read<uint8_t>(record + 0x32), memory.template read<uint8_t>(record + 0x33),
+    };
+    for (const uint32_t category : categories) {
+        if (category < 73 && ((memory.template read<uint32_t>(mask + 4 * (category / 32)) >>
+                               (category % 32)) & 1)) return true;
+    }
+    return false;
+}
+
 }  // namespace nx::acnh

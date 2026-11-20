@@ -1,10 +1,10 @@
 """Compare action-bit, half-tile, and vector-multiply leaves independently."""
 import argparse
 import collections
+import hashlib
 import itertools
 import random
 import re
-import hashlib
 import struct
 import subprocess
 from pathlib import Path
@@ -17,7 +17,7 @@ from tools.acnh_version import build_id
 
 BUILD = "FF1D1C05670DB6021C85B624A710B963"
 BASE = 0x4000000000
-ROUTES = ((0x24642A8, 0x68), (0x1281C54, 0x15C), (0x3DB4ED0, 0x4C))
+ROUTES = ((0x24642A8, 0x68), (0x1281C54, 0x15C), (0x3DB4ED0, 0x4C), (0x849898, 0x118))
 
 
 def inputs():
@@ -59,6 +59,24 @@ def inputs():
         yield 2, out, matrix, point, memory
 
 
+    for x, z, count, records, categories, mask in itertools.product(
+        (-1, 0, 1, 2), (-1, 0, 1, 2), (0, 1, 4), (0, 0x2a000),
+        ((0, 31, 32, 72), (73, 255, 255, 255)), (0, 1 << 31, 1 << 32, 1 << 72),
+    ):
+        owner, query, mask_address, grid = 0x27000, 0x28000, 0x29000, 0x2b000
+        fields = bytearray(0x58)
+        struct.pack_into("<II", fields, 0x38, 2, 2)
+        struct.pack_into("<I", fields, 0x48, count)
+        struct.pack_into("<Q", fields, 0x50, records)
+        data = {
+            owner + 0x80: struct.pack("<Q", grid), query: struct.pack("<Qii", 0, x, z),
+            mask_address: mask.to_bytes(12, "little"), grid: bytes(fields),
+        }
+        if records:
+            data[records] = (bytes(0x30) + bytes(categories)) * 4
+        yield 3, owner, query, mask_address, data
+
+
 HALF_TILE_TRACE = re.compile(
     r"acnh half tile (original|cpp) caller=([0-9a-f]+) base=([0-9a-f]+) "
     r"grid=([0-9a-f]+) query=([0-9a-f]+) record=([0-9a-f]+) out=([0-9a-f]+) "
@@ -86,11 +104,45 @@ def live_half_tiles(path, expected_route):
     return states, cases
 
 
+CATEGORY_MASK_TRACE = re.compile(
+    r"acnh tile category mask (original|cpp) caller=([0-9a-f]+) base=([0-9a-f]+) "
+    r"owner=([0-9a-f]+) query=([0-9a-f]+) mask=([0-9a-f]+) grid=([0-9a-f]+) "
+    r"record=([0-9a-f]+) out=([0-9a-f]+) g=([0-9a-f-]+) q=([0-9a-f]{16}) "
+    r"r=([0-9a-f-]+) m=([0-9a-f-]+)"
+)
+
+
+def live_category_masks(path, expected_route):
+    raw = path.read_bytes()
+    cases = []
+    states = collections.Counter()
+    for route, caller, _, owner, query, mask, grid, record, out, g, q, r, m in CATEGORY_MASK_TRACE.findall(raw.decode(errors="replace")):
+        if route != expected_route:
+            raise ValueError(f"{path}: expected {expected_route}, found {route}")
+        owner, query, mask, grid, record, out = (
+            int(value, 16) for value in (owner, query, mask, grid, record, out)
+        )
+        memory = {query + 8: bytes.fromhex(q)}
+        if grid:
+            memory[owner + 0x80] = struct.pack("<Q", grid)
+            memory[grid + 0x38] = bytes.fromhex(g)
+        if record:
+            memory[record + 0x30] = bytes.fromhex(r)
+            memory[mask] = bytes.fromhex(m)
+        states[(caller, q, r, m, out)] += 1
+        cases.append(((3, owner, query, mask, memory), out))
+    if not cases:
+        raise ValueError(f"{path}: no tile category mask calls")
+    print(f"{path}: {len(cases)} tile category mask calls, SHA-256 {hashlib.sha256(raw).hexdigest()}")
+    return states, cases
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--live-half-tile", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--live-category-mask", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
@@ -104,6 +156,13 @@ def main():
         replacement_states, replacement = live_half_tiles(args.live_half_tile[1], "cpp")
         if original_states != replacement_states:
             raise SystemExit("live callers, query coordinates, record slots or outcomes differ")
+        cases.extend(original)
+        cases.extend(replacement)
+    if args.live_category_mask:
+        original_states, original = live_category_masks(args.live_category_mask[0], "original")
+        replacement_states, replacement = live_category_masks(args.live_category_mask[1], "cpp")
+        if original_states != replacement_states:
+            raise SystemExit("live tile category mask callers, inputs or outcomes differ")
         cases.extend(original)
         cases.extend(replacement)
     lines = []

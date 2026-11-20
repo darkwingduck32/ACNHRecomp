@@ -185,7 +185,46 @@ void half_tile_adapter(CPU& cpu) {
         record_bytes.c_str());
 }
 
-void install_action_mask(const ModuleInfo& module, FuncEntry* entries) {
+Fn original_category_mask = nullptr;
+bool use_cpp_category_mask = false;
+bool trace_category_mask = false;
+std::atomic<unsigned> category_mask_samples{0};
+
+void category_mask_adapter(CPU& cpu) {
+    const uint64_t owner = cpu.x[0];
+    const uint64_t query = cpu.x[1];
+    const uint64_t mask = cpu.x[2];
+    GuestMemory memory;
+    const auto apply = [&] {
+        if (use_cpp_category_mask) cpu.x[0] = acnh::tile_category_mask(owner, query, mask, memory);
+        else original_category_mask(cpu);
+    };
+    const uint64_t caller = cpu.x[30] - main_base;
+    if (!trace_category_mask || (caller != 0x14c4680 && caller != 0x14c46e8) ||
+        category_mask_samples.fetch_add(1, std::memory_order_relaxed) >= 12) {
+        apply();
+        return;
+    }
+
+    const auto x = ld<int32_t>(query + 8);
+    const auto z = ld<int32_t>(query + 12);
+    const uint64_t grid = x >= 0 && z >= 0 ? ld<uint64_t>(owner + 0x80) : 0;
+    const uint64_t record = acnh::tile_category_record(owner, x, z, memory);
+    const auto grid_bytes = grid ? field_bytes(grid + 0x38, 0x20) : "-";
+    const auto query_bytes = field_bytes(query + 8, 8);
+    const auto record_bytes = record ? field_bytes(record + 0x30, 4) : "-";
+    const auto mask_bytes = record ? field_bytes(mask, 12) : "-";
+    apply();
+    log("acnh tile category mask %s caller=%llx base=%llx owner=%llx query=%llx mask=%llx grid=%llx record=%llx out=%llx g=%s q=%s r=%s m=%s",
+        use_cpp_category_mask ? "cpp" : "original", static_cast<unsigned long long>(caller),
+        static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(owner),
+        static_cast<unsigned long long>(query), static_cast<unsigned long long>(mask),
+        static_cast<unsigned long long>(grid), static_cast<unsigned long long>(record),
+        static_cast<unsigned long long>(cpu.x[0]), grid_bytes.c_str(), query_bytes.c_str(),
+        record_bytes.c_str(), mask_bytes.c_str());
+}
+
+void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
     main_base = module.base;
@@ -213,10 +252,16 @@ void install_action_mask(const ModuleInfo& module, FuncEntry* entries) {
         wrap_function(functions, 0x5bd550, terminated_hash_adapter, original_terminated_hash);
 
     mode = std::getenv("NX_ACNH_HALF_TILE_RECORD");
-    use_cpp_half_tile = mode && std::string_view(mode) == "cpp";
+    use_cpp_half_tile = !mode || std::string_view(mode) == "cpp";
     trace_half_tile = std::getenv("NX_ACNH_HALF_TILE_RECORD_TRACE") != nullptr;
     if (use_cpp_half_tile || trace_half_tile)
         wrap_function(functions, 0x1281c54, half_tile_adapter, original_half_tile);
+
+    mode = std::getenv("NX_ACNH_TILE_CATEGORY_MASK");
+    use_cpp_category_mask = mode && std::string_view(mode) == "cpp";
+    trace_category_mask = std::getenv("NX_ACNH_TILE_CATEGORY_MASK_TRACE") != nullptr;
+    if (use_cpp_category_mask || trace_category_mask)
+        wrap_function(functions, 0x849898, category_mask_adapter, original_category_mask);
 }
 
 }  // namespace
@@ -224,7 +269,7 @@ void install_action_mask(const ModuleInfo& module, FuncEntry* entries) {
 void register_acnh_action(Registry& registry) {
     Definition feature;
     feature.id = "acnh.action";
-    feature.module_loaded = install_action_mask;
+    feature.module_loaded = install_acnh_action;
     registry.add(std::move(feature));
 }
 

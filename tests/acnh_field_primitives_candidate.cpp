@@ -29,6 +29,7 @@ int main() {
         if (mode == 0) nx::acnh::set_action_bit(a, static_cast<uint32_t>(b), static_cast<uint32_t>(c), memory);
         if (mode == 1) result = nx::acnh::half_tile_record(c, a, b, memory);
         if (mode == 2) nx::acnh::multiply_vector3(a, b, c, memory);
+        if (mode == 3) result = nx::acnh::tile_category_mask(a, b, c, memory);
         std::cout << result;
         for (const auto& [addr, size, value] : memory.writes)
             std::cout << ' ' << addr << ' ' << size << ' ' << value;

@@ -1,6 +1,6 @@
 # ACNH 3.0.3 function port ledger
 
-The batch targets 10 verified gameplay functions. All ten are verified. See [the final batch replay](batch-verification.md).
+The first batch verified ten gameplay functions. See [the final batch replay](batch-verification.md).
 
 The `port/acnh-engine` branch is checked out at
 `C:/Users/bettr/.codex/worktrees/bb9b/ACNHRecomp` and started from
@@ -44,8 +44,9 @@ with the [candidate queue](next-candidates.md). Verified so far, 7.
 | `0x5bd550` | Hash a terminated byte string with a seed | Verified | The combined default trial matched 257 cases. |
 | `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Verified | The combined default trial matched 518 cases. |
 | `0x24642a8` | Set or clear an action-mask bit | Synthetic comparison | Find a player or NPC state that reaches a known caller. |
-| `0x1281c54` | Look up a half-tile record | Live trial | Compare both routes during the shovel survey. |
+| `0x1281c54` | Look up a half-tile record | Default validation | Repeat the shovel survey through the promoted default. |
 | `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Synthetic comparison | Find a scene that reaches the matrix multiply at `main+0x3dafc64`. |
+| `0x849898` | Test a tile's category bytes against a bit mask | Live trial | Compare both routes at the island field callers. |
 
 The action-mask no-op candidate failed case 0. The C++ implementation
 matched all 228 fixtures against two fresh Unicorn runs, including the
@@ -156,3 +157,23 @@ The tree-shake and shovel probes did not reach the action-bit writer or
 matrix multiply. The original behavior remains active for those entries.
 The next discovery probe includes nearby field predicates and both
 outstanding call sites.
+
+The paired shovel trial in `tree-shake-{original,cpp}-halve2/nx.log`
+captured 24 calls on each route. The 503 total cases matched two original
+executions with exact guest addresses, outputs and writes. The gameplay
+snapshots include the tile grid and all four slots in the selected record.
+C++ is undergoing default validation. Set
+`NX_ACNH_HALF_TILE_RECORD=original` to restore the stock route.
+
+### Tile category masks
+
+The additional candidate at `main+0x849898` has unwind size `0x118`.
+It accepts an owner, coordinate record, and three-word mask. It resolves
+a 0x34-byte tile record and returns whether any of its four category bytes
+selects a set bit below category 73. It only writes to its own stack.
+The probe in `tree-shake-original-spare1/console.log` recorded six calls at
+each of `main+0x14c467c` and `main+0x14c46e4`. The probe SHA-256 is
+`ee10a07d0c5cd5fbec69e6ff6ce19fd65b48dffdf30a7b2a91ef8d340a16a444`.
+A constant-false port failed case 1066. The replacement matched all 768
+synthetic cases against fresh reference executions. The native route is
+opt-in via `NX_ACNH_TILE_CATEGORY_MASK=cpp`.

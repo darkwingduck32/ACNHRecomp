@@ -123,12 +123,13 @@ from .emit_neon_wide import NeonWideOps  # noqa: E402
 
 
 class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
-    def __init__(self, an, prefix="sub"):
+    def __init__(self, an, prefix="sub", *, dispatch=()):
         self.an = an
         self.m = an.module
         self.cs = capstone.Cs(capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)
         self.cs.detail = True
         self.entries = {f.start for f in an.functions}
+        self.dispatch = frozenset(dispatch)
         self.prefix = prefix
         # Debug: NX_TRACE_SP=0xADDR,... logs SP after every instruction that changes it in those functions.
         import os
@@ -201,9 +202,12 @@ class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
         if f.start <= t < f.end:
             self.labels.add(t)
             return f"goto L_{t:X};"
-        if t in self.entries:
-            return f"{{ {self.fn(t)}(c); return; }}"
-        return f"{{ nx::call(c, {B} + {t:#x}ull); return; }}"
+        return f"{{ {self.call_target(t)} return; }}"
+
+    def call_target(self, target):
+        if target in self.entries and target not in self.dispatch:
+            return f"{self.fn(target)}(c);"
+        return f"nx::call(c, {B} + {target:#x}ull);"
 
     # ---- memory addressing --------------------------------------------------------------------------------
 
@@ -287,8 +291,7 @@ class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
             out.append("    " + stmt)
         if not last_term:
             # Falls off the end: continue into whatever follows.
-            out.append("    " + (f"{self.fn(f.end)}(c);" if f.end in self.entries else
-                                 f"nx::call(c, {B} + {f.end:#x}ull);"))
+            out.append("    " + self.call_target(f.end))
         if sj:
             out.append("    return;")
             out.append("    } catch (const nx::LongJmp& e_) {")
@@ -328,7 +331,7 @@ class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
             self.setjmp_sites.append(i.address + 4)
             self.labels.add(i.address + 4)
             return f"js_[{k}].save(c); c.x[0] = 0;"
-        call = f"{self.fn(t)}(c);" if t in self.entries else f"nx::call(c, {B} + {t:#x}ull);"
+        call = self.call_target(t)
         return f"c.x[30] = {B} + {i.address + 4:#x}ull; {call}"
 
     def i_blr(self, f, i, ops):

@@ -18,6 +18,18 @@ def read_hooks(path):
             if line and not line.startswith('include '):hooks.add(int(line,16))
     return hooks
 
+def read_dispatch(path):
+    """Read opt-in function targets. Older importers treating directives as comments keep stock calls."""
+    dispatch = set()
+    for source in hook_sources(path):
+        for raw in source.read_text().splitlines():
+            directive = raw.strip()
+            if directive.startswith("# dispatch "):
+                address = directive[len("# dispatch "):].split("#", 1)[0]
+                dispatch.add(int(address, 16))
+    return dispatch
+
+
 def hooks_mtime(path):
     return max(p.stat().st_mtime for p in hook_sources(path))
 

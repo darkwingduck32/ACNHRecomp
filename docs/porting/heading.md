@@ -34,12 +34,32 @@ clang-cl /nologo /std:c++20 /O2 /fp:precise /Foprivate/heading/candidate.obj /Fe
 & private/venv/Scripts/python -m tests.acnh_heading_replay H:/ACNH/ACNHRecomp/private/game/exefs/main private/heading/candidate.exe
 ```
 
-## Remaining work
+## Runtime route and live validation
 
-The generated caller currently invokes the generated function directly.
-The next step is to test routing explicitly selected calls through the
-runtime function table and wrap the pinned entry there, keeping the original
-function available. Then drive the same tree-shake scenario with both paths,
-record actual inputs and outcomes under ignored `private/`, replay the
-captured inputs, and run the relevant build and regressions. No live
-captures, runtime switch, or promotion exist yet.
+The recompiler reads the opt-in dispatch target from the 3.0.3 hooks
+profile. Calls to it now go through the runtime dispatch table. The installed
+adapter selects the C++ route only with `NX_ACNH_HEADING=cpp`; the original is
+the default and remains the fallback for non-finite inputs. Use
+`NX_ACNH_HEADING_TRACE=1` to log input and output bits at the tree-shake call.
+
+The standard emitter produced the expected dispatch at the actual caller:
+
+```powershell
+& private/venv/Scripts/python -m recomp H:/ACNH/ACNHRecomp/private/game/exefs/main private/heading/emitted --name main --jobs 2 --only 5f0400 23e02d0 --hooks games/acnh/hooks-3.0.3.txt
+```
+
+The isolated player build and all 13 registered CTest tests passed. The
+campaign branch carries the standalone shader build guard already present
+on the integration branch. The initial all-target build failed without it.
+
+The private live scripts are under `private/heading/` in the campaign
+worktree. They build a DLL from the cached 3.0.3 objects with the two
+tree-shake call sites (base and speed variant) routed through dispatch.
+This exercises the same call in gameplay before the full generated rebuild.
+The player build, probe DLL, and disposable saves/logs live under
+`H:/ACNH/ACNHRecomp/private/port-acnh-engine/`.
+
+Next action: inspect the original and C++ trial logs, then pass them to
+`tests.acnh_heading_replay --live ORIGINAL_LOG CPP_LOG` after the two
+positionals above. Finish the full generated build and repeat the scenario
+through the promoted default before counting the row.

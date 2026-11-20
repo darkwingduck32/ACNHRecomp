@@ -17,6 +17,7 @@
 3c4b20c  # button handler input entry (v3_0_3.cpp; 3.0.2 main+3c4b1fc)
 
 include features/camera/hooks-3.0.3.txt
+# dispatch 5f0400 # Heading calculation used in the tree-shake approach
 21f7618  # shovel 3x3 field survey complete, before classifying the selected tile
 23e0808  # tree shake preparation, after masking the selected trunk coordinates
 23e0f50  # tree shake, before dispatching the visual event rectangle

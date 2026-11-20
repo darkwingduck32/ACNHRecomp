@@ -10,7 +10,7 @@ Batch target: 10 verified gameplay functions. Verified: 0.
 
 | Module and entry | Provisional name | Stage | Evidence | Next action |
 | --- | --- | --- | --- | --- |
-| `FF1D1C05670DB6021C85B624A710B963:0x5f0400` | Heading from horizontal direction | Offline comparison | [Pilot](heading.md) | Route the generated tree-shake call through runtime dispatch and capture paired entry/exit observations on a disposable save. |
+| `FF1D1C05670DB6021C85B624A710B963:0x5f0400` | Heading from horizontal direction | Live trial | [Pilot](heading.md) | Compare tree-shake captures from the original and C++ routes and finish the full generated build. |
 | `FF1D1C05670DB6021C85B624A710B963:0x1a03610` | Find index for auxiliary item type | Discovery | Called at `main+0x267d768`; reads a runtime table from the main image. | Verify the unwind range and obtain a live snapshot of the table before replay. |
 | `FF1D1C05670DB6021C85B624A710B963:0x267d6c4` | Resolve field item ID | Discovery | Called at `main+0x21f76b0` and `main+0x23dfe18`; calls the preceding row on one branch. | Establish the leaf dependency and its capture prerequisites. |
 

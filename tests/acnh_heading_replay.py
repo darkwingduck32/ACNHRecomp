@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import random
+import re
 import struct
 import subprocess
 from pathlib import Path
@@ -33,10 +34,31 @@ def inputs():
         yield rng.uniform(-100, 100), rng.uniform(-100, 100)
 
 
+TRACE = re.compile(r"acnh heading tree-shake (original|cpp) s0=([0-9a-f]{8}) s1=([0-9a-f]{8}) w0=([0-9a-f]{8})")
+
+
+def live_cases(path, expected_route):
+    observed = {}
+    raw = path.read_bytes()
+    for match in TRACE.finditer(raw.decode("utf-8", errors="replace")):
+        route, x, z, output = match.groups()
+        if route != expected_route:
+            raise ValueError(f"{path}: expected {expected_route} but observed {route}")
+        pair = int(x, 16), int(z, 16)
+        result = int(output, 16)
+        if observed.setdefault(pair, result) != result:
+            raise ValueError(f"{path}: inconsistent results for {x} {z}")
+    if not observed:
+        raise ValueError(f"{path}: no {expected_route} tree-shake calls")
+    print(f"{path}: {len(observed)} unique inputs; SHA-256 {hashlib.sha256(raw).hexdigest()}")
+    return observed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
+    parser.add_argument("--live", nargs=2, metavar=("ORIGINAL_LOG", "CPP_LOG"), type=Path)
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected module build {BUILD}")
@@ -50,6 +72,14 @@ def main():
     code = bytes(module.image[ENTRY:ENTRY + SIZE])
     table = bytes(module.image[TABLE:TABLE + TABLE_SIZE])
     cases = [struct.unpack("<II", struct.pack("<ff", *pair)) for pair in inputs()]
+    observed = {}
+    if args.live:
+        original = live_cases(args.live[0], "original")
+        replacement = live_cases(args.live[1], "cpp")
+        if original != replacement:
+            raise SystemExit("original and C++ logs differ in observed inputs or results")
+        observed = original
+        cases.extend(observed)
     words = struct.unpack("<258I", table)
     payload = " ".join(map(str, words)) + "\n" + "".join(f"{x} {z}\n" for x, z in cases)
     candidate = subprocess.run([str(args.candidate.resolve())], input=payload, text=True,
@@ -65,6 +95,8 @@ def main():
         if original != repeat or original.memory != memory or original.written_bytes:
             raise SystemExit(f"unexpected reference effects in case {i} (input {x:08x} {z:08x})")
         expected = original.registers[UC_ARM64_REG_X0]
+        if (x, z) in observed and observed[x, z] != expected:
+            raise SystemExit(f"live trace differs from Unicorn for {x:08x} {z:08x}")
         got = int(actual[i])
         if got != expected:
             raise SystemExit(f"case {i}, s0={x:08x}, s1={z:08x}: expected {expected:#010x}, got {got:#010x}")

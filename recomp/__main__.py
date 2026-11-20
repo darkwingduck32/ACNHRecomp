@@ -76,16 +76,17 @@ def main():
     print(f"analysis: {len(an.functions)} functions, {len(an.jump_tables)} jump tables ({time.time() - t:.1f}s)")
 
     os.makedirs(args.out, exist_ok=True)
-    e = emit.Emitter(an, prefix=name)
+    from .hooks import read_dispatch, read_hooks
+    dispatch = read_dispatch(args.hooks) if args.hooks else set()
+    e = emit.Emitter(an, prefix=name, dispatch=dispatch)
     if args.hooks:
-        from .hooks import read_hooks
         e.hooks = read_hooks(args.hooks)
-        print(f"  {len(e.hooks)} hooks from {args.hooks}")
+        print(f"  {len(e.hooks)} hooks and {len(dispatch)} dispatch targets from {args.hooks}")
     funcs = an.functions
     global _variant
     _variant = None
     if args.variant:
-        _variant = build_variant(m, an, read_pchtxt(args.variant), name, e.hooks)
+        _variant = build_variant(m, an, read_pchtxt(args.variant), name, e.hooks, dispatch)
     if args.only:
         want = {int(x, 16) for x in args.only}
         funcs = [f for f in funcs if f.start in want]
@@ -190,14 +191,14 @@ def read_pchtxt(path):
     return words
 
 
-def build_variant(m, an, words, name, hooks):
+def build_variant(m, an, words, name, hooks, dispatch):
     """The patched module analyzed, and which of its functions differ from the module's."""
     t = time.time()
     m2 = dataclasses.replace(m, image=bytearray(m.image))
     for off, w in words:
         m2.image[off:off + 4] = w.to_bytes(4, "little")
     an2 = analysis.analyze(m2, patched=[off for off, _ in words if m.in_text(off)])
-    e2 = emit.Emitter(an2, prefix=name)
+    e2 = emit.Emitter(an2, prefix=name, dispatch=dispatch)
     e2.hooks = hooks
     text = sorted(off for off, _ in words if m.in_text(off))
     def touched(f):

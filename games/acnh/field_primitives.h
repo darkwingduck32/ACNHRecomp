@@ -1,7 +1,5 @@
 #pragma once
 
-#include "tile_record_flag.h"
-
 #include <array>
 #include <bit>
 #include <cmath>
@@ -16,26 +14,6 @@ void set_action_bit(uint64_t object, uint32_t bit, uint32_t flag, Memory& memory
     const uint32_t mask = uint32_t{1} << (bit % 32);
     const uint32_t word = memory.template read<uint32_t>(address);
     memory.template write<uint32_t>(address, (flag & 1) ? word | mask : word & ~mask);
-}
-
-inline uint32_t half_tile_coordinate(int32_t coordinate) {
-    return static_cast<uint32_t>(static_cast<int32_t>(std::floor(static_cast<float>(coordinate) * 0.5f)));
-}
-
-template<class Memory>
-uint64_t half_tile_record(uint64_t base, uint64_t grid, uint64_t query, const Memory& memory) {
-    const int32_t x = memory.template read<int32_t>(query + 8);
-    const int32_t z = memory.template read<int32_t>(query + 12);
-    const auto tile_x = half_tile_coordinate(x);
-    const auto tile_z = half_tile_coordinate(z);
-    const uint64_t record = tile_record(base + 0x50a50f0, grid, tile_x, tile_z, memory);
-    for (uint64_t slot = record + 0x28; slot < record + 0x68; slot += 16) {
-        if (memory.template read<int16_t>(slot + 12) == x &&
-            memory.template read<int16_t>(slot + 14) == z) {
-            return slot;
-        }
-    }
-    return 0;
 }
 
 template<class Memory>

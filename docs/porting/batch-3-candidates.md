@@ -1,7 +1,8 @@
 # ACNH 3.0.3 batch 3 candidate queue
 
-The [ledger](ledger.md#active-batch-3) contains the first ten entries. This
-queue adds 90 distinct entries on build `FF1D1C05670DB6021C85B624A710B963`.
+This discovery queue tracks 100 entries on build
+`FF1D1C05670DB6021C85B624A710B963`. The [ledger](ledger.md#active-batch-3)
+tracks candidates selected for implementation.
 
 The scan followed direct calls up to seven levels from 61 gameplay caller
 roots. Roots include call sites observed in the disposable shovel probe.
@@ -43,9 +44,7 @@ Recreate the queue from the campaign worktree.
 | `0x1285040` | `0x14c` | `0x87aae4` | Observed |
 | `0x19e89e0` | `0x178` | `0x659b6c` | Observed |
 | `0x880630` | `0x19c` | `0x87c0bc` | Observed |
-| `0x880870` | `0x19c` | `0x87733c` | Observed |
 | `0x881090` | `0x1b0` | `0x87c0ec` | Observed |
-| `0x1285fe0` | `0x1c4` | `0x87c048` | Observed |
 | `0x19d7ca0` | `0x1c8` | `0x160fb50` | Observed |
 | `0x19d78cc` | `0x1d8` | `0x2225f58` | Observed |
 | `0x328b5cc` | `0x18` | `0x3091a68` | Discovery |
@@ -94,7 +93,6 @@ Recreate the queue from the campaign worktree.
 | `0x22295ec` | `0x16c` | `0x225aef0` | Discovery |
 | `0x8673c0` | `0x178` | `0x8658f8` | Discovery |
 | `0x2832e20` | `0x128` | `0x15ed758` | Discovery |
-| `0x880a10` | `0x19c` | `0x8775d0` | Discovery |
 | `0x113b5b0` | `0x214` | `0x1150a44` | Discovery |
 | `0x237620` | `0x20` | `0x222b7c` | Discovery |
 | `0x23a8f0` | `0x20` | `0x222b64` | Discovery |
@@ -112,3 +110,16 @@ Recreate the queue from the campaign worktree.
 | `0x120e980` | `0xec` | `0x120e720` | Discovery |
 | `0x1298524` | `0x104` | `0x129302c` | Discovery |
 | `0x113cc10` | `0x10c` | `0x114c9d8` | Discovery |
+| `0x19e8b58` | `0x118` | `0x26a9d84` | Discovery |
+| `0x22e0f4` | `0x234` | `0x22e79c` | Discovery |
+| `0x1a160f0` | `0x240` | `0x2690890` | Discovery |
+| `0x1a164e0` | `0x240` | `0x2690974` | Discovery |
+| `0x2603058` | `0xdc` | `0x2542d54` | Discovery |
+| `0x32d4244` | `0x1a4` | `0x32d4214` | Discovery |
+| `0x377de70` | `0x88` | `0x1cb1f18` | Discovery |
+| `0x114b2a0` | `0xdc` | `0x1142f88` | Discovery |
+| `0x170e2d0` | `0xdc` | `0x83bef4` | Discovery |
+| `0x113c9b0` | `0x10c` | `0x114c54c` | Discovery |
+| `0x16c0740` | `0x1c8` | `0x83c0a8` | Discovery |
+| `0x3a0d9a0` | `0x1e0` | `0x3c4ce38` | Discovery |
+| `0x26c0ee4` | `0x44` | `0x27168e8` | Discovery |

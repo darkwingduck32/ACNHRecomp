@@ -55,3 +55,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 849898 # Test tile categories against a bit mask
 # dispatch 1140fd0 # Pack four field category codes into a key
 # dispatch 240f090 # Resolve an indexed record pointer
+# dispatch 1285fe0 # Test a property on a half-tile record in a field layer
+# dispatch 880870 # Test the shovel terrain record property
+# dispatch 880a10 # Test the alternate terrain record property
+# dispatch 127c6ec # Initialize the shovel neighborhood scratch records

@@ -7,6 +7,9 @@
 #include "config.h"
 #include "hle_ldn.h"
 
+#include <atomic>
+#include <cstdlib>
+
 namespace nx {
 
 void acnh_gui_touch_update(uint64_t manager);  // games/acnh/pointer.cpp
@@ -191,7 +194,7 @@ void tree_effect(CPU& c) {
 // records, but the native occupancy mask includes only even/even anchors.
 // Promote a single buried footprint under the shovel to its ordinary native
 // dig path. The native action still owns removal, inventory and hole creation.
-void buried_target(CPU& c) {
+void select_buried_target(CPU& c) {
     const auto sp = c.x[31];
     const int x = static_cast<int>(c.x[26]), y = static_cast<int>(c.x[27]);
     const int col = x - ld<int32_t>(sp + 0x210), row = y - ld<int32_t>(sp + 0x214);
@@ -219,6 +222,38 @@ void buried_target(CPU& c) {
         st<uint64_t>(records, selected);
         st<uint32_t>(sp + 0xc8, mask | (1u << slot));
     }
+}
+
+void buried_target(CPU& c) {
+    static const bool trace = std::getenv("NX_ACNH_SHOVEL_SURVEY_TRACE") != nullptr;
+    static std::atomic<unsigned> samples{0};
+    if (!trace || samples.fetch_add(1, std::memory_order_relaxed) >= 16) {
+        select_buried_target(c);
+        return;
+    }
+
+    const auto stack = c.x[31];
+    const auto x = static_cast<int32_t>(c.x[26]);
+    const auto z = static_cast<int32_t>(c.x[27]);
+    const int64_t column = int64_t{x} - ld<int32_t>(stack + 0x210);
+    const int64_t row = int64_t{z} - ld<int32_t>(stack + 0x214);
+    if (column < 0 || column >= 3 || row < 0 || row >= 3) {
+        select_buried_target(c);
+        return;
+    }
+
+    const auto slots = c.x[22] + (3 * row + column) * 32;
+    const auto first = ld<uint64_t>(slots);
+    const auto second = ld<uint64_t>(slots + 8);
+    const auto third = ld<uint64_t>(slots + 16);
+    const auto fourth = ld<uint64_t>(slots + 24);
+    const auto mask = ld<uint32_t>(stack + 0xc8);
+    select_buried_target(c);
+    log("acnh shovel survey x=%d z=%d before=%x after=%x records=%llx,%llx,%llx,%llx selected=%llx",
+        x, z, mask, ld<uint32_t>(stack + 0xc8),
+        static_cast<unsigned long long>(first), static_cast<unsigned long long>(second),
+        static_cast<unsigned long long>(third), static_cast<unsigned long long>(fourth),
+        static_cast<unsigned long long>(ld<uint64_t>(slots)));
 }
 
 // The save layer removes continuations correctly, but the field actor manager

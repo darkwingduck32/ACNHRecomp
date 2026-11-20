@@ -1,5 +1,6 @@
 #include "../../../games/acnh/action_mask.h"
 #include "../../../games/acnh/field_primitives.h"
+#include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_state.h"
 #include "../../../games/acnh/terminated_hash.h"
 
@@ -160,7 +161,11 @@ void half_tile_adapter(CPU& cpu) {
     const uint64_t query = cpu.x[1];
     GuestMemory memory;
     const auto apply = [&] {
-        if (use_cpp_half_tile) cpu.x[0] = acnh::half_tile_record(main_base, grid, query, memory);
+        if (use_cpp_half_tile) {
+            const acnh::FieldQueries fields{main_base, memory};
+            const acnh::HalfTile tile{ld<int32_t>(query + 8), ld<int32_t>(query + 12)};
+            cpu.x[0] = fields.record_at({grid}, tile).address;
+        }
         else original_half_tile(cpu);
     };
     const uint64_t caller = cpu.x[30] - main_base;
@@ -247,6 +252,38 @@ void field_case_key_adapter(CPU& cpu) {
     }
 }
 
+Fn original_shovel_survey_init = nullptr;
+bool use_cpp_shovel_survey_init = false;
+bool trace_shovel_survey_init = false;
+std::atomic<unsigned> survey_init_samples{0};
+
+void shovel_survey_init_adapter(CPU& cpu) {
+    const acnh::SurveyScratch scratch{cpu.x[0]};
+    const uint64_t caller = cpu.x[30] - main_base;
+    const auto apply = [&] {
+        if (use_cpp_shovel_survey_init) {
+            GuestMemory memory;
+            acnh::FieldQueries{main_base, memory}.initialize_survey(scratch);
+        } else {
+            original_shovel_survey_init(cpu);
+        }
+    };
+    if (!trace_shovel_survey_init || (caller != 0x21f75a0 && caller != 0x21f75a8) ||
+        survey_init_samples.fetch_add(1, std::memory_order_relaxed) >= 16) {
+        apply();
+        return;
+    }
+
+    const auto empty = field_bytes(main_base + 0x5486008, 8);
+    const auto before = field_bytes(scratch.address, 0x178);
+    apply();
+    log("acnh shovel scratch %s caller=%llx base=%llx object=%llx empty=%s before=%s after=%s out=%llx",
+        use_cpp_shovel_survey_init ? "cpp" : "original", static_cast<unsigned long long>(caller),
+        static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(scratch.address),
+        empty.c_str(), before.c_str(), field_bytes(scratch.address, 0x178).c_str(),
+        static_cast<unsigned long long>(cpu.x[0]));
+}
+
 void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -279,6 +316,12 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     trace_half_tile = std::getenv("NX_ACNH_HALF_TILE_RECORD_TRACE") != nullptr;
     if (use_cpp_half_tile || trace_half_tile)
         wrap_function(functions, 0x1281c54, half_tile_adapter, original_half_tile);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_SURVEY_INIT");
+    use_cpp_shovel_survey_init = mode && std::string_view(mode) == "cpp";
+    trace_shovel_survey_init = std::getenv("NX_ACNH_SHOVEL_SURVEY_INIT_TRACE") != nullptr;
+    if (use_cpp_shovel_survey_init || trace_shovel_survey_init)
+        wrap_function(functions, 0x127c6ec, shovel_survey_init_adapter, original_shovel_survey_init);
 
     mode = std::getenv("NX_ACNH_TILE_CATEGORY_MASK");
     use_cpp_category_mask = !mode || std::string_view(mode) == "cpp";

@@ -223,8 +223,8 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 
 ## Active batch 3
 
-The previous batch is complete. This batch queues 100 new candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 0.
+The previous batch is complete. The discovery queue holds 100 candidates for verification on
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 1.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -235,19 +235,22 @@ All gameplay tests use the same muted single-instance launcher.
 
 | Main entry | Unwind size | Provisional function | Observed caller | Stage |
 | --- | --- | --- | --- | --- |
-| `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x220fd80`, `0x2215230`, `0x221f0c4`, `0x225b344` | Live trial |
-| `0x1148db0` | `0xd4` | Resolve an eight-slot cached field | `0x114169c`, `0x114182c`, `0x1141850`, `0x1141874` | Queued |
-| `0x29cbe80` | `0x124` | Read cached row value, slot 12 | `0x29cd3d0` | Queued |
-| `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Queued |
-| `0x29cc0e0` | `0x124` | Read cached row value from slot 14 | `0x29cd3f0` | Queued |
-| `0x29cc210` | `0x124` | Read cached row value from slot 15 | `0x29cd400` | Queued |
-| `0x29cc340` | `0x124` | Read cached row value from slot 16 | `0x29cd410` | Queued |
-| `0x29cc470` | `0x124` | Read cached row value from slot 17 | `0x29cd420` | Queued |
-| `0x29cc5a0` | `0x124` | Read cached row value from slot 18 | `0x29cd430` | Queued |
-| `0x29cc6d0` | `0x124` | Read cached row value from slot 19 | `0x29cd440` | Queued |
+| `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x220fd80`, `0x2215230`, `0x221f0c4`, `0x225b344` | Opt-in trial passed |
+| `0x1148db0` | `0xd4` | Resolve an eight-slot cached field | `0x114169c`, `0x114182c`, `0x1141850`, `0x1141874` | Reference replay passed |
+| `0x29cbe80` | `0x124` | Read cached row value, slot 12 | `0x29cd3d0` | Reference replay passed |
+| `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Reference replay passed |
+| `0x29cc0e0` | `0x124` | Read cached row value from slot 14 | `0x29cd3f0` | Reference replay passed |
+| `0x29cc210` | `0x124` | Read cached row value from slot 15 | `0x29cd400` | Reference replay passed |
+| `0x29cc340` | `0x124` | Read cached row value from slot 16 | `0x29cd410` | Reference replay passed |
+| `0x29cc470` | `0x124` | Read cached row value from slot 1 | `0x29cd420` | Reference replay passed |
+| `0x29cc5a0` | `0x124` | Read cached row value from slot 2 | `0x29cd430` | Reference replay passed |
+| `0x29cc6d0` | `0x124` | Read cached row value from slot 3 | `0x29cd440` | Reference replay passed |
 
-The [extended candidate queue](batch-3-candidates.md) records the other 90
-entries. In total, 36 of the 100 candidates have observed direct callers.
+The [discovery queue](batch-3-candidates.md) holds 100 candidates beyond
+the implementation entries listed here. 24 queue entries have
+observed direct callers.
+
+Implementation priority is the [shovel field-query path](shovel-field-queries.md). The queue also holds observed candidates outside that path.
 
 The indexed lookup takes an owner in X0 and an index in W1 and returns a
 pointer or null in X0. It reads either a direct pointer array or a packed
@@ -270,3 +273,72 @@ fixture and captures the known caller at `main+0x221f0c4` in
 & private/venv/Scripts/python -m private.heading.identify_batch3
 & private/venv/Scripts/python -m private.heading.compare_leaf field_record --indexed
 ```
+
+The indexed lookup opt-in trial matched 24 calls per route and all 384
+cases against two reference executions. Its reported caller is inside
+`main+0x221f070`, outside the proven shovel survey call chain. It remains
+opt-in while implementation focuses on the shovel path.
+
+The eight-slot lookup matched 363 independent replay cases. Each of the
+eight cached row-value entries matched 122. Every no-op first failed on
+cold initialization writes. The runtime routing draft is preserved under
+`private/heading/field-value-cache-route.patch` for later grouping.
+
+
+### Shovel implementation group
+
+| Main entry | Unwind size | Query | Stage |
+| --- | --- | --- | --- |
+| `0x1281c54` | `0x15c` | Find a record in a field grid at a half-tile position | Verified through typed interface |
+| `0x1285fe0` | `0x1c4` | Select a layer and test a bit on its half-tile record | Verified |
+
+The typed interface uses field-grid, layer, half-tile and record types.
+Guest register decoding and the original switch stay in the runtime
+adapters. The stub failed at case 90 for the record lookup and case 546
+for the layer query. The replacement matched 455 and 122 cases
+respectively against two reference executions. The surrounding field
+primitives still passed. Select the original layer route with
+`NX_ACNH_HALF_TILE_LAYER_FLAG=original`.
+
+```powershell
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives
+```
+
+
+The first shovel group used one muted original, opt-in C++, and default
+gameplay run. The captures are `tree-shake-{original,cpp}-shovelqueries1`
+and `tree-shake-default-shovelqueries2`. All six survey snapshots matched
+in each run. The half-tile lookup matched 503 cases and the layer query
+matched 170. The layer trace at `0x87c048` provided 12 identical starting
+states per route. The capped terrain trace at `0x87737c` captured different
+coordinates between processes. Every exact capture still matched the
+independent original, including its observed output. The default trace
+identified those terrain calls under `0x28732d4`, outside the survey.
+The survey's call to that terrain branch needs a fixture with a diggable
+target. The Release player passed all 13 CTest tests and the nine replay
+and profile regressions.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-shovelqueries1/nx.log"
+$c = "$r/tree-shake-default-shovelqueries2/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-half-tile $o $c --live-layer-flag $o $c --match-layer-caller 87c04c --live-survey $o $c
+```
+
+### Next shovel group
+
+| Main entry | Query | Stage |
+| --- | --- | --- |
+| `0x880870` | Read the diggable terrain property | 96 reference cases passed, live trial |
+| `0x880a10` | Read the alternate terrain property | 96 reference cases passed, caller retry |
+| `0x127c6ec` | Initialize the survey scratch records | 40 reference cases passed, live trial |
+
+The scratch initializer is called at `0x21f759c` and `0x21f75a4`.
+The replay checks the whole ordered write sequence, including when the
+object aliases the empty-record template. The terrain predicates reuse
+the verified packed row and column lookups. Their original switches are
+`NX_ACNH_TERRAIN_DIGGABLE=original` and
+`NX_ACNH_TERRAIN_ALTERNATE=original`. Use
+`NX_ACNH_SHOVEL_SURVEY_INIT=original` for the scratch initializer.
+The terrain captures include the parent return address so an ambient
+terrain call cannot be mistaken for a shovel-survey call.

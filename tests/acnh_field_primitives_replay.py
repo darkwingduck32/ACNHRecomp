@@ -12,12 +12,13 @@ from pathlib import Path
 from unicorn.arm64_const import UC_ARM64_REG_X0, UC_ARM64_REG_X1, UC_ARM64_REG_X2
 
 from recomp import ehframe, nso
+from tests.acnh_field_record_replay import decode_reads
 from tests.function_replay import run
 from tools.acnh_version import build_id
 
 BUILD = "FF1D1C05670DB6021C85B624A710B963"
 BASE = 0x4000000000
-ROUTES = ((0x24642A8, 0x68), (0x1281C54, 0x15C), (0x3DB4ED0, 0x4C), (0x849898, 0x118))
+ROUTES = ((0x24642A8, 0x68), (0x1281C54, 0x15C), (0x3DB4ED0, 0x4C), (0x849898, 0x118), (0x1285FE0, 0x1C4), (0x880870, 0x19C), (0x880A10, 0x19C), (0x127C6EC, 0x278))
 
 
 def inputs():
@@ -44,7 +45,60 @@ def inputs():
             0x25000: struct.pack("<Qii", 0, x, z), BASE + 0x50a50f0: bytes(fallback),
         }
 
+    owner, node = 0x27000, 0x28000
+    for layer, x, z, flag in itertools.product((0, 1, 56, 57, 0xffffffff), (-3, 0, 5), (-1, 1), (0, 1, 2, 3)):
+        owner_bytes = bytearray(0x200)
+        layer_address = 0x1f8 if layer == 0 else 0x30 + 8 * (layer if layer < 57 else 0)
+        struct.pack_into("<Q", owner_bytes, layer_address, node)
+        node_bytes = bytearray(0xb8)
+        struct.pack_into("<Q", node_bytes, 0xb0, 0x23000)
+        records = bytearray(12 * 0x68)
+        fallback = bytearray(0x68)
+        for offset in range(12):
+            struct.pack_into("<B3xhh", records, offset * 0x68 + 0x40, flag, x, z)
+        struct.pack_into("<B3xhh", fallback, 0x40, flag, x, z)
+        yield 4, 0x25000, layer, BASE, {
+            BASE + 0x509d040: struct.pack("<Q", owner), owner: bytes(owner_bytes),
+            node: bytes(node_bytes), 0x23000: bytes(grid), 0x24000: bytes(records),
+            0x25000: struct.pack("<Qii", 0, x, z), BASE + 0x50a50f0: bytes(fallback),
+        }
+    yield 4, 0x25000, 0, BASE, {BASE + 0x509d040: struct.pack("<Q", owner), owner: bytes(0x200)}
+    owner_with_node = bytearray(0x200)
+    struct.pack_into("<Q", owner_with_node, 0x1f8, node)
+    yield 4, 0x25000, 0, BASE, {
+        BASE + 0x509d040: struct.pack("<Q", owner), owner: bytes(owner_with_node), node: bytes(0xb8),
+    }
+
+    table, row, header, pointers = 0x28000, 0x29200, 0x29000, 0x2a000
+    for mode, hash_value in ((5, 0x472724ed), (6, 0x0254bd05)):
+        for ready, cached, value, index, present in itertools.product(
+            (0, 1), (-2, -1, 28), (0, 2), (0, 1, 2, 0xffffffff), (False, True),
+        ):
+            owner = bytearray(0x1cc)
+            struct.pack_into("<IQi", owner, 0x1b8, 1, 0, 0)
+            struct.pack_into("<Qi", owner, 0x1c0, pointers, 2)
+            data = bytearray(64)
+            struct.pack_into("<I", data, 0, row - header)
+            data[28] = value
+            fields = bytearray(64)
+            struct.pack_into("<HB", fields, 8, 1, 0)
+            struct.pack_into("<II", fields, 0xc, hash_value if present else hash_value ^ 1, 28)
+            yield mode, table, index, BASE, {
+                table: bytes(owner), header: bytes(fields), row: bytes(data),
+                pointers: struct.pack("<Q", row),
+                BASE + 0x4bfab80: struct.pack("<B3x14i", ready, *([cached] * 14)),
+            }
+
     rng = random.Random(303)
+    defaults = BASE + 0x5486008
+    for obj in (0x27000, 0x27001, defaults - 0x18, defaults - 0x41, defaults - 0xf0):
+        for _ in range(8):
+            data = rng.randbytes(0x178)
+            memory = {obj: data}
+            if not obj <= defaults < obj + len(data):
+                memory[defaults] = rng.randbytes(8)
+            yield 7, obj, 0, BASE, memory
+
     for alias, case in itertools.product((0, 1, 2, 3), range(64)):
         values = struct.pack("<9f", *(rng.uniform(-200, 200) for _ in range(9)))
         vector = struct.pack("<3f", *(rng.uniform(-200, 200) for _ in range(3)))
@@ -138,12 +192,119 @@ def live_category_masks(path, expected_route):
     return states, cases
 
 
+LAYER_FLAG_TRACE = re.compile(
+    r"acnh half tile layer (original|cpp) caller=([0-9a-f]+) base=([0-9a-f]+) "
+    r"query=([0-9a-f]+) layer=([0-9a-f]+) out=([0-9a-f]+) reads=([0-9a-f:,]+)"
+)
+
+
+def live_layer_flags(path, expected_route):
+    raw = path.read_bytes()
+    cases = []
+    states = collections.Counter()
+    for route, caller, base, query, layer, out, fields in LAYER_FLAG_TRACE.findall(raw.decode(errors="replace")):
+        if route != expected_route:
+            raise ValueError(f"{path}: expected {expected_route}, found {route}")
+        base, query, layer, out = (int(value, 16) for value in (base, query, layer, out))
+        reads, memory = decode_reads(fields)
+        pointers = {0: 0, query: 1}
+        normalized = tuple((width, pointers.setdefault(value, len(pointers)) if width == 8 else value)
+                           for _, width, value in reads)
+        states[(caller, layer, out, normalized)] += 1
+        cases.append(((4, query, layer, base, memory), out))
+    if not cases:
+        raise ValueError(f"{path}: no half-tile layer flag calls")
+    callers = sorted({key[0] for key in states})
+    print(f"{path}: {len(cases)} layer calls from {', '.join(callers)}, SHA-256 {hashlib.sha256(raw).hexdigest()}")
+    return states, cases
+
+
+TERRAIN_TRACE = re.compile(
+    r"acnh shovel terrain (original|cpp) entry=([0-9a-f]+) caller=([0-9a-f]+) "
+    r"parent=([0-9a-f]+) base=([0-9a-f]+) table=([0-9a-f]+) index=([0-9a-f]+) "
+    r"out=([0-9a-f]+) before=([0-9a-f]{120}) after=([0-9a-f]{120}) reads=([0-9a-f:,]+)"
+)
+
+
+def live_terrain(path, expected_route, required_entries, required_parent):
+    raw = path.read_bytes()
+    cases = []
+    states = collections.Counter()
+    reached = collections.Counter()
+    for route, entry, caller, parent, base, table, index, out, before, after, fields in TERRAIN_TRACE.findall(raw.decode(errors="replace")):
+        entry, caller, parent, base, table, index, out = (
+            int(value, 16) for value in (entry, caller, parent, base, table, index, out)
+        )
+        if entry not in required_entries or (required_parent is not None and parent != required_parent):
+            continue
+        if route != expected_route:
+            raise ValueError(f"{path}: expected {expected_route}, found {route}")
+        reads, memory = decode_reads(fields)
+        cache = base + 0x4bfab80
+        memory[cache] = bytes.fromhex(before)
+        pointers = {0: 0, table: 1}
+        normalized = tuple((width, pointers.setdefault(value, len(pointers)) if width == 8 else value)
+                           for _, width, value in reads)
+        mode = 5 if entry == 0x880870 else 6
+        states[(entry, caller, parent, index, out, before, after, normalized)] += 1
+        cases.append(((mode, table, index, base, memory), (out, cache, bytes.fromhex(after))))
+        reached[entry] += 1
+    missing = required_entries - reached.keys()
+    if missing:
+        raise ValueError(f"{path}: missing terrain entries {', '.join(map(hex, sorted(missing)))}")
+    print(f"{path}: terrain calls {dict(reached)}, SHA-256 {hashlib.sha256(raw).hexdigest()}")
+    return states, cases
+
+
+SCRATCH_TRACE = re.compile(
+    r"acnh shovel scratch (original|cpp) caller=([0-9a-f]+) base=([0-9a-f]+) "
+    r"object=([0-9a-f]+) empty=([0-9a-f]{16}) before=([0-9a-f]{752}) after=([0-9a-f]{752}) out=([0-9a-f]+)"
+)
+
+
+def live_scratch(path, expected_route):
+    raw = path.read_bytes()
+    cases = []
+    states = collections.Counter()
+    callers = set()
+    for route, caller, base, obj, empty, before, after, out in SCRATCH_TRACE.findall(raw.decode(errors="replace")):
+        if route != expected_route:
+            raise ValueError(f"{path}: expected {expected_route}, found {route}")
+        base, obj, out = (int(value, 16) for value in (base, obj, out))
+        before, after = bytes.fromhex(before), bytes.fromhex(after)
+        memory = {obj: before, base + 0x5486008: bytes.fromhex(empty)}
+        cases.append(((7, obj, 0, base, memory), (out, obj, after)))
+        written = after[0x18:0x1c] + after[0x30:0x150] + after[0x160:0x168] + after[0x170:0x178]
+        states[(caller, empty, written, out == obj)] += 1
+        callers.add(caller)
+    if callers != {"21f75a0", "21f75a8"}:
+        raise ValueError(f"{path}: expected both shovel initializer callers, got {sorted(callers)}")
+    print(f"{path}: {len(cases)} shovel scratch calls, SHA-256 {hashlib.sha256(raw).hexdigest()}")
+    return states, cases
+
+
+def survey_outcomes(path):
+    outcomes = collections.Counter(line for line in path.read_text(errors="replace").splitlines()
+                                   if line.startswith("acnh shovel survey "))
+    if not outcomes:
+        raise ValueError(f"{path}: no shovel survey snapshots")
+    print(f"{path}: {outcomes.total()} shovel survey outcomes")
+    return outcomes
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--live-half-tile", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     parser.add_argument("--live-category-mask", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--live-layer-flag", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--match-layer-caller", help="require matching layer snapshots at this caller; replay all snapshots")
+    parser.add_argument("--live-survey", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--live-terrain", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--terrain-entry", action="append", type=lambda s: int(s, 16), choices=(0x880870, 0x880a10))
+    parser.add_argument("--terrain-parent", type=lambda s: int(s, 16))
+    parser.add_argument("--live-scratch", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
@@ -166,6 +327,36 @@ def main():
             raise SystemExit("live tile category mask callers, inputs or outcomes differ")
         cases.extend(original)
         cases.extend(replacement)
+    if args.live_survey and survey_outcomes(args.live_survey[0]) != survey_outcomes(args.live_survey[1]):
+        raise SystemExit("shovel survey outcomes differ")
+    if args.live_layer_flag:
+        original_states, original = live_layer_flags(args.live_layer_flag[0], "original")
+        replacement_states, replacement = live_layer_flags(args.live_layer_flag[1], "cpp")
+        if args.match_layer_caller:
+            caller = args.match_layer_caller.lower().removeprefix("0x")
+            original_states = {key: n for key, n in original_states.items() if key[0] == caller}
+            replacement_states = {key: n for key, n in replacement_states.items() if key[0] == caller}
+            if not original_states or not replacement_states:
+                raise SystemExit(f"both layer routes must reach caller {caller}")
+        if original_states != replacement_states:
+            raise SystemExit("live half-tile layer flag callers, inputs or outcomes differ")
+        cases.extend(original)
+        cases.extend(replacement)
+    if args.live_terrain:
+        required = set(args.terrain_entry or (0x880870, 0x880a10))
+        original_states, original = live_terrain(args.live_terrain[0], "original", required, args.terrain_parent)
+        replacement_states, replacement = live_terrain(args.live_terrain[1], "cpp", required, args.terrain_parent)
+        if original_states != replacement_states:
+            raise SystemExit("live terrain callers, states or outcomes differ")
+        cases.extend(original)
+        cases.extend(replacement)
+    if args.live_scratch:
+        original_states, original = live_scratch(args.live_scratch[0], "original")
+        replacement_states, replacement = live_scratch(args.live_scratch[1], "cpp")
+        if original_states != replacement_states:
+            raise SystemExit("shovel scratch callers or initialized contents differ")
+        cases.extend(original)
+        cases.extend(replacement)
     lines = []
     for (mode, a, b, c, memory), _ in cases:
         pairs = [(address+i, byte) for address, data in memory.items() for i, byte in enumerate(data)]
@@ -179,16 +370,21 @@ def main():
         entry, size = ROUTES[mode]
         code = bytes(module.image[entry:entry + size])
         regs = {UC_ARM64_REG_X0: a, UC_ARM64_REG_X1: b, UC_ARM64_REG_X2: c}
-        address = (c if mode == 1 else BASE) + entry
+        address = (c if mode in (1, 4, 5, 6, 7) else BASE) + entry
         want = run(address, code, regs, (UC_ARM64_REG_X0,), memory)
         if want != run(address, code, regs, (UC_ARM64_REG_X0,), memory):
             raise SystemExit(f"reference changed on repeat in case {i}")
         expected = (want.registers[UC_ARM64_REG_X0], *(v for event in want.writes for v in event))
-        if observed is not None and expected[0] != observed:
-            raise SystemExit(f"live case {i} differs from Unicorn")
+        if observed is not None:
+            if mode in (5, 6, 7):
+                out, cache, after = observed
+                if expected[0] != out or want.memory.get(cache) != after:
+                    raise SystemExit(f"live case {i} differs from Unicorn")
+            elif expected[0] != observed:
+                raise SystemExit(f"live case {i} differs from Unicorn")
         got = tuple(map(int, actual[i].split()))
         if got != expected:
-            failures.setdefault(mode, f"entry {entry:#x}, case {i}: expected {expected}, got {got}")
+            failures.setdefault(mode, f"entry {entry:#x}, case {i}: expected {expected[:13]}, got {got[:13]}")
         counts[mode] += 1
     if failures:
         raise SystemExit("\n".join(failures.values()))

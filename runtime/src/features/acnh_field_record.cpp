@@ -2,6 +2,7 @@
 #include "../../../games/acnh/field_column_25.h"
 #include "../../../games/acnh/field_flag.h"
 #include "../../../games/acnh/field_record.h"
+#include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/record_category.h"
 #include "../../../games/acnh/tile_record_flag.h"
 
@@ -120,6 +121,44 @@ void indexed_record_adapter(CPU& cpu) {
             use_cpp_indexed_record ? "cpp" : "original", static_cast<unsigned long long>(caller),
             static_cast<unsigned long long>(db), index, static_cast<unsigned long long>(cpu.x[0]),
             reads.c_str());
+}
+
+Fn original_half_tile_layer_flag = nullptr;
+bool use_cpp_half_tile_layer_flag = false;
+bool trace_half_tile_layer_flag = false;
+std::atomic<unsigned> layer_flag_samples[3]{};
+
+void half_tile_layer_flag_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const bool terrain_caller = caller == 0x877380;
+    const uint64_t parent = trace_half_tile_layer_flag && terrain_caller
+        ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
+    const size_t sample = parent == 0x21f778c ? 2 : terrain_caller ? 1 : 0;
+    const bool trace = trace_half_tile_layer_flag && (terrain_caller || caller == 0x87c04c) &&
+        layer_flag_samples[sample].fetch_add(1, std::memory_order_relaxed) < 12;
+    if (!use_cpp_half_tile_layer_flag && !trace) {
+        original_half_tile_layer_flag(cpu);
+        return;
+    }
+
+    const uint64_t query = cpu.x[0];
+    const acnh::FieldLayer layer{static_cast<uint32_t>(cpu.x[1])};
+    std::string reads;
+    const GuestMemory memory{trace ? &reads : nullptr};
+    const acnh::FieldQueries fields{main_base, memory};
+    const auto grid = fields.grid_for(layer);
+    bool found = false;
+    if (grid) {
+        const acnh::HalfTile tile{memory.read<int32_t>(query + 8), memory.read<int32_t>(query + 12)};
+        found = fields.record_flag(fields.record_at(grid, tile));
+    }
+    if (use_cpp_half_tile_layer_flag) cpu.x[0] = found;
+    else original_half_tile_layer_flag(cpu);
+    if (trace)
+        log("acnh half tile layer %s caller=%llx base=%llx query=%llx layer=%x out=%llx reads=%s parent=%llx",
+            use_cpp_half_tile_layer_flag ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(query), layer.index,
+            static_cast<unsigned long long>(cpu.x[0]), reads.c_str(), static_cast<unsigned long long>(parent));
 }
 
 struct ColumnSnapshot {
@@ -393,6 +432,63 @@ void cached_field_adapter(CPU& cpu) {
         static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
 }
 
+template<size_t Index>
+void terrain_property_adapter(CPU& cpu);
+
+struct TerrainRoute {
+    uint64_t entry;
+    acnh::TerrainProperty property;
+    uint64_t first_caller;
+    uint64_t last_caller;
+    Fn adapter;
+    Fn original = nullptr;
+    bool use_cpp = false;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<TerrainRoute, 2> terrain_routes{{
+    {0x880870, acnh::TerrainProperty::diggable, 0x877340, 0x877370, terrain_property_adapter<0>},
+    {0x880a10, acnh::TerrainProperty::alternate, 0x8775d4, 0x877614, terrain_property_adapter<1>},
+}};
+bool trace_terrain = false;
+
+template<size_t Index>
+void terrain_property_adapter(CPU& cpu) {
+    auto& route = terrain_routes[Index];
+    const uint64_t caller = cpu.x[30] - main_base;
+    const acnh::TerrainTable table{cpu.x[0]};
+    const uint32_t index = static_cast<uint32_t>(cpu.x[1]);
+    const auto apply = [&] {
+        if (route.use_cpp) {
+            GuestMemory memory;
+            cpu.x[0] = acnh::FieldQueries{main_base, memory}.terrain_has(table, index, route.property);
+        } else {
+            route.original(cpu);
+        }
+    };
+
+    if (!trace_terrain || caller < route.first_caller || caller > route.last_caller ||
+        route.samples.fetch_add(1, std::memory_order_relaxed) >= 24) {
+        apply();
+        return;
+    }
+
+    const uint64_t parent = ld<uint64_t>(cpu.x[29] + 8) - main_base;
+    const uint64_t cache = main_base + column_cache_offset;
+    const auto before = read_cache(cache);
+    std::string reads;
+    ColumnSnapshot snapshot{cache, before, GuestMemory{&reads}};
+    acnh::FieldQueries{main_base, snapshot}.terrain_has(table, index, route.property);
+    apply();
+    log("acnh shovel terrain %s entry=%llx caller=%llx parent=%llx base=%llx table=%llx index=%x "
+        "out=%llx before=%s after=%s reads=%s",
+        route.use_cpp ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+        static_cast<unsigned long long>(caller), static_cast<unsigned long long>(parent),
+        static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(table.address), index,
+        static_cast<unsigned long long>(cpu.x[0]), cache_hex(before).c_str(),
+        cache_hex(read_cache(cache)).c_str(), reads.c_str());
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -409,6 +505,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_indexed_record = std::getenv("NX_ACNH_INDEXED_RECORD_TRACE") != nullptr;
     if (use_cpp_indexed_record || trace_indexed_record)
         wrap_function(entries, 0x240f090, indexed_record_adapter, original_indexed_record);
+
+    mode = std::getenv("NX_ACNH_HALF_TILE_LAYER_FLAG");
+    use_cpp_half_tile_layer_flag = !mode || std::string_view(mode) == "cpp";
+    trace_half_tile_layer_flag = std::getenv("NX_ACNH_HALF_TILE_LAYER_FLAG_TRACE") != nullptr;
+    if (use_cpp_half_tile_layer_flag || trace_half_tile_layer_flag)
+        wrap_function(entries, 0x1285fe0, half_tile_layer_flag_adapter, original_half_tile_layer_flag);
 
     mode = std::getenv("NX_ACNH_FIELD_COLUMN");
     use_cpp_column = !mode || std::string_view(mode) == "cpp";
@@ -437,6 +539,16 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         mode = std::getenv(cache_modes[i]);
         route.use_cpp = !mode || std::string_view(mode) == "cpp";
         if (route.use_cpp || trace_cached_field)
+            wrap_function(entries, route.entry, route.adapter, route.original);
+    }
+
+    trace_terrain = std::getenv("NX_ACNH_SHOVEL_TERRAIN_TRACE") != nullptr;
+    const char* const terrain_modes[]{"NX_ACNH_TERRAIN_DIGGABLE", "NX_ACNH_TERRAIN_ALTERNATE"};
+    for (size_t i = 0; i < terrain_routes.size(); ++i) {
+        auto& route = terrain_routes[i];
+        mode = std::getenv(terrain_modes[i]);
+        route.use_cpp = mode && std::string_view(mode) == "cpp";
+        if (route.use_cpp || trace_terrain)
             wrap_function(entries, route.entry, route.adapter, route.original);
     }
 

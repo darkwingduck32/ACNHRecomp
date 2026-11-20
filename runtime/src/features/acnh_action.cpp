@@ -1,6 +1,7 @@
 #include "../../../games/acnh/action_mask.h"
 #include "../../../games/acnh/field_primitives.h"
 #include "../../../games/acnh/field_queries.h"
+#include "../../../games/acnh/shovel_survey.h"
 #include "../../../games/acnh/field_state.h"
 #include "../../../games/acnh/terminated_hash.h"
 
@@ -332,23 +333,147 @@ void survey_items_adapter(CPU& cpu) {
             before.c_str(), field_bytes(first.address, 36 * 8).c_str());
 }
 
+struct ShovelGatherServices {
+    CPU cpu;
+    uint64_t stack;
+    unsigned phase = 0;
+
+    explicit ShovelGatherServices(const CPU& caller) : cpu(caller), stack(caller.x[31] - 0x140) {
+        cpu.x[31] = stack;
+        cpu.x[29] = stack + 0xe0;
+        st<uint64_t>(cpu.x[29], caller.x[29]);
+        st<uint64_t>(cpu.x[29] + 8, caller.x[30]);
+        st<uint64_t>(stack + 0x88, vtable(0x4abfe68));
+        st<uint32_t>(stack + 0x90, 0);
+    }
+
+    static uint64_t vtable(uint64_t offset) { return ld<uint64_t>(main_base + offset) + 0x10; }
+
+    uint32_t stage_hash(uint32_t index) const {
+        CPU nested = cpu;
+        nested.x[0] = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab2640));
+        nested.x[1] = index;
+        nested.x[30] = main_base + 0x127cb30;
+        call(nested, ld<uint64_t>(ld<uint64_t>(nested.x[0]) + 0x18));
+        nested.x[0] = ld<uint64_t>(nested.x[0]);
+        nested.x[1] = 0;
+        nested.x[30] = main_base + 0x127cb3c;
+        call(nested, main_base + 0x5bd550);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+
+    bool stage_rule(uint32_t key) const {
+        CPU nested = cpu;
+        nested.x[0] = key;
+        nested.x[30] = main_base + 0x127cb6c;
+        call(nested, main_base + 0x16baf44);
+        return (nested.x[0] & 1) != 0;
+    }
+
+    void set_stage(uint32_t key, bool rule) const {
+        st<uint32_t>(stack + 0x94, key);
+        st<uint8_t>(stack + 0x98, rule);
+    }
+
+    acnh::SurveyCell read(acnh::HalfTile point, bool anchor) {
+        constexpr uint64_t returns[]{0x127cc88, 0x127cf88, 0x127cfd4, 0x127cffc};
+        const uint64_t position = stack + (anchor ? 0x78 : 0x28);
+        const uint64_t root = stack + 0x68;
+        const uint64_t result = stack + (anchor ? 0x60 : 0x78);
+        st<uint64_t>(position, vtable(anchor ? 0x4ab2010 : 0x4ab2018));
+        st<int32_t>(position + 8, point.x);
+        st<int32_t>(position + 12, point.z);
+        if (anchor) {
+            st<uint64_t>(root, vtable(0x4ab2010));
+            st<uint64_t>(root + 8, 0);
+        }
+
+        CPU nested = cpu;
+        nested.x[0] = stack + 0x88;
+        nested.x[1] = 0;
+        nested.x[2] = position;
+        nested.x[3] = anchor ? root : 0;
+        nested.x[8] = result;
+        nested.x[30] = main_base + returns[phase];
+        phase = (phase + 1) % 4;
+        call(nested, main_base + 0x195033c);
+        return {ld<uint64_t>(result), anchor
+            ? acnh::HalfTile{ld<int32_t>(root + 8), ld<int32_t>(root + 12)} : acnh::HalfTile{}};
+    }
+
+    uint32_t item_id(uint64_t item, acnh::SurveyItemUse use) const {
+        constexpr uint64_t returns[]{0x127ccbc, 0x127cd10, 0x127cd64, 0x127ce08, 0x127ce54};
+        uint64_t record = stack + 0x60;
+        if (use == acnh::SurveyItemUse::metadata_key || use == acnh::SurveyItemUse::extent) {
+            const uint64_t type = use == acnh::SurveyItemUse::metadata_key ? 0x4ac0510 : 0x4ac35c0;
+            st<uint64_t>(stack + 0x28, vtable(type));
+            record = stack + 0x30;
+        }
+        st<uint64_t>(record, item);
+        CPU nested = cpu;
+        nested.x[0] = record;
+        nested.x[30] = main_base + returns[static_cast<size_t>(use)];
+        call(nested, main_base + 0x267d6c4);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+
+    bool metadata_occupied(uint64_t item, uint64_t detail) const {
+        st<uint64_t>(stack + 0x28, vtable(0x4ac0510));
+        st<uint64_t>(stack + 0x30, item);
+        st<uint64_t>(stack + 0x38, detail);
+        st<uint32_t>(stack + 0x50, 0);
+        CPU nested = cpu;
+        nested.x[0] = stack + 0x28;
+        nested.x[30] = main_base + 0x127cd98;
+        call(nested, main_base + 0x19ee3b4);
+        return static_cast<uint32_t>(nested.x[0]) == ld<uint32_t>(stack + 0x50);
+    }
+
+    bool single_tile_extent(uint64_t item) const {
+        st<uint64_t>(stack + 0x50, vtable(0x4ac35c0));
+        st<uint64_t>(stack + 0x58, item);
+        st<uint64_t>(stack + 0x28, vtable(0x4abc1a0));
+        st<uint64_t>(stack + 0x30, vtable(0x4ab2010));
+        st<uint64_t>(stack + 0x38, 0);
+        st<uint64_t>(stack + 0x40, vtable(0x4ab2010));
+        st<uint64_t>(stack + 0x48, 0);
+        CPU nested = cpu;
+        nested.x[0] = stack + 0x50;
+        nested.x[1] = stack + 0x28;
+        nested.x[30] = main_base + 0x127cea4;
+        call(nested, main_base + 0x253fe7c);
+        return ld<uint32_t>(stack + 0x48) - ld<uint32_t>(stack + 0x38) == 1 &&
+               ld<uint32_t>(stack + 0x4c) - ld<uint32_t>(stack + 0x3c) == 1;
+    }
+};
+
 Fn original_shovel_gather = nullptr;
+bool use_cpp_shovel_gather = false;
+bool trace_shovel_gather = false;
 std::atomic<unsigned> shovel_gather_samples{0};
 
 void shovel_gather_adapter(CPU& cpu) {
     const uint64_t caller = cpu.x[30] - main_base;
-    if (caller != 0x21f7618 || shovel_gather_samples.fetch_add(1, std::memory_order_relaxed) >= 12) {
+    if (caller != 0x21f7618) {
         original_shovel_gather(cpu);
         return;
     }
 
     const acnh::SurveyScratch scratch{cpu.x[0]};
-    const auto before = field_bytes(scratch.address, 0x178);
-    original_shovel_gather(cpu);
-    log("acnh shovel gather original caller=%llx base=%llx scratch=%llx before=%s after=%s",
-        static_cast<unsigned long long>(caller), static_cast<unsigned long long>(main_base),
-        static_cast<unsigned long long>(scratch.address), before.c_str(),
-        field_bytes(scratch.address, 0x178).c_str());
+    const bool trace = trace_shovel_gather && shovel_gather_samples.fetch_add(1, std::memory_order_relaxed) < 12;
+    const auto before = trace ? field_bytes(scratch.address, 0x178) : std::string{};
+    if (use_cpp_shovel_gather) {
+        GuestMemory memory;
+        ShovelGatherServices services{cpu};
+        acnh::gather_shovel_neighborhood(main_base, scratch, memory, services);
+    } else {
+        original_shovel_gather(cpu);
+    }
+    if (trace)
+        log("acnh shovel gather %s caller=%llx base=%llx scratch=%llx before=%s after=%s",
+            use_cpp_shovel_gather ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(scratch.address),
+            before.c_str(), field_bytes(scratch.address, 0x178).c_str());
 }
 
 void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
@@ -396,7 +521,10 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     if (use_cpp_survey_items || trace_survey_items)
         wrap_function(functions, 0x127c524, survey_items_adapter, original_survey_items);
 
-    if (std::getenv("NX_ACNH_SHOVEL_GATHER_TRACE"))
+    mode = std::getenv("NX_ACNH_SHOVEL_GATHER");
+    use_cpp_shovel_gather = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_gather = std::getenv("NX_ACNH_SHOVEL_GATHER_TRACE") != nullptr;
+    if (use_cpp_shovel_gather || trace_shovel_gather)
         wrap_function(functions, 0x127cab0, shovel_gather_adapter, original_shovel_gather);
 
     mode = std::getenv("NX_ACNH_TILE_CATEGORY_MASK");

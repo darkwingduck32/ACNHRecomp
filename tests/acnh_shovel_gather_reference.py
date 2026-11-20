@@ -88,6 +88,25 @@ def fixture(x, z, mode):
         **{BASE + site: (BASE + 0x267d6c4, w0(item_id)) for site in ITEM_SITES},
         **{BASE + site: (BASE + 0x195033c, cell_body(mode != "anchor-miss")) for site in CELL_SITES},
     }
+    if mode.startswith("stage-"):
+        context = bytearray(0x33c)
+        struct.pack_into("<QI", context, 0x330, 1, 23)
+        memory.update({
+            0x21000: struct.pack("<Q", 0x28000),
+            0x28000: bytes(context),
+            BASE + 0x4ab2640: struct.pack("<Q", 0x21020),
+            0x21020: struct.pack("<Q", 0x29000),
+            0x29000: struct.pack("<Q", 0x2a000),
+            0x2a018: struct.pack("<Q", BASE + 0x200000),
+            0x2b000: struct.pack("<Q", 0x2b100),
+            BASE + 0x4ac3a80: struct.pack("<Q", 0x2c000),
+            0x2c038: struct.pack("<I", 0x678),
+        })
+        # Return a name handle. The declared hash callee supplies a known stage hash.
+        callees[BASE + 0x127cb2c] = (BASE + 0x200000, words(0xd2800000 | (0xb000 << 5), 0xf2a00040, RETURN))
+        hash_body = words(0x52800000 | (0x7eaf << 5), 0x72a00000 | (0x758f << 5), RETURN)
+        callees[BASE + 0x127cb38] = (BASE + 0x5bd550, hash_body if mode == "stage-match" else w0(0))
+
     return memory, callees
 
 
@@ -110,7 +129,7 @@ def main():
     if not any(f.start == ENTRY and f.size == SIZE for f in ehframe.parse(module)):
         parser.error("unexpected neighborhood gather boundary")
     code = bytes(module.image[ENTRY:ENTRY + SIZE])
-    modes = ("absent", "actor", "metadata-match", "metadata-miss", "extent-match", "extent-miss", "anchor-miss", "empty")
+    modes = ("absent", "actor", "metadata-match", "metadata-miss", "extent-match", "extent-miss", "anchor-miss", "empty", "stage-match", "stage-other")
     cases = 0
     for (x, z), mode in itertools.product(((-4, -3), (0, 0), (40, 69)), modes):
         memory, callees = fixture(x, z, mode)

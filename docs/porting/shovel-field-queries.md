@@ -8,7 +8,7 @@ The action engine continues to own item removal, inventory, and hole creation.
 | Survey call site | Target | Field-query responsibility | State |
 | --- | --- | --- | --- |
 | `0x21f7568` to `0x21f75a4` | `0x3f04450`, `0x127c524`, `0x127c6ec` | Prepare the survey scratch data | `0x127c6ec` and `0x127c524` are verified C++ defaults. The generated item initializer remains. |
-| `0x21f7614` | `0x127cab0` | Gather the neighborhood records and occupancy flags | Generated, with the string hash already in C++ |
+| `0x21f7614` | `0x127cab0` | Gather the neighborhood records and occupancy flags | Verified C++ default at the shovel call site |
 | `0x21f76b0` | `0x267d6c4` | Resolve an item ID | Verified C++ default with original auxiliary fallback `0x1a03610` |
 | `0x21f7788` | `0x877130` | Test the selected terrain | Generated, with `0x880870` and `0x1285fe0` in C++ by default |
 | `0x21f77ac` through `0x21f7944` | `0x127d05c` | Classify field item and terrain properties | Generated, with `0x113d890` already in C++ |
@@ -75,3 +75,19 @@ result buffer. Its X3 argument carries the resolved position. The typed bounds a
 The runtime boundary maintains the original routes and calls the generated
 initializer and provider. The original, opt-in and default trials matched
 the result item and resolved position at all four gather call sites.
+
+## Verified neighborhood path
+
+The gather at `0x127cab0` now calls the typed field-cell interface for
+the 3-by-3 survey. The stock, opt-in and default runs matched its full
+scratch result, including the 36 records and the occupancy mask.
+Outside the shovel call site, its existing generated entry is used.
+
+The field provider `0x11e4f58` is still generated, including its virtual
+provider methods, occupancy filters and continuation resolution. Map
+those virtual targets from the gameplay trace before selecting the group
+that will replace the provider. The stage rule `0x16baf44`, item
+initializer `0x267d4ac`, metadata predicate `0x19ee3b4`, extent helper
+`0x253fe7c`, terrain orchestration and item classification also remain
+generated. The runtime adapters keep these calls selectable and preserve
+the guest ABI. The shovel action engine continues after the survey.

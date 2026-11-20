@@ -1,10 +1,11 @@
-"""Replay bounded AArch64 code with explicit memory and declared direct callees."""
+"""Replay bounded AArch64 code with explicit memory and declared callees."""
 from dataclasses import dataclass
 
 from unicorn import (
     UC_ARCH_ARM64, UC_HOOK_CODE, UC_HOOK_MEM_INVALID, UC_HOOK_MEM_READ,
     UC_HOOK_MEM_WRITE, UC_MEM_WRITE, UC_MODE_ARM, Uc, UcError,
 )
+from unicorn import arm64_const
 from unicorn.arm64_const import UC_ARM64_REG_LR, UC_ARM64_REG_PC, UC_ARM64_REG_SP, UC_ARM64_REG_X0
 
 
@@ -13,6 +14,7 @@ STACK_BASE = 0x6000000000
 STACK_SIZE = 0x10000
 STACK_END = STACK_BASE + STACK_SIZE
 RETURN = STACK_END + PAGE
+X_REGISTERS = tuple(getattr(arm64_const, f"UC_ARM64_REG_X{i}") for i in range(31))
 
 
 @dataclass(frozen=True)
@@ -84,10 +86,15 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, cal
         word = int.from_bytes(body[address - start:address - start + size], "little")
         last_instruction = word
         opcode = word & 0xfc000000
-        linked = opcode == 0x94000000
+        indirect = word & 0xfffffc1f == 0xd63f0000
+        linked = opcode == 0x94000000 or indirect
         if linked or (opcode == 0x14000000 and address in declared_calls):
-            displacement = ((word & 0x3ffffff) ^ 0x2000000) - 0x2000000
-            target = address + 4 * displacement
+            if indirect:
+                register = (word >> 5) & 31
+                target = machine.reg_read(X_REGISTERS[register]) if register < 31 else 0
+            else:
+                displacement = ((word & 0x3ffffff) ^ 0x2000000) - 0x2000000
+                target = address + 4 * displacement
             declared = declared_calls.get(address)
             if not declared or target != declared[0]:
                 stop(machine, f"unexpected call at {address:#x}")
@@ -100,8 +107,6 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, cal
                     return
                 frames[-1] = (target, resume, sp)
             calls.append((address, target, machine.reg_read(UC_ARM64_REG_X0)))
-        elif word & 0xfffffc1f == 0xd63f0000:
-            stop(machine, f"unexpected call at {address:#x}")
         elif word == 0xd65f03c0:
             if machine.reg_read(UC_ARM64_REG_LR) != resume or machine.reg_read(UC_ARM64_REG_SP) != sp:
                 stop(machine, "RET did not restore the expected link register or stack pointer")

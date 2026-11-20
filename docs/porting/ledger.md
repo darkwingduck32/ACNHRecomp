@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 7.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 8.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -443,3 +443,36 @@ need equivalence testing before this gather can become a default.
 ```powershell
 & private/venv/Scripts/python -m tests.acnh_shovel_gather_reference H:/ACNH/ACNHRecomp/private/game/exefs/main
 ```
+
+### Neighborhood gather
+
+The gather at `0x127cab0` is verified and defaults to handwritten C++ at
+the shovel survey's call site. It owns stage selection, coordinate
+conversion, the neighborhood traversal, and occupancy updates. The
+runtime boundary supplies the generated stage lookup, cell provider,
+metadata and extent calls. Set `NX_ACNH_SHOVEL_GATHER=original` to
+select the original.
+
+The independent harness checks 30 cases, including two explicit
+stage-selection variants. Each case compares ordered dependency calls
+and writes against two runs of the pinned AArch64 body. The muted
+original trace in `tree-shake-default-shovelprep2` and opt-in and default
+traces in `tree-shake-cpp-shovelgather1` and
+`tree-shake-default-shovelgather2` captured five matching full gathers.
+The four focal survey outcomes also matched before and after selection.
+All 13 CTest tests and 13 replay and profile tests passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-default-shovelprep2/nx.log"
+$c = "$r/tree-shake-default-shovelgather2/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_gather --live $o $c
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
+```
+
+The next discovery run, `tree-shake-default-shovelprovider1`, records the
+actual generated targets from the `0x11e4f58` provider under the shovel
+gather. This is the main remaining generated dependency inside the
+neighborhood query. Other pending paths include the alternate terrain
+predicate, the auxiliary item selector and the survey's outer
+classification routine.

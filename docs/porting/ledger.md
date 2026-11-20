@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 46.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 49.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -1109,3 +1109,45 @@ body still calls `0x15e026c` and `0x15f3ed0`. Capture those call sites
 to identify which parts of target selection to port together. The
 same probe also observed `0x267e024` from the outer survey and later
 generated calls to `0x19fb044` and `0x2878a24`.
+
+### Shovel target selection and terrain setup
+
+| Entry | Original route switch | Independent AArch64 cases | Calls per route at (40, 69) |
+| --- | --- | ---: | ---: |
+| `0x15f36e0` | `NX_ACNH_SHOVEL_TARGET=original` | 420 | 4 |
+| `0x87b460` | `NX_ACNH_SHOVEL_TERRAIN_SETUP=original` | 336 | 4 |
+| `0x1284ee0` | `NX_ACNH_SHOVEL_LAYER_ONE=original` | 42 | 4 |
+
+The selector now runs its coordinate adjustment and search in
+handwritten C++ on the shovel survey. The replay compared the
+request's final bytes and each probe's input coordinates and call
+order. Terrain setup retains its virtual stage lookup and selects a
+material check. Its replay ran the original layer-zero and layer-one
+predicates for their respective branches. Layer one also passed its
+own independent replay.
+
+The original and opt-in `targetport1` and default `targetport2` runs
+matched the selector's captured coordinates and result, plus the
+terrain setup and layer-one predicate results. The fixture reached
+layer one at each focal call. The default matched all four focal
+neighborhoods, surveys, and final results from `original-classdeep2`.
+The three routes ran as sequential muted instances. All 14 Release
+CTest checks and 14 replay and profile tests passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-targetport1"
+$c = "$r/tree-shake-default-targetport2"
+foreach ($group in 'shovel_target', 'shovel_terrain_setup') {
+    & private/venv/Scripts/python -m private.heading.compare_leaf $group --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+}
+$o = "$r/tree-shake-original-classdeep2"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+Height sampling `0x15e026c` and point classification `0x15f3ed0`
+remain generated. The default run's `SHOVEL_TARGET_CHILD` trace
+encountered the height calls first. It reached the samplers
+`0x83b024` and `0x83a950`, the parameter accessor `0x241e98c`, and
+the virtual float accessor `0x60cba4`, in that order. This is the
+next group for moving height sampling off the generated path.

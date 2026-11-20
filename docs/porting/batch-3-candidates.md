@@ -73,7 +73,6 @@ Recreate the queue from the campaign worktree.
 | `0x3c49da4` | `0xf8` | `0x3093ab8` | Discovery |
 | `0x194fa00` | `0xfc` | `0x1578d54` | Discovery |
 | `0x194f680` | `0x118` | `0x157db4c` | Discovery |
-| `0x1284ee0` | `0x15c` | `0x84bbc8` | Discovery |
 | `0x16bfae0` | `0x198` | `0x852ae8` | Discovery |
 | `0x8ceb5c` | `0x218` | `0x246420c` | Discovery |
 | `0x21e264` | `0x78` | `0x227d30` | Discovery |
@@ -123,3 +122,4 @@ Recreate the queue from the campaign worktree.
 | `0x2a72fd0` | `0x108` | `0x2a8f2d8` | Discovery |
 | `0x16c0620` | `0x120` | `0x85a0f0` | Discovery |
 | `0x2a673a0` | `0x14c` | `0x2a590f8` | Discovery |
+| `0x2a67620` | `0x194` | `0x2a59264` | Discovery |

@@ -45,14 +45,55 @@ uint32_t terrain_fallback_kind(uint64_t base, TerrainWorldPoint& point, TerrainF
 }
 
 template<class Memory>
-bool terrain_has_field_material(uint64_t base, HalfTile point, Memory& memory) {
-    const FieldQueries fields{base, memory};
-    const auto grid = fields.grid_for({0});
+bool terrain_grid_has_material(uint64_t base, FieldGrid grid, HalfTile point, const Memory& memory) {
     if (!grid) return false;
     const auto record = tile_record(base + 0x50a50f0, grid.address,
                                     half_tile_coordinate(point.x), half_tile_coordinate(point.z), memory);
     return !(memory.template read<uint8_t>(record + 0xe) & 0x20)
         && memory.template read<uint8_t>(record + 0x1e) != 0xff;
+}
+
+template<class Memory>
+bool terrain_has_field_material(uint64_t base, HalfTile point, Memory& memory) {
+    const FieldQueries fields{base, memory};
+    return terrain_grid_has_material(base, fields.grid_for({0}), point, memory);
+}
+
+template<class Memory>
+bool terrain_layer_one_has_material(uint64_t base, HalfTile point, const Memory& memory) {
+    const uint64_t owner_slot = memory.template read<uint64_t>(base + 0x4ab27a8);
+    const uint64_t owner = memory.template read<uint64_t>(owner_slot);
+    const uint64_t node = memory.template read<uint64_t>(owner + 0x38);
+    const FieldGrid grid{node ? memory.template read<uint64_t>(node + 0xb0) : 0};
+    return terrain_grid_has_material(base, grid, point, memory);
+}
+
+enum class TerrainSetupRoute { layer_zero, overlay, layer_one };
+
+template<class Memory, class Services>
+uint32_t shovel_terrain_setup(uint64_t base, HalfTileRef point, const Memory& memory, Services& services) {
+    const uint64_t terrain = base + 0x4bfae30;
+    if (!memory.template read<uint64_t>(terrain)) return 0;
+
+    uint64_t selected = base + 0x54c04a0;
+    const uint64_t context_slot = memory.template read<uint64_t>(base + 0x4ab2720);
+    const uint64_t context = memory.template read<uint64_t>(context_slot);
+    if (context && memory.template read<uint64_t>(context + 0x330)) {
+        const uint64_t object = memory.template read<uint64_t>(base + 0x59ed668);
+        const uint32_t index = memory.template read<uint32_t>(context + 0x338);
+        if (services.stage_hash(object, index) == 0x758f7eaf)
+            selected = memory.template read<uint64_t>(base + 0x4ac3a80);
+    }
+    if (memory.template read<uint32_t>(selected + 0x38) == 0xe820ff3d)
+        return services.test_material(point, TerrainSetupRoute::layer_zero);
+    const uint64_t alternate = memory.template read<uint64_t>(base + 0x4ac3a80);
+    if (memory.template read<uint32_t>(alternate + 0x38) == 0xdb5d97b8)
+        return services.test_material(point, TerrainSetupRoute::layer_zero);
+
+    const uint64_t owner = memory.template read<uint64_t>(terrain);
+    const bool same_grid = memory.template read<uint64_t>(owner + 0xa8)
+                         == memory.template read<uint64_t>(owner + 0x90);
+    return services.test_material(point, same_grid ? TerrainSetupRoute::layer_one : TerrainSetupRoute::overlay);
 }
 
 template<class Memory, class Services>

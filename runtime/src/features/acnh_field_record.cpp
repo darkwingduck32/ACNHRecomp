@@ -10,6 +10,7 @@
 #include "../../../games/acnh/field_provider_context_flag.h"
 #include "../../../games/acnh/field_provider_context_handle.h"
 #include "../../../games/acnh/field_item_init.h"
+#include "../../../games/acnh/shovel_target.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
 #include "../../../games/acnh/shovel_item_queries.h"
@@ -747,6 +748,162 @@ struct TerrainFallbackServices {
         return static_cast<uint32_t>(nested.x[0]);
     }
 };
+
+Fn original_shovel_target = nullptr;
+Fn original_shovel_terrain_setup = nullptr;
+Fn original_shovel_layer_one = nullptr;
+bool use_cpp_shovel_target = false;
+bool use_cpp_shovel_terrain_setup = false;
+bool use_cpp_shovel_layer_one = false;
+bool trace_shovel_target = false;
+constexpr uint64_t shovel_target_resume = 0x21f70d8;
+constexpr uint64_t shovel_terrain_setup_resume = 0x21f7500;
+
+struct ShovelTargetServices {
+    CPU cpu;
+
+    explicit ShovelTargetServices(const CPU& caller) : cpu(caller) {
+        cpu.x[31] -= 0x70;
+        cpu.x[29] = cpu.x[31] + 0x30;
+        st<uint64_t>(cpu.x[29], caller.x[29]);
+        st<uint64_t>(cpu.x[29] + 8, caller.x[30]);
+    }
+
+    uint32_t heading(float x, float z) const {
+        CPU nested = cpu;
+        nested.v[0].f32[0] = x;
+        nested.v[1].f32[0] = z;
+        nested.x[30] = main_base + 0x15f3748;
+        call(nested, main_base + 0x5f0400);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+
+    float height(acnh::ShovelTargetRequest request, acnh::ShovelTargetHeight which) const {
+        constexpr std::array resumes{0x15f392cu, 0x15f3e74u, 0x15f3e8cu};
+        const auto resume = resumes[size_t(which)];
+        CPU nested = cpu;
+        nested.x[0] = request.address + (which == acnh::ShovelTargetHeight::desired ? 0xc : 0);
+        nested.x[1] = nested.x[2] = 0;
+        nested.v[0] = {};
+        nested.x[30] = main_base + resume;
+        trace_shovel_dependency(0x15e026c, resume);
+        call(nested, main_base + 0x15e026c);
+        return nested.v[0].f32[0];
+    }
+
+    uint32_t probe(acnh::ShovelTargetPoint point, acnh::ShovelTargetRequest request,
+                   acnh::ShovelTargetProbe method, size_t index) const {
+        constexpr std::array approach{0x15f39c8u, 0x15f3a24u, 0x15f3a78u};
+        constexpr std::array nearby{0x15f3b84u, 0x15f3bd8u, 0x15f3c2cu, 0x15f3c80u, 0x15f3cd4u,
+                                    0x15f3d28u, 0x15f3d88u, 0x15f3ddcu, 0x15f3e3cu};
+        const auto resume = method == acnh::ShovelTargetProbe::approach ? approach[index]
+            : method == acnh::ShovelTargetProbe::radius ? 0x15f3b40u : nearby[index];
+        CPU nested = cpu;
+        const auto vector = cpu.x[31] + 4;
+        st<float>(vector, point.x);
+        st<float>(vector + 4, point.y);
+        st<float>(vector + 8, point.z);
+        nested.x[0] = vector;
+        nested.x[1] = request.address;
+        nested.x[30] = main_base + resume;
+        trace_shovel_dependency(0x15f3ed0, resume);
+        call(nested, main_base + 0x15f3ed0);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+};
+
+void shovel_target_adapter(CPU& cpu) {
+    if (cpu.x[30] != main_base + shovel_target_resume) {
+        original_shovel_target(cpu);
+        return;
+    }
+    const acnh::ShovelTargetRequest request{cpu.x[0]};
+    std::array<uint32_t, 6> input;
+    if (trace_shovel_target)
+        for (size_t i = 0; i < input.size(); ++i)
+            input[i] = ld<uint32_t>(request.address + 4 * i);
+    if (use_cpp_shovel_target) {
+        GuestMemory memory;
+        ShovelTargetServices services{cpu};
+        cpu.x[0] = acnh::select_shovel_target(main_base, request, memory, services);
+    } else {
+        original_shovel_target(cpu);
+    }
+    if (trace_shovel_target) {
+        const auto data = request.address;
+        log("acnh shovel target %s entry=15f36e0 call=21f70d4 in=%x,%x,%x,%x,%x,%x originHeight=%x goal=%x,%x,%x selected=%x,%x,%x code=%x out=%x",
+            use_cpp_shovel_target ? "cpp" : "original", input[0], input[1], input[2], input[3], input[4], input[5],
+            ld<uint32_t>(data + 4), ld<uint32_t>(data + 0xc), ld<uint32_t>(data + 0x10), ld<uint32_t>(data + 0x14),
+            ld<uint32_t>(data + 0x2c), ld<uint32_t>(data + 0x30), ld<uint32_t>(data + 0x34),
+            ld<uint32_t>(data + 0x38), static_cast<unsigned>(cpu.x[0]));
+    }
+}
+
+void shovel_layer_one_adapter(CPU& cpu) {
+    if (cpu.x[30] != main_base + shovel_terrain_setup_resume) {
+        original_shovel_layer_one(cpu);
+        return;
+    }
+    const acnh::HalfTile point{ld<int32_t>(cpu.x[0] + 8), ld<int32_t>(cpu.x[0] + 12)};
+    if (use_cpp_shovel_layer_one)
+        cpu.x[0] = acnh::terrain_layer_one_has_material(main_base, point, GuestMemory{});
+    else
+        original_shovel_layer_one(cpu);
+    if (trace_shovel_target)
+        log("acnh shovel target %s entry=1284ee0 call=87b57c pos=%d,%d out=%x",
+            use_cpp_shovel_layer_one ? "cpp" : "original", point.x, point.z, static_cast<unsigned>(cpu.x[0]));
+}
+
+struct ShovelTerrainSetupServices {
+    const CPU& caller;
+
+    uint32_t stage_hash(uint64_t object, uint32_t index) const {
+        CPU nested = caller;
+        nested.x[31] -= 0x30;
+        nested.x[29] = nested.x[31];
+        st<uint64_t>(nested.x[29], caller.x[29]);
+        st<uint64_t>(nested.x[29] + 8, caller.x[30]);
+        const auto target = ld<uint64_t>(ld<uint64_t>(object) + 0x18);
+        nested.x[0] = object;
+        nested.x[1] = index;
+        nested.x[30] = main_base + 0x87b4c0;
+        trace_shovel_dependency(target - main_base, 0x87b4c0);
+        call(nested, target);
+        nested.x[0] = ld<uint64_t>(nested.x[0]);
+        nested.x[1] = 0;
+        nested.x[30] = main_base + 0x87b4cc;
+        call(nested, main_base + 0x5bd550);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+
+    uint32_t test_material(acnh::HalfTileRef point, acnh::TerrainSetupRoute route) const {
+        constexpr std::array targets{0x1285040u, 0x170cee0u, 0x1284ee0u};
+        const auto target = targets[size_t(route)];
+        CPU nested = caller;
+        nested.x[0] = point.address;
+        call(nested, main_base + target);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+};
+
+void shovel_terrain_setup_adapter(CPU& cpu) {
+    if (cpu.x[30] != main_base + shovel_terrain_setup_resume) {
+        original_shovel_terrain_setup(cpu);
+        return;
+    }
+    const acnh::HalfTileRef point{cpu.x[0]};
+    const auto x = ld<int32_t>(point.address + 8);
+    const auto z = ld<int32_t>(point.address + 12);
+    if (use_cpp_shovel_terrain_setup) {
+        ShovelTerrainSetupServices services{cpu};
+        cpu.x[0] = acnh::shovel_terrain_setup(main_base, point, GuestMemory{}, services);
+    } else {
+        original_shovel_terrain_setup(cpu);
+    }
+    if (trace_shovel_target)
+        log("acnh shovel target %s entry=87b460 call=21f74fc pos=%d,%d out=%x",
+            use_cpp_shovel_terrain_setup ? "cpp" : "original", x, z, static_cast<unsigned>(cpu.x[0]));
+}
 
 struct TerrainHelperServices {
     CPU cpu;
@@ -2292,6 +2449,20 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_terrain_level = !mode || std::string_view(mode) == "cpp";
     if (use_cpp_terrain_level || trace_terrain_helpers)
         wrap_function(entries, 0x871f80, terrain_level_adapter, original_terrain_level);
+    mode = std::getenv("NX_ACNH_SHOVEL_TARGET");
+    use_cpp_shovel_target = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_SETUP");
+    use_cpp_shovel_terrain_setup = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_SHOVEL_LAYER_ONE");
+    use_cpp_shovel_layer_one = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_target = std::getenv("NX_ACNH_SHOVEL_TARGET_TRACE") != nullptr;
+    if (use_cpp_shovel_target || trace_shovel_target)
+        wrap_function(entries, 0x15f36e0, shovel_target_adapter, original_shovel_target);
+    if (use_cpp_shovel_terrain_setup || trace_shovel_target)
+        wrap_function(entries, 0x87b460, shovel_terrain_setup_adapter, original_shovel_terrain_setup);
+    if (use_cpp_shovel_layer_one || trace_shovel_target)
+        wrap_function(entries, 0x1284ee0, shovel_layer_one_adapter, original_shovel_layer_one);
+
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_PRIMARY");
     use_cpp_terrain_primary = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_SECONDARY");

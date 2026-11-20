@@ -75,3 +75,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 16f37d0 # Check primary stage keys under the shovel stage rule
 # dispatch 16f3a18 # Check secondary stage keys under the shovel stage rule
 # dispatch 267f248 # Finalize empty item slots for the shovel survey
+# dispatch 1285040 # Read the layer-zero material flag for shovel terrain
+# dispatch 15f36e0 # Select a target for the shovel survey
+# dispatch 87b460 # Check terrain before gathering the shovel neighborhood
+# dispatch 1284ee0 # Read the layer-one material flag

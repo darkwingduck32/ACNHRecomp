@@ -3,6 +3,7 @@
 #include "../../../games/acnh/field_flag.h"
 #include "../../../games/acnh/field_record.h"
 #include "../../../games/acnh/field_value_cache.h"
+#include "../../../games/acnh/field_action_state.h"
 #include "../../../games/acnh/field_scan_queries.h"
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
@@ -264,7 +265,7 @@ std::array<Fn, field_scan_routes.size()> original_field_scan{};
 bool use_cpp_field_scan = false;
 bool trace_field_scan = false;
 
-struct FieldScanPreviewMemory {
+struct FieldWritePreview {
     struct Write {
         uint64_t address;
         size_t size;
@@ -329,7 +330,7 @@ void field_scan_adapter(CPU& cpu) {
     GuestMemory memory;
     std::array<uint32_t, 2> position{};
     uint32_t selector = 0;
-    FieldScanPreviewMemory preview;
+    FieldWritePreview preview;
     uint64_t expected = 0;
     bool trace = false;
     if (trace_field_scan) {
@@ -376,6 +377,133 @@ void field_scan_adapter(CPU& cpu) {
         use_cpp_field_scan ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
         static_cast<unsigned long long>(resume - 4), selector, position[0], position[1], writes.c_str(),
         match ? "match" : "mismatch", static_cast<unsigned long long>(Index == 1 ? 0 : cpu.x[0]));
+}
+
+struct FieldActionRoute { uint64_t entry; std::array<uint64_t, 2> resumes; };
+constexpr std::array<FieldActionRoute, 8> field_action_routes{{
+    {0x21e094, {0x226544, 0}}, {0x21e0f8, {0x221e74, 0}},
+    {0x21e17c, {0x221e94, 0}}, {0x21e208, {0x226ca4, 0}},
+    {0x21e264, {0x227d34, 0}}, {0x21e2dc, {0x227cf4, 0}},
+    {0x21e3b8, {0x222bb4, 0}}, {0x21e3f4, {0x225d90, 0x225dbc}},
+}};
+std::array<Fn, field_action_routes.size()> original_field_action{};
+bool use_cpp_field_action = false;
+bool trace_field_action = false;
+bool focus_field_action = false;
+
+template<size_t Index, class Memory>
+uint64_t field_action_query(acnh::FieldActionState action, uint32_t event, Memory& memory) {
+    if constexpr (Index == 0) {
+        return acnh::field_action_advance(action, event, memory);
+    } else if constexpr (Index == 1 || Index == 2) {
+        return acnh::field_action_has_slot(action, Index == 1 ? acnh::FieldActionSlot::first : acnh::FieldActionSlot::second, memory);
+    } else if constexpr (Index == 3) {
+        return acnh::field_action_ready(action, memory);
+    } else if constexpr (Index == 4 || Index == 5) {
+        constexpr auto curve = Index == 4 ? acnh::FieldActionCurve::linear_blend : acnh::FieldActionCurve::power;
+        return std::bit_cast<uint32_t>(acnh::field_action_weight(action, curve, memory));
+    } else if constexpr (Index == 6) {
+        return acnh::field_action_position(action, memory);
+    } else {
+        return acnh::field_action_can_start(action, memory);
+    }
+}
+
+template<size_t Index>
+void field_action_adapter(CPU& cpu) {
+    constexpr auto route = field_action_routes[Index];
+    const auto original = original_field_action[Index];
+    const auto resume = cpu.x[30] - main_base;
+    const auto site = std::find(route.resumes.begin(), route.resumes.end(), resume);
+    constexpr bool focused = Index == 0 || Index == 2;
+    const bool selected = !focus_field_action || focused;
+    if (!resume || site == route.resumes.end() || !selected || (!use_cpp_field_action && !trace_field_action)) {
+        original(cpu);
+        return;
+    }
+    constexpr bool scalar = Index == 4 || Index == 5;
+    const auto result = [](const CPU& state) -> uint64_t {
+        if constexpr (scalar) return state.v[0].u32[0];
+        return state.x[0];
+    };
+    const acnh::FieldActionState action{cpu.x[0]};
+    const uint32_t event = Index == 0 ? uint32_t(cpu.x[1]) : 0;
+    const uint64_t base_position = Index == 6 && trace_field_action ? ld<uint64_t>(action.address + 0x788) : 0;
+    bool trace = false;
+    if (trace_field_action) {
+        static std::array<std::atomic<uint64_t>, route.resumes.size()> calls{};
+        const auto count = calls[size_t(site - route.resumes.begin())].fetch_add(1, std::memory_order_relaxed) + 1;
+        trace = count <= 256 || std::has_single_bit(count);
+    }
+    GuestMemory memory;
+    FieldWritePreview preview;
+    uint64_t expected = trace ? field_action_query<Index>(action, event, preview) : 0;
+    std::string inputs;
+    if (trace && focused) {
+        if constexpr (Index == 0) {
+            const auto flags = ld<uint16_t>(action.address + 9);
+            const auto index = ld<uint32_t>(action.address + 0x30);
+            uint32_t size = 0;
+            if (event == 1 || (event == 2 && flags))
+                size = ld<uint32_t>(ld<uint64_t>(ld<uint64_t>(action.address + 0x4d0)));
+            char state[40];
+            std::snprintf(state, sizeof(state), "%04x:%08x:%08x", unsigned(flags), index, size);
+            inputs = state;
+        } else if constexpr (Index == 2) {
+            const auto group = ld<uint64_t>(action.address + 0x240);
+            for (unsigned offset = 0x350; offset <= 0x360; offset += 8) {
+                if (!inputs.empty()) inputs += ':';
+                const auto node = ld<uint64_t>(group + offset);
+                if (!node) {
+                    inputs += '-';
+                    continue;
+                }
+                char field[8];
+                std::snprintf(field, sizeof(field), "%02x%02x", unsigned(ld<uint8_t>(node + 0x51)),
+                              unsigned(ld<uint8_t>(node + 0x14)));
+                inputs += field;
+            }
+        }
+    }
+    if (use_cpp_field_action) {
+        if constexpr (Index != 0) {
+            if (trace) {
+                CPU reference = cpu;
+                original(reference);
+                expected = result(reference);
+            }
+        }
+        const auto output = field_action_query<Index>(action, event, memory);
+        if constexpr (scalar) {
+            cpu.v[0] = {};
+            cpu.v[0].u32[0] = uint32_t(output);
+        } else {
+            cpu.x[0] = output;
+        }
+    } else {
+        original(cpu);
+    }
+    if (!trace) return;
+
+    const auto output = result(cpu);
+    bool match = output == expected;
+    std::string writes;
+    if constexpr (Index == 0) {
+        for (size_t i = 0; i < preview.count; ++i) {
+            const auto [address, size, value] = preview.writes[i];
+            const uint64_t actual = size == 2 ? ld<uint16_t>(address)
+                : size == 4 ? ld<uint32_t>(address) : ld<uint64_t>(address);
+            match &= actual == value;
+            char field[80];
+            std::snprintf(field, sizeof(field), "%llx:%zu:%llx,", static_cast<unsigned long long>(address - action.address),
+                          size, static_cast<unsigned long long>(size == 8 ? actual - action.address : actual));
+            writes.append(field);
+        }
+    }
+    log("acnh field action %s entry=%llx call=%llx event=%x writes=%s same_input=%s out=%llx%s%s",
+        use_cpp_field_action ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+        static_cast<unsigned long long>(resume - 4), event, writes.c_str(), match ? "match" : "mismatch",
+        static_cast<unsigned long long>(output - base_position), inputs.empty() ? "" : " inputs=", inputs.c_str());
 }
 
 void field_column_adapter(CPU& cpu) {
@@ -5756,6 +5884,19 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         };
         for (size_t i = 0; i < adapters.size(); ++i)
             wrap_function(entries, terrain_triangle_routes[i].entry, adapters[i], original_terrain_triangles[i]);
+    }
+
+    mode = std::getenv("NX_ACNH_FIELD_ACTION_STATE");
+    use_cpp_field_action = !mode || std::string_view(mode) == "cpp";
+    trace_field_action = std::getenv("NX_ACNH_FIELD_ACTION_STATE_TRACE") != nullptr;
+    focus_field_action = std::getenv("NX_ACNH_FIELD_ACTION_STATE_FOCUS") != nullptr;
+    if (use_cpp_field_action || trace_field_action) {
+        constexpr std::array<Fn, field_action_routes.size()> adapters{
+            field_action_adapter<0>, field_action_adapter<1>, field_action_adapter<2>, field_action_adapter<3>,
+            field_action_adapter<4>, field_action_adapter<5>, field_action_adapter<6>, field_action_adapter<7>,
+        };
+        for (size_t i = 0; i < adapters.size(); ++i)
+            wrap_function(entries, field_action_routes[i].entry, adapters[i], original_field_action[i]);
     }
 
     mode = std::getenv("NX_ACNH_FIELD_SCAN");

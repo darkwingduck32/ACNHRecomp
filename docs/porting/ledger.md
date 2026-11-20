@@ -2662,7 +2662,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 7.
+two promoted material queries. Verified so far, 15.
 
 Implementation continues on the typed shovel traversal path.
 
@@ -2804,3 +2804,47 @@ The eight surveys, eight neighborhoods, and eight final decisions
 also matched. All 14 Release CTests and 14 profile and replay
 checks passed. Batch 4 has seven verified functions and 100 discovery
 candidates.
+
+### Field action state
+
+Eight observed action-state routines now use a typed state query.
+The runtime handles the original return registers, including S0 for
+the two weight calculations, and guards nine observed call sites.
+Set `NX_ACNH_FIELD_ACTION_STATE=original` to select the generated bodies.
+
+| Entry | Unwind size | Typed operation | Original AArch64 cases | Stage |
+| --- | --- | --- | ---: | --- |
+| `0x21e094` | `0x64` | Advance the current slot | 288 | Verified |
+| `0x21e0f8` | `0x84` | Test the first slot | 64 | Verified |
+| `0x21e17c` | `0x84` | Test the second slot | 64 | Verified |
+| `0x21e208` | `0x5c` | Check readiness | 288 | Verified |
+| `0x21e264` | `0x78` | Blend action weights | 1,024 | Verified |
+| `0x21e2dc` | `0xdc` | Evaluate action power curves | 1,024 | Verified |
+| `0x21e3b8` | `0x30` | Resolve the action position | 72 | Verified |
+| `0x21e3f4` | `0x3c` | Check the starting state | 102 | Verified |
+
+Two original AArch64 runs per input matched 2,926 portable cases,
+including bit-exact scalar results and the three ordered stores
+that advance the current slot. The broad original and opt-in
+`fieldaction1` sequences differed at one result each for the
+slot advance and second slot test. The other six matched 1,842
+samples in per-function order.
+
+The focused original and opt-in `fieldactionfocus1` retry recorded
+the prior slot state, cycle size, and both relevant bytes from
+each candidate slot record. The original and opt-in runs had 264
+samples per function and six common input states with matching
+effects. The remaining four original-only and one opt-in-only
+states also passed independent replay. Default `fieldaction2` was
+compared on the same complete-state basis for these two functions
+and by per-function order for the six stable functions. Its 264
+samples per focused function had the same six shared states and
+the same C++-only state. Independent replay matched all 11 states
+across the three routes.
+
+All measured shovel outcomes matched across routes. All 14 Release
+CTests and 14 profile and replay checks passed. Batch 4 has 15
+verified functions and 100 discovery candidates. The separate
+`traversalwest1` fixture reached nine outer traversals and 342
+sweep casts with a raised west strip. It produced no alternate-axis
+calls, so that route still uses generated code.

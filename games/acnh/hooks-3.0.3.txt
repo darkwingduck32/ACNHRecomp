@@ -111,6 +111,14 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 15f27e0 # Sample the highest point near a shovel traversal position
 # dispatch 15f23b0 # Sweep positions along a shovel traversal segment
 # dispatch 11eb21c # Read a record and anchor from the selected field provider view
+# dispatch 21e094 # Advance a field action ring index
+# dispatch 21e0f8 # Check the first field action slot
+# dispatch 21e17c # Check the second field action slot
+# dispatch 21e208 # Check whether a field action is ready
+# dispatch 21e264 # Blend field action weights
+# dispatch 21e2dc # Evaluate field action power curves
+# dispatch 21e3b8 # Resolve a field action position
+# dispatch 21e3f4 # Check whether a field action can start
 # dispatch 19d6a30 # Test a field scan item type
 # dispatch 19d9fd0 # Resolve the field scan item type
 # dispatch 19f49bc # Check a fixed field scan item type

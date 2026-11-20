@@ -463,6 +463,14 @@ std::array<TerrainRoute, 2> terrain_routes{{
     {0x880870, acnh::TerrainProperty::diggable, 0x877340, 0x877370, terrain_property_adapter<0>},
     {0x880a10, acnh::TerrainProperty::alternate, 0x8775d4, 0x877614, terrain_property_adapter<1>},
 }};
+bool trace_shovel_dependencies = false;
+
+void trace_shovel_dependency(uint64_t entry, uint64_t resume) {
+    if (trace_shovel_dependencies)
+        log("acnh shovel dependency entry=%llx call=%llx",
+            static_cast<unsigned long long>(entry), static_cast<unsigned long long>(resume - 4));
+}
+
 bool trace_terrain = false;
 
 template<size_t Index>
@@ -692,6 +700,7 @@ struct TerrainHelperServices {
         CPU nested = cpu;
         nested.x[0] = vector;
         nested.x[30] = main_base + resume;
+        trace_shovel_dependency(target, resume);
         call(nested, main_base + target);
         point = {ld<float>(vector), ld<float>(vector + 8)};
         return static_cast<uint32_t>(nested.x[0]);
@@ -1583,6 +1592,7 @@ struct ShovelMetadataServices {
         CPU nested = cpu;
         nested.x[0] = address;
         nested.x[30] = main_base + resume;
+        if (entry != 0x267d6c4) trace_shovel_dependency(entry, resume);
         call(nested, main_base + entry);
         return nested.x[0];
     }
@@ -1780,6 +1790,18 @@ std::atomic<unsigned> provider_handle_samples[2]{};
 template<bool Acquire>
 void provider_handle_call(CPU& cpu);
 
+bool use_cpp_provider_handle_prepare = false;
+bool trace_provider_handle_prepare = false;
+std::atomic<unsigned> provider_handle_prepare_samples{0};
+
+uint32_t adjust_provider_word(CPU& cpu, uint64_t address, uint32_t delta) {
+    uint32_t before;
+    do {
+        before = nx::ldxr<uint32_t>(cpu, address);
+    } while (nx::stxr<uint32_t>(cpu, address, before + delta));
+    return before;
+}
+
 struct ProviderContextServices {
     CPU frame;
     CPU& caller;
@@ -1848,7 +1870,7 @@ struct ProviderContextServices {
                 return paired.handle_counter(handle, first ? 0x262ea38 : 0x262e9f8);
             }
             void prepare_counter(uint64_t counters, bool first) {
-                paired.invoke(0x37e2e80, first ? 0x262ea50 : 0x262ea10, counters);
+                paired.prepare_handle_counters(counters, first ? 0x262ea50 : 0x262ea10);
             }
         } callbacks{paired};
         GuestMemory memory;
@@ -1866,7 +1888,8 @@ struct ProviderContextServices {
 
     uint64_t counter(uint64_t handle, bool) { return handle_counter(handle, 0x25ee714); }
 
-    void prepare_counter(uint64_t counters, bool) { invoke(0x37e2e80, 0x25ee72c, counters); }
+    void prepare_counter(uint64_t counters, bool) { prepare_handle_counters(counters, 0x25ee72c); }
+    void prepare_handle_counters(uint64_t counters, uint64_t resume);
     void enter_first(uint64_t handle) { invoke(0x37569c0, 0x25ee744, handle); }
     void leave_second(uint64_t handle, bool nested) {
         CPU call_state = frame;
@@ -1882,6 +1905,51 @@ struct ProviderContextServices {
     }
 };
 
+void ProviderContextServices::prepare_handle_counters(uint64_t counters, uint64_t resume) {
+    const bool trace = trace_provider_handle_prepare &&
+        provider_handle_prepare_samples.fetch_add(1, std::memory_order_relaxed) < 48;
+    const auto before = trace ? ld<uint32_t>(counters) : 0;
+
+    if (!use_cpp_provider_handle_prepare) {
+        invoke(0x37e2e80, resume, counters);
+    } else {
+        CPU nested = frame;
+        nested.x[0] = counters;
+        nested.x[30] = main_base + resume;
+        nested.x[31] -= 0x20;
+        st<uint64_t>(nested.x[31], frame.x[29]);
+        st<uint64_t>(nested.x[31] + 8, nested.x[30]);
+        nested.x[29] = nested.x[31];
+        struct CounterCallbacks {
+            CPU& nested;
+            const CPU& parent;
+
+            uint32_t adjust(uint64_t address, uint32_t delta) {
+                return adjust_provider_word(nested, address, delta);
+            }
+
+            void wait_readers(uint64_t address, bool initial) {
+                CPU saved = nested;
+                saved.x[0] = address;
+                saved.x[30] = main_base + (initial ? 0x37e2eb0 : 0x37e2eec);
+                call(saved, main_base + 0x3f05820);
+            }
+
+            void wake_readers(uint64_t address) {
+                nested.x[0] = address;
+                nested.x[29] = parent.x[29];
+                nested.x[31] = parent.x[31];
+                call(nested, main_base + 0x3f05830);
+            }
+        } callbacks{nested, frame};
+        acnh::prepare_provider_handle_counters(counters, callbacks);
+    }
+    if (trace)
+        log("acnh shovel handle prepare %s caller=%llx before=%u out=%u",
+            use_cpp_provider_handle_prepare ? "cpp" : "original",
+            static_cast<unsigned long long>(resume), before, ld<uint32_t>(counters));
+}
+
 struct ProviderHandleCallbacks {
     ProviderContextServices& services;
     bool acquire;
@@ -1893,16 +1961,15 @@ struct ProviderHandleCallbacks {
 
     void enter_records(uint64_t guard) { services.invoke(0x3f03880, 0x375684c, guard); }
     void leave_records(uint64_t guard) { services.invoke(0x3f038c0, 0x37568ac, guard); }
-    void release_shared(uint64_t holders) { services.invoke(0x37e3040, 0x3756998, holders); }
+    void release_shared(uint64_t holders) {
+        trace_shovel_dependency(0x37e3040, 0x3756998);
+        services.invoke(0x37e3040, 0x3756998, holders);
+    }
     void signal_waiter(uint64_t waiter) { services.invoke(0x3f05830, 0x3756990, waiter); }
     void barrier() { nx::barrier(); }
 
     uint32_t decrement(uint64_t address) {
-        uint32_t before;
-        do {
-            before = nx::ldxr<uint32_t>(services.caller, address);
-        } while (nx::stxr<uint32_t>(services.caller, address, before - 1));
-        return before;
+        return adjust_provider_word(services.caller, address, uint32_t(-1));
     }
 };
 
@@ -2137,6 +2204,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
 
     mode = std::getenv("NX_ACNH_SHOVEL_METADATA");
     use_cpp_shovel_metadata = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_dependencies = std::getenv("NX_ACNH_SHOVEL_DEPENDENCY_TRACE") != nullptr;
     trace_shovel_metadata = std::getenv("NX_ACNH_SHOVEL_METADATA_TRACE") != nullptr;
     if (use_cpp_shovel_metadata || trace_shovel_metadata)
         wrap_function(entries, 0x19ee3b4, shovel_metadata_adapter, original_shovel_metadata);
@@ -2147,6 +2215,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_provider_binding || trace_provider_binding)
         for (auto& route : provider_binding_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_HANDLE_PREPARE");
+    use_cpp_provider_handle_prepare = !mode || std::string_view(mode) == "cpp";
+    trace_provider_handle_prepare = std::getenv("NX_ACNH_PROVIDER_HANDLE_PREPARE_TRACE") != nullptr;
 
     mode = std::getenv("NX_ACNH_PROVIDER_HANDLE");
     use_cpp_provider_handle = !mode || std::string_view(mode) == "cpp";

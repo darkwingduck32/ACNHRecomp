@@ -82,7 +82,9 @@ def prepare_fixture(primary, ticket, next_group):
 
 
 def live(path, entry, expected):
-    pattern = re.compile(rf"acnh shovel handle (original|cpp) entry={entry:x} (state=[^\r\n]+)")
+    pattern = (re.compile(r"acnh shovel handle prepare (original|cpp) (caller=[^\r\n]+)")
+               if entry == 0x37e2e80 else
+               re.compile(rf"acnh shovel handle (original|cpp) entry={entry:x} (state=[^\r\n]+)"))
     states = Counter()
     for route, state in pattern.findall(path.read_text(errors="replace")):
         if route != expected:

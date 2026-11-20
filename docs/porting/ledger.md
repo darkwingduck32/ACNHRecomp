@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 40.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 41.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -919,9 +919,32 @@ $c = "$r/tree-shake-default-providerhandle2"
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
 ```
 
-Counter initialization `0x37e2e80` is the next observed dependency. The
-ordinary-read captures returned a zero count from record selection,
-which enters initialization before incrementing the record. Its C++
-candidate and independent `provider_context_handle --prepare` replay
-matched 64 cases against two original runs each. Gameplay still uses
-the generated initializer and this entry awaits route verification.
+### Provider counter initialization
+
+The counter initializer at `0x37e2e80` defaults to C++ under the
+shovel provider. `NX_ACNH_PROVIDER_HANDLE_PREPARE=original` selects the
+generated body. Guest wait and wake imports at `0x3f05820` and
+`0x3f05830` remain at the boundary. The handwritten body uses the
+runtime's guest exclusive-monitor operations.
+
+All 64 independent cases matched two AArch64 runs. Original and opt-in
+`providerprepare1` and default `providerprepare2` each captured 48
+initializations, 24 per pair caller, with the counter changing from
+zero to one. All four focal surveys, neighborhoods, and final shovel
+decisions matched at (40, 69). The runs used one muted game instance
+at a time. All 13 Release CTest checks and 14 replay and profile tests passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-providerprepare1"
+$c = "$r/tree-shake-default-providerprepare2"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_context_handle --prepare --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The first generated dependency observed by the scoped trace was the
+alternate descriptor kind query `0x19f93e8` at `0x19ee424`. The
+descriptor predicate `0x19e59b0` followed at `0x19ee440`,
+`0x19ee44c`, and `0x19ee46c`. These two candidates share the item
+metadata path. The terrain fallbacks `0x87a980` and `0x87aa70` were
+also observed later in the same run.

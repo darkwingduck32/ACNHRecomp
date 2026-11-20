@@ -167,11 +167,14 @@ C++. The context-flag lookup `0x2601110` also uses C++. Its imported thread
 resolver and virtual name refresh calls stay at the guest boundary.
 Paired-handle acquisition `0x262e9bc` also defaults to C++. The live
 fixture exercised acquire mode 1 with two kind-2 handles and the guard
-disabled. Record selection `0x37567d0` and release `0x37568c0` now
-default to C++ on this path. The next generated candidate is counter
-initialization `0x37e2e80`, which ordinary reads reach with a zero
-record count. Its independent replay passes and it awaits gameplay
-verification. The thread, lock, and wake imports remain at the boundary.
+disabled. Record selection `0x37567d0`, release `0x37568c0`, and
+counter initialization `0x37e2e80` now default to C++ on this path.
+The thread, lock, and wake imports remain at the guest boundary.
+
+The next observed group starts with the alternate descriptor kind
+query `0x19f93e8`, followed by the descriptor predicate `0x19e59b0`.
+The scoped trace reached both from the native metadata classifier
+before reaching the terrain fallbacks.
 
 The generated boundary also retains the quadrant fallbacks
 `0x87a980` and `0x87aa70`, deeper item descriptor and category calls,

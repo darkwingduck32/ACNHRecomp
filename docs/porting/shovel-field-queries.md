@@ -11,7 +11,7 @@ The action engine continues to own item removal, inventory, and hole creation.
 | `0x21f7614` | `0x127cab0` | Gather the neighborhood records and occupancy flags | Verified C++ default at the shovel call site |
 | `0x21f76b0` | `0x267d6c4` | Resolve an item ID | Verified C++ default with original auxiliary fallback `0x1a03610` |
 | `0x21f7788` | `0x877130` | Test the selected terrain | Verified C++ dispatcher, rectangle height, quadrant materials and record reader |
-| `0x21f77ac` through `0x21f7944` | `0x127d05c` | Classify field item and terrain properties | Generated, with `0x113d890` already in C++ |
+| `0x21f77ac` through `0x21f7944` | `0x127d05c` | Classify field item and terrain properties | Verified C++ classifier and entry checks with generated metadata and category callbacks |
 | `0x21f787c` | `0x1281c54` | Find the field record at a half-tile position | Verified C++ default through typed field queries |
 | `0x21f790c`, `0x21f7bb8` | `0x8773f0` | Check the alternate terrain condition | Generated, with leaf `0x880a10` |
 
@@ -137,3 +137,13 @@ item ID, descriptor metadata `0x19e59b0` and `0x19e6020`, descriptor
 construction `0x114c030`, and category checks through `0x114dcb0`,
 `0x113d890` and `0x113db50`. The half-tile probe reached the first two
 gates. Deeper classification remains to be observed in a gameplay fixture.
+
+The classifier and both entry checks now default to C++. The six
+half-tile outcomes exercised the two early rejections. Replay also
+covered accepted results and the remaining descriptor branches.
+
+The next group is the neighborhood stage filter `0x16baf44` and its
+stage-key helpers `0x16f37d0` and `0x16f3a18`. Each of the recorded
+false stage decisions implies both helper calls ran. This group removes
+the stage filter from each shovel gather while leaving stage lookup and
+the provider's lifecycle callbacks at the ABI boundary.

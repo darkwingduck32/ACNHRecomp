@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 18.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 21.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -592,3 +592,28 @@ and 12 to `0x267e024` at `0x127d080`. Neither attempt observed the
 alternate terrain route. The whole-tile probe separately observed
 the stage predicate `0x16baf44` and one metadata predicate
 `0x19ee3b4` under the stock neighborhood gather.
+
+### Shovel item classification
+
+The typed classifier `0x127d05c` and its two entry checks `0x267da10`
+and `0x267e024` default to C++ through the shovel survey. The shared
+selector `NX_ACNH_SHOVEL_ITEM_CLASS=original` selects their generated
+routes. Descriptor construction and deeper category and metadata
+callbacks remain at the guest boundary.
+
+Their independent AArch64 replays match 420, 40 and 30 cases,
+respectively. The muted half-tile trials `itemquery1` (original and
+opt-in) and `itemquery2` (default) each recorded 24 classifier calls, 24
+first-gate calls and 12 alternate-gate calls. All 60 input records
+and results matched across routes, as did six focal neighborhoods
+and survey outcomes. All observed classifier outcomes were false.
+Synthetic replay covers accepted examples and deeper metadata and
+category routes. All 13 Release CTest cases passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-itemquery1/nx.log"
+$c = "$r/tree-shake-default-itemquery2/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_item_queries --live $o $c
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
+```

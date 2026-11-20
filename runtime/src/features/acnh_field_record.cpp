@@ -6,6 +6,7 @@
 #include "../../../games/acnh/field_provider.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
+#include "../../../games/acnh/shovel_item_queries.h"
 #include "../../../games/acnh/record_category.h"
 #include "../../../games/acnh/tile_record_flag.h"
 
@@ -1143,6 +1144,161 @@ void provider_cell_adapter(CPU& cpu) {
             ld<unsigned long long>(query.output.address), counter, ld<uint32_t>(query.provider.address + 0x1c4));
 }
 
+constexpr std::array<uint64_t, 5> shovel_item_class_callers{
+    0x21f77b0, 0x21f77cc, 0x21f77e0, 0x21f7948, 0x21f7bfc,
+};
+
+bool shovel_item_class_caller(uint64_t caller) {
+    for (const uint64_t site : shovel_item_class_callers)
+        if (caller == site) return true;
+    return false;
+}
+
+template<size_t Index>
+struct ShovelItemRuntimeServices {
+    CPU cpu;
+    uint64_t stack;
+
+    explicit ShovelItemRuntimeServices(const CPU& caller) : cpu(caller) {
+        constexpr std::array frame_sizes{0x40, 0x60, 0x50};
+        stack = caller.x[31] - frame_sizes[Index];
+        cpu.x[31] = stack;
+        cpu.x[29] = stack + (Index == 0 ? 0x10 : 0x20);
+        st<uint64_t>(cpu.x[29], caller.x[29]);
+        st<uint64_t>(cpu.x[29] + 8, caller.x[30]);
+    }
+
+    uint32_t invoke(uint64_t target, uint64_t resume, uint64_t object, uint64_t arg = 0) const {
+        CPU nested = cpu;
+        nested.x[0] = object;
+        nested.x[1] = arg;
+        nested.x[30] = main_base + resume;
+        call(nested, main_base + target);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+
+    uint32_t item_id(acnh::FieldItem item, acnh::ShovelItemIdUse use) const {
+        constexpr uint64_t resumes[3][6]{
+            {0x267da8c, 0x267dac4, 0, 0x267db30, 0, 0},
+            {0, 0x267e050, 0x267e0c4, 0, 0x267e0f0, 0},
+            {0x127d1dc, 0x127d0a4, 0x127d104, 0, 0x127d150, 0x127d2ec},
+        };
+        return invoke(0x267d6c4, resumes[Index][static_cast<size_t>(use)], item.address);
+    }
+
+    acnh::ItemDescriptor copy_alternate(acnh::FieldItem item) const {
+        const uint64_t descriptor = stack + 8;
+        st<uint64_t>(descriptor, main_base + 0x4936b50);
+        st<uint64_t>(descriptor + 8, ld<uint64_t>(item.address));
+        st<uint64_t>(descriptor + 0x10, 0);
+        return {descriptor};
+    }
+
+    acnh::FieldItem copy_special(acnh::FieldItem item, uint16_t id) const {
+        st<uint64_t>(stack, ld<uint64_t>(main_base + 0x4ac35c0) + 0x10);
+        st<uint16_t>(stack + 8, id);
+        st<uint16_t>(stack + 0xa, ld<uint16_t>(item.address + 2));
+        st<uint32_t>(stack + 0xc, ld<uint32_t>(item.address + 4));
+        return {stack + 8};
+    }
+
+    acnh::FieldItem copy_fallback(acnh::FieldItem item) const {
+        st<uint64_t>(stack + 8, ld<uint64_t>(main_base + 0x4ac35c0) + 0x10);
+        st<uint64_t>(stack + 0x10, ld<uint64_t>(item.address));
+        return {stack + 0x10};
+    }
+
+    bool recognized(acnh::FieldItem item) const {
+        return (invoke(0x267da10, 0x127d078, item.address) & 1) != 0;
+    }
+
+    bool blocked_by_alternate(acnh::FieldItem item) const {
+        return (invoke(0x267e024, 0x127d084, item.address) & 1) != 0;
+    }
+
+    bool metadata_enabled(acnh::ItemDescriptor descriptor) const {
+        constexpr uint64_t resume = Index == 1 ? 0x267e120 : 0x127d180;
+        return (invoke(0x19e59b0, resume, descriptor.address) & 1) != 0;
+    }
+
+    bool metadata_suitable(acnh::ItemDescriptor descriptor) const {
+        return (invoke(0x19e6020, 0x127d18c, descriptor.address) & 1) != 0;
+    }
+
+    acnh::ItemDescriptor describe(acnh::FieldItem item) const {
+        const uint64_t descriptor = stack + 8;
+        invoke(0x114c030, 0x127d20c, descriptor, item.address);
+        return {descriptor};
+    }
+
+    bool has_category(acnh::ItemDescriptor descriptor) const {
+        return (invoke(0x114dcb0, 0x127d214, descriptor.address) & 1) != 0;
+    }
+
+    bool category_flag(acnh::CatalogEntry row, uint32_t bit) const {
+        return (invoke(0x113d890, 0x127d224, row.address, bit) & 1) != 0;
+    }
+
+    uint32_t category(acnh::FieldItem item, acnh::CatalogEntry row, size_t call_index) const {
+        constexpr std::array resumes{0x127d23c, 0x127d254, 0x127d268, 0x127d280, 0x127d298, 0x127d2ac, 0x127d2c4};
+        return invoke(0x113db50, resumes[call_index], item.address, row.address);
+    }
+};
+
+template<size_t Index>
+void shovel_item_query_adapter(CPU& cpu);
+
+struct ShovelItemRoute {
+    uint64_t entry;
+    Fn adapter;
+    Fn original = nullptr;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<ShovelItemRoute, 3> shovel_item_queries{{
+    {0x267da10, shovel_item_query_adapter<0>},
+    {0x267e024, shovel_item_query_adapter<1>},
+    {0x127d05c, shovel_item_query_adapter<2>},
+}};
+bool use_cpp_shovel_item_queries = false;
+bool trace_shovel_item_queries = false;
+
+template<size_t Index>
+void shovel_item_query_adapter(CPU& cpu) {
+    auto& route = shovel_item_queries[Index];
+    const uint64_t caller = cpu.x[30] - main_base;
+    bool on_shovel_path;
+    if constexpr (Index == 2) {
+        on_shovel_path = shovel_item_class_caller(caller);
+    } else {
+        constexpr uint64_t call_site = Index == 0 ? 0x127d078 : 0x127d084;
+        on_shovel_path = caller == call_site && shovel_item_class_caller(ld<uint64_t>(cpu.x[29] + 8) - main_base);
+    }
+    if (!on_shovel_path) {
+        route.original(cpu);
+        return;
+    }
+
+    const acnh::FieldItem item{cpu.x[0]};
+    const bool trace = trace_shovel_item_queries && route.samples.fetch_add(1, std::memory_order_relaxed) < 48;
+    const auto before = trace ? ld<unsigned long long>(item.address) : 0;
+    if (use_cpp_shovel_item_queries) {
+        GuestMemory memory;
+        ShovelItemRuntimeServices<Index> services{cpu};
+        const acnh::ShovelItemQueries queries{main_base, memory};
+        if constexpr (Index == 0) cpu.x[0] = queries.recognized(item, services);
+        if constexpr (Index == 1) cpu.x[0] = queries.blocked_by_alternate(item, services);
+        if constexpr (Index == 2) cpu.x[0] = queries.suitable(item, services);
+    } else {
+        route.original(cpu);
+    }
+    if (trace)
+        log("acnh shovel item class %s entry=%llx caller=%llx before=%llx after=%llx out=%u",
+            use_cpp_shovel_item_queries ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+            static_cast<unsigned long long>(caller), before, ld<unsigned long long>(item.address),
+            unsigned(cpu.x[0] & 1));
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -1261,6 +1417,13 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_provider_methods = std::getenv("NX_ACNH_PROVIDER_METHODS_TRACE") != nullptr;
     if (use_cpp_provider_methods || trace_provider_methods)
         for (auto& route : provider_methods)
+            wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_ITEM_CLASS");
+    use_cpp_shovel_item_queries = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_item_queries = std::getenv("NX_ACNH_SHOVEL_ITEM_CLASS_TRACE") != nullptr;
+    if (use_cpp_shovel_item_queries || trace_shovel_item_queries)
+        for (auto& route : shovel_item_queries)
             wrap_function(entries, route.entry, route.adapter, route.original);
 
     mode = std::getenv("NX_ACNH_RECORD_CATEGORY");

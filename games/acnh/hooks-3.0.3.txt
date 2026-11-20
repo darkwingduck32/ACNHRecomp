@@ -69,3 +69,6 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 862530 # Sample terrain records for the shovel terrain tests
 # dispatch 871f80 # Check elevation across a shovel terrain rectangle
 # dispatch 848e68 # Query the four shovel terrain materials
+# dispatch 127d05c # Classify a field item for the shovel survey
+# dispatch 267da10 # Check whether the shovel classifier recognizes an item
+# dispatch 267e024 # Check the alternate item flags for the shovel classifier

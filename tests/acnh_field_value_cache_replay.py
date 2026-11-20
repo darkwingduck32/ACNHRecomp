@@ -67,8 +67,8 @@ def cases():
         yield from read_fixtures(entry, 1, index, hash_value)
 
 
-def observed_read_only_cases(path):
-    _, recorded = summarize(read_groups(path, "original"))
+def observed_read_only_cases(path, *, early=False):
+    _, recorded = summarize(read_groups(path, "original", early=early))
     routes = {entry: (index, key) for entry, index, key in VALUE}
     for call in recorded.values():
         index, key = routes[call.entry]
@@ -92,6 +92,7 @@ def main():
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--capture", type=Path, help="Replay read-only inputs measured in original gameplay")
+    parser.add_argument("--early", action="store_true", help="Read the four earlier readers from the capture")
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected module build {BUILD}")
@@ -103,7 +104,7 @@ def main():
     inputs = list(cases())
     captured_results = {}
     if args.capture:
-        for case, result in observed_read_only_cases(args.capture):
+        for case, result in observed_read_only_cases(args.capture, early=args.early):
             captured_results[len(inputs)] = result
             inputs.append(case)
     lines = []

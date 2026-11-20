@@ -643,7 +643,7 @@ struct CachedRowValueRoute {
     uint32_t hash;
 };
 
-constexpr std::array<CachedRowValueRoute, 8> cached_row_value_routes{{
+constexpr std::array<CachedRowValueRoute, 12> cached_row_value_routes{{
     {0x29cc340, 0x29cd414, 16, 0x498a840d},
     {0x29cc470, 0x29cd424, 1, 0xb6f6977b},
     {0x29cc5a0, 0x29cd434, 2, 0xa1def3bb},
@@ -652,10 +652,16 @@ constexpr std::array<CachedRowValueRoute, 8> cached_row_value_routes{{
     {0x29cc930, 0x29cd464, 5, 0xea57047b},
     {0x29cca60, 0x29cd474, 6, 0xfd7f60bb},
     {0x29ccb90, 0x29cd494, 7, 0xc407cdfb},
+    {0x29cbe80, 0x29cd3d4, 12, 0xac68310d},
+    {0x29cbfb0, 0x29cd3e4, 13, 0x95109c4d},
+    {0x29cc0e0, 0x29cd3f4, 14, 0x8238f88d},
+    {0x29cc210, 0x29cd404, 15, 0x5ea2e0cd},
 }};
 std::array<Fn, cached_row_value_routes.size()> original_cached_row_value{};
 bool use_cpp_cached_row_value = false;
 bool trace_cached_row_value = false;
+bool use_cpp_early_row_value = false;
+bool trace_early_row_value = false;
 
 template<size_t Index>
 void cached_row_value_adapter(CPU& cpu) {
@@ -666,15 +672,18 @@ void cached_row_value_adapter(CPU& cpu) {
     }
 
     const auto object = cpu.x[0];
+    constexpr bool early = Index >= 8;
+    const bool native = early ? use_cpp_early_row_value : use_cpp_cached_row_value;
+    const bool trace = early ? trace_early_row_value : trace_cached_row_value;
     const auto apply = [&] {
-        if (use_cpp_cached_row_value) {
+        if (native) {
             GuestMemory memory;
             cpu.x[0] = acnh::cached_record_value(main_base, {object, route.slot, route.hash}, memory);
         } else {
             original_cached_row_value[Index](cpu);
         }
     };
-    if (!trace_cached_row_value) {
+    if (!trace) {
         apply();
         return;
     }
@@ -697,8 +706,8 @@ void cached_row_value_adapter(CPU& cpu) {
     const auto offset = before[0] ? ld<int32_t>(slots + 4ull * route.slot) : -1;
     const auto input = offset >= 0 ? ld<uint32_t>(row + offset) : 0;
     apply();
-    log("acnh field value %s entry=%llx call=%llx parent=%llx owner=%llx request=%x back=%x row=%u input=%x before=%s after=%s out=%x",
-        use_cpp_cached_row_value ? "cpp" : "original",
+    log("acnh field value%s %s entry=%llx call=%llx parent=%llx owner=%llx request=%x back=%x row=%u input=%x before=%s after=%s out=%x",
+        early ? " early" : "", native ? "cpp" : "original",
         static_cast<unsigned long long>(route.entry), static_cast<unsigned long long>(route.resume - 4),
         static_cast<unsigned long long>(parent_frame), static_cast<unsigned long long>(object), requested, back,
         unsigned(row != 0), input,
@@ -5439,11 +5448,16 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_FIELD_VALUE_CACHE");
     use_cpp_cached_row_value = !mode || std::string_view(mode) == "cpp";
     trace_cached_row_value = std::getenv("NX_ACNH_FIELD_VALUE_CACHE_TRACE") != nullptr;
-    if (use_cpp_cached_row_value || trace_cached_row_value) {
+    mode = std::getenv("NX_ACNH_FIELD_VALUE_EARLY_CACHE");
+    use_cpp_early_row_value = !mode || std::string_view(mode) == "cpp";
+    trace_early_row_value = std::getenv("NX_ACNH_FIELD_VALUE_EARLY_CACHE_TRACE") != nullptr;
+    if (use_cpp_cached_row_value || trace_cached_row_value || use_cpp_early_row_value || trace_early_row_value) {
         constexpr std::array<Fn, cached_row_value_routes.size()> adapters{
             cached_row_value_adapter<0>, cached_row_value_adapter<1>, cached_row_value_adapter<2>,
             cached_row_value_adapter<3>, cached_row_value_adapter<4>, cached_row_value_adapter<5>,
             cached_row_value_adapter<6>, cached_row_value_adapter<7>,
+            cached_row_value_adapter<8>, cached_row_value_adapter<9>,
+            cached_row_value_adapter<10>, cached_row_value_adapter<11>,
         };
         for (size_t i = 0; i < adapters.size(); ++i)
             wrap_function(entries, cached_row_value_routes[i].entry, adapters[i], original_cached_row_value[i]);

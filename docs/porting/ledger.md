@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 94.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 98.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -237,10 +237,10 @@ All gameplay tests use the same muted single-instance launcher.
 | --- | --- | --- | --- | --- |
 | `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x220fd80`, `0x2215230`, `0x221f0c4`, `0x225b344` | Opt-in trial passed |
 | `0x1148db0` | `0xd4` | Resolve an eight-slot cached field | `0x114169c`, `0x114182c`, `0x1141850`, `0x1141874` | Reference replay passed |
-| `0x29cbe80` | `0x124` | Read cached row value, slot 12 | `0x29cd3d0` | Reference replay passed |
-| `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Reference replay passed |
-| `0x29cc0e0` | `0x124` | Read cached row value from slot 14 | `0x29cd3f0` | Reference replay passed |
-| `0x29cc210` | `0x124` | Read cached row value from slot 15 | `0x29cd400` | Reference replay passed |
+| `0x29cbe80` | `0x124` | Read cached row value, slot 12 | `0x29cd3d0` | Verified |
+| `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Verified |
+| `0x29cc0e0` | `0x124` | Read cached row value from slot 14 | `0x29cd3f0` | Verified |
+| `0x29cc210` | `0x124` | Read cached row value from slot 15 | `0x29cd400` | Verified |
 | `0x29cc340` | `0x124` | Read cached row value from slot 16 | `0x29cd410` | Verified |
 | `0x29cc470` | `0x124` | Read cached row value from slot 1 | `0x29cd420` | Verified |
 | `0x29cc5a0` | `0x124` | Read cached row value from slot 2 | `0x29cd430` | Verified |
@@ -2601,3 +2601,34 @@ The direct traversal parent, sweep, and measured height paths remain
 typed. Recursive traversal legs, rectangle callbacks, and stage helpers
 outside their measured scopes still use generated code. The next queue
 group completes four observed row readers that share the typed cache.
+
+### Early field row readers
+
+The four earlier lookups at slots 12–15 now use the same typed row
+cache as the eight downstream readers. Each is guarded by its BL
+return address under `0x29cce10`. Set
+`NX_ACNH_FIELD_VALUE_EARLY_CACHE=original` to select the original bodies
+for these four call sites.
+
+Each reader passed 122 portable cases against two independent
+original AArch64 executions. The cases compare return values and
+exact cache write order. The additional 22 captured read-only
+cases matched, for 510 focused comparisons. The full matrix passed
+1,849 cases including the other eight readers and the column resolver.
+
+Original and opt-in `earlyrow1` and default `earlyrow2` matched
+two ordered cache-resolving groups that cover all four entries,
+22 read-only inputs, eight surveys, eight neighborhoods, and
+eight final decisions. Original and default recorded 3,106 parent
+groups. Opt-in recorded 3,096. The state-changing groups and the
+distinct read-only inputs agree across routes. All 14 Release CTests
+and 14 profile and replay checks passed. Batch 3 has 98 verified
+functions and the discovery queue still holds 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-earlyrow1"
+$c = "$r/tree-shake-default-earlyrow2"
+& private/venv/Scripts/python -m tests.acnh_field_value_cache_live --early "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_value_cache --early --capture "$o/nx.log"
+```

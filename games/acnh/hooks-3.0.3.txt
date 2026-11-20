@@ -109,6 +109,10 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 15f27e0 # Sample the highest point near a shovel traversal position
 # dispatch 15f23b0 # Sweep positions along a shovel traversal segment
 # dispatch 11eb21c # Read a record and anchor from the selected field provider view
+# dispatch 29cbe80 # Read cached row value at slot 12
+# dispatch 29cbfb0 # Read cached row value at slot 13
+# dispatch 29cc0e0 # Read cached row value at slot 14
+# dispatch 29cc210 # Read cached row value at slot 15
 # dispatch 29cc340 # Read cached row value at slot 16
 # dispatch 29cc470 # Read cached row value at slot 1
 # dispatch 29cc5a0 # Read cached row value at slot 2

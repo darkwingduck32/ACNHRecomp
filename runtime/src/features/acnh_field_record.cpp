@@ -5,6 +5,7 @@
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
 #include "../../../games/acnh/field_provider_anchor.h"
+#include "../../../games/acnh/field_provider_binding.h"
 #include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
@@ -14,6 +15,7 @@
 #include "../../../games/acnh/record_category.h"
 #include "../../../games/acnh/tile_record_flag.h"
 
+#include "features/acnh_provider_member.h"
 #include "features/camera/version_303.h"
 #include "features/module_hooks.h"
 #include "features/registry.h"
@@ -837,6 +839,15 @@ bool shovel_cell_caller(uint64_t caller) {
            caller == 0x127cfd4 || caller == 0x127cffc;
 }
 
+bool provider_read_frame(uint64_t frame) {
+    return ld<uint64_t>(frame + 8) == main_base + 0x1950414 &&
+           shovel_cell_caller(ld<uint64_t>(ld<uint64_t>(frame) + 8) - main_base);
+}
+
+bool provider_acquire_frame(uint64_t frame) {
+    return ld<uint64_t>(frame + 8) == main_base + 0x11e51b8 && provider_read_frame(ld<uint64_t>(frame));
+}
+
 void field_bounds_adapter(CPU& cpu) {
     const uint64_t caller = cpu.x[30] - main_base;
     const uint64_t parent = trace_field_bounds && caller == 0x1950370
@@ -978,8 +989,7 @@ void provider_method_adapter(CPU& cpu) {
     auto& route = provider_methods[Index];
     const uint64_t caller = cpu.x[30] - main_base;
     if (caller < 0x11e4fa8 || caller > 0x11e51d0 ||
-        ld<uint64_t>(cpu.x[29] + 8) != main_base + 0x1950414 ||
-        !shovel_cell_caller(ld<uint64_t>(ld<uint64_t>(cpu.x[29]) + 8) - main_base)) {
+        !provider_read_frame(cpu.x[29])) {
         route.original(cpu);
         return;
     }
@@ -1438,8 +1448,7 @@ void provider_anchor_adapter(CPU& cpu) {
     auto& route = provider_anchor_routes[Index];
     constexpr uint64_t resume = Index == 0 ? 0x11e51b8 : 0x11e5200;
     const uint64_t frame = cpu.x[29];
-    if (cpu.x[30] != main_base + resume || ld<uint64_t>(frame + 8) != main_base + 0x1950414 ||
-        !shovel_cell_caller(ld<uint64_t>(ld<uint64_t>(frame) + 8) - main_base)) {
+    if (cpu.x[30] != main_base + resume || !provider_read_frame(frame)) {
         route.original(cpu);
         return;
     }
@@ -1615,6 +1624,113 @@ void shovel_metadata_adapter(CPU& cpu) {
             unsigned(has_row), static_cast<unsigned>(cpu.x[0]));
 }
 
+template<size_t Index>
+void provider_binding_adapter(CPU& cpu);
+
+struct ProviderBindingRoute {
+    uint64_t entry;
+    Fn adapter;
+    Fn original = nullptr;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<ProviderBindingRoute, 3> provider_binding_routes{{
+    {0x1267360, provider_binding_adapter<0>},
+    {0x260b860, provider_binding_adapter<1>},
+    {0x260b934, provider_binding_adapter<2>},
+}};
+bool use_cpp_provider_binding = false;
+bool trace_provider_binding = false;
+
+bool provider_table_binding_caller(uint64_t caller, uint64_t frame) {
+    switch (caller) {
+        case 0x11e4fa8: case 0x11e4fd0: case 0x11e5008:
+        case 0x11e50a4: case 0x11e5170: case 0x11e5194:
+            return provider_read_frame(frame);
+        case 0x11e45a0:
+            return provider_acquire_frame(frame);
+        default:
+            return false;
+    }
+}
+
+template<size_t Index>
+void provider_binding_adapter(CPU& cpu) {
+    auto& route = provider_binding_routes[Index];
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint64_t frame = cpu.x[29];
+    bool on_shovel_path;
+    if constexpr (Index == 0) {
+        on_shovel_path = provider_table_binding_caller(caller, frame);
+    } else if constexpr (Index == 1) {
+        on_shovel_path = (caller == 0x11e50f4 && provider_read_frame(frame)) ||
+                         (caller == 0x11e45f0 && provider_acquire_frame(frame));
+    } else {
+        on_shovel_path = (caller == 0x1950414 && shovel_cell_caller(ld<uint64_t>(frame + 8) - main_base)) ||
+                         (caller == 0x11e5200 && provider_read_frame(frame));
+    }
+    if (!on_shovel_path) {
+        route.original(cpu);
+        return;
+    }
+
+    const bool trace = trace_provider_binding && route.samples.fetch_add(1, std::memory_order_relaxed) < 12;
+    const GuestMemory memory;
+    uint64_t target = 0;
+    uint64_t dispatch_kind = 0;
+    if constexpr (Index == 0) {
+        if (use_cpp_provider_binding || trace) {
+            const auto table = acnh::resolve_provider_table(main_base, memory, [&](acnh::ProviderBinding binding, bool extra_layer) {
+                target = ld<uint64_t>(ld<uint64_t>(binding.address) + 0x38);
+                dispatch_kind = extra_layer ? 2 : 1;
+                if (!use_cpp_provider_binding) return uint64_t{0};
+                CPU nested = cpu;
+                nested.x[31] -= 0x10;
+                st<uint64_t>(nested.x[31], cpu.x[29]);
+                st<uint64_t>(nested.x[31] + 8, cpu.x[30]);
+                nested.x[29] = nested.x[31];
+                nested.x[0] = binding.address;
+                nested.x[8] = target;
+                nested.x[30] = main_base + (extra_layer ? 0x12673c4 : 0x1267394);
+                call(nested, target);
+                return nested.x[0];
+            });
+            if (use_cpp_provider_binding) cpu.x[0] = table.address;
+        }
+        if (!use_cpp_provider_binding) route.original(cpu);
+        if (trace) {
+            const uint64_t vtable = cpu.x[0] != 0xe7690 ? ld<uint64_t>(cpu.x[0]) - main_base : 0;
+            log("acnh shovel provider binding %s entry=%llx state=caller=%llx kind=%llu target=%llx table=%llx",
+                use_cpp_provider_binding ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+                static_cast<unsigned long long>(caller), static_cast<unsigned long long>(dispatch_kind),
+                static_cast<unsigned long long>(target ? target - main_base : 0), static_cast<unsigned long long>(vtable));
+        }
+    } else {
+        const uint64_t context = cpu.x[0];
+        if (use_cpp_provider_binding || trace) {
+            const auto member = provider_member_target(context, memory);
+            if (member.present) {
+                target = member.target;
+                if (trace) dispatch_kind = (ld<uint64_t>(context + 0x18) & 1) + 1;
+                if (use_cpp_provider_binding) {
+                    cpu.x[0] = member.receiver;
+                    cpu.x[1] = member.target;
+                    cpu.x[8] = member.dispatch_base;
+                    call(cpu, member.target);
+                }
+            } else if constexpr (Index == 1) {
+                if (use_cpp_provider_binding) cpu.x[0] = 0;
+            }
+        }
+        if (!use_cpp_provider_binding) route.original(cpu);
+        if (trace)
+            log("acnh shovel provider binding %s entry=%llx state=caller=%llx kind=%llu target=%llx out=%u",
+                use_cpp_provider_binding ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+                static_cast<unsigned long long>(caller), static_cast<unsigned long long>(dispatch_kind),
+                static_cast<unsigned long long>(target ? target - main_base : 0), Index == 1 ? unsigned(cpu.x[0] & 1) : 0);
+    }
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -1748,6 +1864,13 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_shovel_metadata = std::getenv("NX_ACNH_SHOVEL_METADATA_TRACE") != nullptr;
     if (use_cpp_shovel_metadata || trace_shovel_metadata)
         wrap_function(entries, 0x19ee3b4, shovel_metadata_adapter, original_shovel_metadata);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_BINDING");
+    use_cpp_provider_binding = !mode || std::string_view(mode) == "cpp";
+    trace_provider_binding = std::getenv("NX_ACNH_PROVIDER_BINDING_TRACE") != nullptr;
+    if (use_cpp_provider_binding || trace_provider_binding)
+        for (auto& route : provider_binding_routes)
+            wrap_function(entries, route.entry, route.adapter, route.original);
 
     mode = std::getenv("NX_ACNH_PROVIDER_METHODS");
     use_cpp_provider_methods = !mode || std::string_view(mode) == "cpp";

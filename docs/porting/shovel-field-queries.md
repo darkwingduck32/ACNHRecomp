@@ -103,7 +103,7 @@ All observed dispatch targets below came from the field-cell call at
 | `0x11e4fb0`, `0x11e50b0`, `0x11e5178` | `0x261157c`, width | Verified C++ default |
 | `0x11e4fd8`, `0x11e50c4`, `0x11e519c` | `0x2611584`, height | Verified C++ default |
 | `0x11e5114`, `0x11e51cc` | `0x261158c`, record displacement | Verified C++ default |
-| `0x11e50f0`, tail `0x11e5284` | `0x260b860`, `0x260b934`, context callbacks | Generated |
+| `0x11e50f0`, tail `0x11e5284` | `0x260b860`, `0x260b934`, context dispatch | Verified C++ defaults. The stateful runtime callbacks remain generated. |
 | `0x11e51b4`, `0x11e51fc` | `0x11e4578`, `0x2540184`, continuation resolve and cleanup | Verified C++ defaults with generated context callbacks |
 
 The typed provider read is verified in gameplay. Its independent replay
@@ -147,9 +147,10 @@ The neighborhood stage filter `0x16baf44` and both stage-key helpers
 `0x16f37d0` and `0x16f3a18` now default to C++. The virtual stage
 lookup still returns the runtime stage name. The continuation
 resolver and cleanup are also verified on the shovel path. The next
-group is the table resolver `0x1267360` and the context dispatch thunks
-`0x260b860` and `0x260b934`. The provider calls the resolver through
-the runtime-loaded target in `0x11ac1e8`.
+group is the storage accessor `0x260bd50` beneath the now-native table
+resolver `0x1267360`. The provider calls the resolver through the
+runtime-loaded target in `0x11ac1e8`. The context dispatch thunks also
+default to C++, and forward to generated `0x25ee660` and `0x25ee758`.
 
 ## Composed gameplay verification
 

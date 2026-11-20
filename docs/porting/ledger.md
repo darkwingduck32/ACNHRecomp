@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 29.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 32.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -703,3 +703,30 @@ The next set is the frequently invoked provider table resolver
 `0x260b934`. All 12 inspected table resolutions used this same
 destination. Their real virtual callbacks remain selectable through the
 guest boundary.
+
+### Provider binding and context dispatch
+
+`0x1267360`, `0x260b860` and `0x260b934` default to C++ for the
+observed shovel provider. The table resolver owns the binding selection
+and final pointer adjustment. Context receiver adjustment and member
+dispatch remain in the runtime adapter. The original group is
+selectable through `NX_ACNH_PROVIDER_BINDING=original`.
+
+Independent replays matched 15, 60 and 60 cases respectively. They
+exercised null bindings, both resolver branches, missing context,
+direct and virtual member dispatch, and signed receiver adjustment.
+The original, opt-in and default gameplay captures had 12 calls per
+entry and matched their selected methods, table type and read results.
+The four focal final decisions and neighborhood records matched.
+All 13 Release CTest checks passed.
+
+All observed provider binding calls used the storage accessor
+`0x260bd50` at `0x1267390`. The context thunks select the stateful
+runtime callbacks `0x25ee660` and `0x25ee758`, which remain generated.
+The next group removes the storage accessor on the observed shovel
+route while preserving the context callbacks.
+
+The smaller `shovelmissretry1` trial used the disposable `exactfixed`
+fixture. It captured 48 diggable property calls and 19 item-ID
+calls. It did not reach the deferred alternate terrain
+`0x880a10` or auxiliary item index `0x1a03610`.

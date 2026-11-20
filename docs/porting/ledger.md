@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 75.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 76.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -2125,3 +2125,58 @@ Stage filters at the newer classifier and collision call sites
 still use generated code. The step traversal fallback still needs
 a gameplay hit. The next groups cover the stage filters and
 retry the traversal fixture with post-action lateral movement.
+
+### Initial peak inside the shovel traversal fallback
+
+Lateral movement after the first shovel action reached the
+generated traversal fallback `0x15f10f0`. The first two
+side-strip probes had missed it. The new fixture captured eight
+complete traversal invocations. Two original AArch64 executions
+per capture reproduced all 17 callback sites and results, the
+caller output, and W0=1 using the recorded child effects.
+
+The initial traversal peak `0x15f27e0` at `0x15f11e0` now
+defaults to typed C++. It samples the origin and nine positions
+in order, preserves ties, and uses the coordinates written by
+a winning height callback. That call also uses the existing
+C++ surface-height chain for its ten samples. Set
+`NX_ACNH_SHOVEL_TRAVERSAL_PEAK=original` for the original route
+at this call site and its height dependencies.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x15f27e0` | 84 | 9 |
+| `0x15e026c` | 768 | 90 |
+| `0x83b024` | 128 | 90 |
+| `0x83a950` | 128 | 90 |
+| `0x241e98c` | 30 | 180 |
+| `0x60cba4` | 3 | 270 |
+| `0x862700` | 672 | 180 |
+| `0x22688e4` | 180 | 180 |
+
+The peak cases include 75 portable cases and nine original
+gameplay captures. The replays compare all three return
+registers, the origin, and ten ordered callback inputs. The
+original and opt-in traversalpeak1 runs and default
+traversalpeak2 run used the same HID frame schedule and matched
+all 1,089 scoped calls, eight captured traversal returns, ten
+surveys and neighborhoods, and 12 final decisions. All 14
+Release CTests and 14 Python profile and replay checks passed.
+The peak adds one ledger entry. The seven reused functions
+retain their earlier entries and the discovery queue stays at
+100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-traversalpeak1"
+$c = "$r/tree-shake-default-traversalpeak2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_traversal_peak --capture "$o/nx.log" --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m tests.acnh_shovel_height_chain_live "$o/nx.log" "$c/nx.log"
+```
+
+The traversal parent, recursive calls, and both modes of sweep
+`0x15f23b0` still use generated code. The latest original run
+captured six sweeps per mode. Those captures reproduced the
+original sweep body's ordered callbacks and unchanged outputs
+in AArch64 using recorded child replies. The sweeps are the
+next implementation group.

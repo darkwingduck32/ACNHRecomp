@@ -137,7 +137,8 @@ calls at each of `0x21f77ac`, `0x21f77c8`, `0x21f77dc` and
 item ID, descriptor metadata `0x19e59b0` and `0x19e6020`, descriptor
 construction `0x114c030`, and category checks through `0x114dcb0`,
 `0x113d890` and `0x113db50`. The half-tile probe reached the first two
-gates. Deeper classification remains to be observed in a gameplay fixture.
+gates. The later `shovelclassdeep2` fixture reached populated descriptor
+metadata for the roses and the fossil.
 
 The classifier and both entry checks now default to C++. The six
 half-tile outcomes exercised the two early rejections. Replay also
@@ -180,13 +181,13 @@ special-kind callback `0x19f4c7c`.
 
 The quadrant fallbacks `0x87a980` and `0x87aa70` now run in C++ on
 the shovel survey route, including the field material predicate
-`0x1285040`. The stage lookup and material overrides remain at the
-guest boundary. The boundary also retains deeper item descriptor and
-category calls,
-the extent helper `0x253fe7c`, and the alternate terrain flow
-`0x8773f0` / `0x880a10`. The auxiliary item lookup `0x1a03610`
-remains original. The alternate terrain and auxiliary cases need a
-gameplay fixture that enters those branches.
+`0x1285040`. The alternate terrain rectangle `0x87bf30` and its
+two cached material predicates run in C++ at the verified caller.
+The separate shovel survey alternate dispatcher `0x8773f0` and
+its property check `0x880a10` still need gameplay coverage at their
+survey call sites. The boundary also retains the auxiliary item
+lookup `0x1a03610`, the extent helper `0x253fe7c`, and deeper
+item descriptor and category callbacks.
 
 ## Host integration test
 
@@ -231,6 +232,11 @@ The classifier uses the C++ surface height, obstruction and
 stage-specific height decisions. Stage selection and field-record
 resolution and step geometry also run in typed C++. The provider
 record lookup and its bounds check resolve the record and its
-anchor half tile in C++. Collision and traversal queries and the
-overlay sampler remain at the guest boundary. See the
-[provider verification](ledger.md#stage-bounds-and-provider-record-leaf).
+anchor half tile in C++. The three observed step cast modes and
+both collision probes use typed C++ through their observed height,
+stage item, and provider calls. Stage-name dispatch and the newer
+stage filter call sites still use generated code. The traversal
+fallback `0x15f10f0` reaches the C++ peak sampler and its height
+chain in the side-strip gameplay fixture. Both sweep modes and
+the recursive traversal still run through generated code. See
+the [traversal verification](ledger.md#initial-peak-inside-the-shovel-traversal-fallback).

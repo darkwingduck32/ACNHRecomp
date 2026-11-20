@@ -2230,3 +2230,41 @@ code. The sweep retains generated stage-name selection,
 stage filtering, record selection, and the collision cast
 at its guest boundary. The observed stage-name and filter
 callbacks are the next group.
+
+### Stage helpers inside traversal sweeps
+
+Both sweep modes now use the existing C++ stage-name lookup,
+terminated hash, and stage filter with its two predicates.
+The name getter uses the observed virtual target `0x5cb0a0`.
+The stage filter receives the selected key from the sweep at
+`0x15f2654`. Set `NX_ACNH_SHOVEL_SWEEP_STAGE=original` to
+select the generated route for all five functions in this scope.
+
+| Entry | Independent AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x5cb0a0` | 24 | 18 |
+| `0x5bd550` | 209 | 18 |
+| `0x16baf44` | 1505 | 18 |
+| `0x16f37d0` | 197 | 18 |
+| `0x16f3a18` | 108 | 18 |
+
+The original and opt-in sweepstage1 runs and default sweepstage2
+run matched all 90 calls in order, including name index, hash
+bytes and seed, predicate inputs, and all returns. They also
+matched nine traversal results, ten surveys and neighborhoods,
+and 12 final decisions. All 14 Release CTests and 14 Python
+profile and replay checks passed. The five functions retain
+their earlier entries. The ledger is at 77 and the discovery
+queue contains 100 candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-sweepstage1"
+$c = "$r/tree-shake-default-sweepstage2"
+& private/venv/Scripts/python -m tests.acnh_shovel_sweep_stage_live "$o/nx.log" "$c/nx.log"
+```
+
+The sweep's record lookup `0x195190c` at `0x15f2670` still
+uses generated code. Its bounds check and provider lookup
+are the next group so the destination record and root can be
+verified through the typed interface.

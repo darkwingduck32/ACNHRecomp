@@ -238,6 +238,7 @@ stage item, and provider calls. Stage-name dispatch and the newer
 stage filter call sites still use generated code. The traversal
 fallback `0x15f10f0` reaches the C++ peak sampler, both C++
 segment sweep modes, and their height chains in the side-strip
-fixture. The traversal parent, recursive traversal, and
-sweep stage and collision callbacks still use generated code.
-See the [sweep verification](ledger.md#segment-sweeps-inside-shovel-traversal).
+fixture. Both sweeps use the C++ stage-name, hash, and filter
+functions. The traversal parent, recursive traversal, sweep
+record lookup, and collision callback still use generated
+code. See the [stage helper verification](ledger.md#stage-helpers-inside-traversal-sweeps).

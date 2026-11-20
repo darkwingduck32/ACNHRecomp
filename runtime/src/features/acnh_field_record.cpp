@@ -2,6 +2,7 @@
 #include "../../../games/acnh/field_column_25.h"
 #include "../../../games/acnh/field_flag.h"
 #include "../../../games/acnh/field_record.h"
+#include "../../../games/acnh/field_value_cache.h"
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
 #include "../../../games/acnh/field_provider_anchor.h"
@@ -553,6 +554,76 @@ void terrain_property_adapter(CPU& cpu) {
 
 constexpr std::array<uint64_t, 2> shovel_terrain_pair_entries{0x880630, 0x881090};
 std::array<Fn, 2> original_shovel_terrain_pair{};
+
+struct CachedRowValueRoute {
+    uint64_t entry;
+    uint64_t resume;
+    uint32_t slot;
+    uint32_t hash;
+};
+
+constexpr std::array<CachedRowValueRoute, 8> cached_row_value_routes{{
+    {0x29cc340, 0x29cd414, 16, 0x498a840d},
+    {0x29cc470, 0x29cd424, 1, 0xb6f6977b},
+    {0x29cc5a0, 0x29cd434, 2, 0xa1def3bb},
+    {0x29cc6d0, 0x29cd444, 3, 0x98a65efb},
+    {0x29cc800, 0x29cd454, 4, 0x8f8e3a3b},
+    {0x29cc930, 0x29cd464, 5, 0xea57047b},
+    {0x29cca60, 0x29cd474, 6, 0xfd7f60bb},
+    {0x29ccb90, 0x29cd494, 7, 0xc407cdfb},
+}};
+std::array<Fn, cached_row_value_routes.size()> original_cached_row_value{};
+bool use_cpp_cached_row_value = false;
+bool trace_cached_row_value = false;
+
+template<size_t Index>
+void cached_row_value_adapter(CPU& cpu) {
+    constexpr auto route = cached_row_value_routes[Index];
+    if (cpu.x[30] != main_base + route.resume) {
+        original_cached_row_value[Index](cpu);
+        return;
+    }
+
+    const auto object = cpu.x[0];
+    const auto apply = [&] {
+        if (use_cpp_cached_row_value) {
+            GuestMemory memory;
+            cpu.x[0] = acnh::cached_record_value(main_base, {object, route.slot, route.hash}, memory);
+        } else {
+            original_cached_row_value[Index](cpu);
+        }
+    };
+    if (!trace_cached_row_value) {
+        apply();
+        return;
+    }
+
+    const auto parent_frame = cpu.x[29];
+    const auto requested = uint32_t(cpu.x[19]);
+    const auto row = ld<uint64_t>(object + 8);
+    const auto back = row ? ld<uint32_t>(row) : 0;
+    const auto ready = back ? ld<uint64_t>(main_base + 0x4ac4610) : 0;
+    const auto slots = back ? ld<uint64_t>(main_base + 0x4ac4618) : 0;
+    const auto cache = [ready, slots] {
+        std::array<uint8_t, 145> snapshot{};
+        if (ready && slots) {
+            snapshot[0] = ld<uint8_t>(ready);
+            std::memcpy(snapshot.data() + 1, reinterpret_cast<const void*>(slots), snapshot.size() - 1);
+        }
+        return snapshot;
+    };
+    const auto before = cache();
+    const auto offset = before[0] ? ld<int32_t>(slots + 4ull * route.slot) : -1;
+    const auto input = offset >= 0 ? ld<uint32_t>(row + offset) : 0;
+    apply();
+    log("acnh field value %s entry=%llx call=%llx parent=%llx owner=%llx request=%x back=%x row=%u input=%x before=%s after=%s out=%x",
+        use_cpp_cached_row_value ? "cpp" : "original",
+        static_cast<unsigned long long>(route.entry), static_cast<unsigned long long>(route.resume - 4),
+        static_cast<unsigned long long>(parent_frame), static_cast<unsigned long long>(object), requested, back,
+        unsigned(row != 0), input,
+        cache_hex(before).c_str(), cache_hex(cache()).c_str(), unsigned(cpu.x[0]));
+}
+
 bool use_cpp_shovel_terrain_pair = false;
 bool trace_shovel_terrain_pair = false;
 
@@ -4994,6 +5065,19 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_shovel_stage || trace_shovel_stage || trace_shovel_sweep_stage)
         for (auto& route : shovel_stage_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_FIELD_VALUE_CACHE");
+    use_cpp_cached_row_value = !mode || std::string_view(mode) == "cpp";
+    trace_cached_row_value = std::getenv("NX_ACNH_FIELD_VALUE_CACHE_TRACE") != nullptr;
+    if (use_cpp_cached_row_value || trace_cached_row_value) {
+        constexpr std::array<Fn, cached_row_value_routes.size()> adapters{
+            cached_row_value_adapter<0>, cached_row_value_adapter<1>, cached_row_value_adapter<2>,
+            cached_row_value_adapter<3>, cached_row_value_adapter<4>, cached_row_value_adapter<5>,
+            cached_row_value_adapter<6>, cached_row_value_adapter<7>,
+        };
+        for (size_t i = 0; i < adapters.size(); ++i)
+            wrap_function(entries, cached_row_value_routes[i].entry, adapters[i], original_cached_row_value[i]);
+    }
 
     mode = std::getenv("NX_ACNH_RECORD_CATEGORY");
     use_cpp_categories = !mode || std::string_view(mode) == "cpp";

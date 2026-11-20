@@ -25,15 +25,21 @@ uint64_t field_column_8(uint64_t base, uint64_t row, uint32_t index, uint32_t ha
     return resolved >= 0 ? row + resolved : 0;
 }
 
+struct CachedRowValueQuery {
+    uint64_t owner;
+    uint32_t slot;
+    uint32_t key;
+};
+
 template<class Memory>
-uint32_t cached_record_value(uint64_t base, uint64_t object, uint32_t index, uint32_t hash, Memory& memory) {
-    const uint64_t row = memory.template read<uint64_t>(object + 8);
+uint32_t cached_record_value(uint64_t base, CachedRowValueQuery query, Memory& memory) {
+    const uint64_t row = memory.template read<uint64_t>(query.owner + 8);
     if (!row) return 0x244db4da;
     if (!memory.template read<uint32_t>(row)) return 0;
 
     const uint64_t ready = memory.template read<uint64_t>(base + 0x4ac4610);
     const uint64_t slots = memory.template read<uint64_t>(base + 0x4ac4618);
-    const uint64_t slot = slots + 4ull * index;
+    const uint64_t slot = slots + 4ull * query.slot;
     for (;;) {
         if (!memory.template read<uint8_t>(ready)) {
             memory.template write<uint64_t>(slots, UINT64_MAX);
@@ -51,7 +57,7 @@ uint32_t cached_record_value(uint64_t base, uint64_t object, uint32_t index, uin
         }
 
         const uint32_t back = memory.template read<uint32_t>(row);
-        if (!cache_field_offset(row, back, hash, slot, memory)) return 0;
+        if (!cache_field_offset(row, back, query.key, slot, memory)) return 0;
         if (!memory.template read<uint32_t>(row)) return 0;
     }
 }

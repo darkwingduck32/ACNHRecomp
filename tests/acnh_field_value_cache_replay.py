@@ -8,6 +8,7 @@ from pathlib import Path
 from unicorn.arm64_const import UC_ARM64_REG_X0, UC_ARM64_REG_X1, UC_ARM64_REG_X2
 
 from recomp import ehframe, nso
+from tests.acnh_field_value_cache_live import read_groups, summarize
 from tests.function_replay import run
 from tools.acnh_version import build_id
 
@@ -19,6 +20,8 @@ VALUE = (
     (0x29CC0E0, 14, 0x8238F88D), (0x29CC210, 15, 0x5EA2E0CD),
     (0x29CC340, 16, 0x498A840D), (0x29CC470, 1, 0xB6F6977B),
     (0x29CC5A0, 2, 0xA1DEF3BB), (0x29CC6D0, 3, 0x98A65EFB),
+    (0x29CC800, 4, 0x8F8E3A3B), (0x29CC930, 5, 0xEA57047B),
+    (0x29CCA60, 6, 0xFD7F60BB), (0x29CCB90, 7, 0xC407CDFB),
 )
 HEADER, ROW, OBJECT, READY, SLOTS = 0x22000, 0x22200, 0x24000, 0x25000, 0x26000
 
@@ -64,10 +67,31 @@ def cases():
         yield from read_fixtures(entry, 1, index, hash_value)
 
 
+def observed_read_only_cases(path):
+    _, recorded = summarize(read_groups(path, "original"))
+    routes = {entry: (index, key) for entry, index, key in VALUE}
+    for call in recorded.values():
+        index, key = routes[call.entry]
+        row = ROW if call.row_present else 0
+        memory = {OBJECT: struct.pack("<QQ", 0, row)}
+        if row:
+            offset = call.warm_slot()
+            data = bytearray(max(4, offset + 4))
+            struct.pack_into("<I", data, 0, call.back)
+            if call.back and offset >= 0:
+                struct.pack_into("<I", data, offset, call.input_word)
+            memory[ROW] = bytes(data)
+        if call.back:
+            memory.update({BASE + 0x4ac4610: struct.pack("<QQ", READY, SLOTS),
+                           READY: call.before[:1], SLOTS: call.before[1:]})
+        yield (call.entry, 1, OBJECT, index, key, memory), call.result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
+    parser.add_argument("--capture", type=Path, help="Replay read-only inputs measured in original gameplay")
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected module build {BUILD}")
@@ -77,6 +101,11 @@ def main():
     if any(ranges.get(entry) != size for entry, size in expected_sizes.items()):
         parser.error("unexpected function boundary")
     inputs = list(cases())
+    captured_results = {}
+    if args.capture:
+        for case, result in observed_read_only_cases(args.capture):
+            captured_results[len(inputs)] = result
+            inputs.append(case)
     lines = []
     for _, mode, obj, index, hash_value, memory in inputs:
         pairs = [(address + offset, byte) for address, block in memory.items()
@@ -96,6 +125,8 @@ def main():
         if first != run(BASE + entry, code, regs, (UC_ARM64_REG_X0,), memory):
             raise SystemExit(f"unstable original at {entry:#x}, case {i}")
         expected = (first.registers[UC_ARM64_REG_X0], *(item for write in first.writes for item in write))
+        if i in captured_results and (expected[0] != captured_results[i] or first.writes):
+            raise SystemExit(f"{entry:#x}: original replay disagrees with captured read-only case {i}")
         actual = tuple(map(int, line.split()))
         if actual != expected:
             failures.setdefault(entry, f"entry {entry:#x}, case {i}: expected {expected[:10]}, got {actual[:10]}")

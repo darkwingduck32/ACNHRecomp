@@ -29,7 +29,7 @@ int main() {
         }
         const uint64_t result = operation == 0
             ? nx::acnh::field_column_8(base, row, index, hash, memory)
-            : nx::acnh::cached_record_value(base, row, index, hash, memory);
+            : nx::acnh::cached_record_value(base, {row, index, hash}, memory);
         std::cout << result;
         for (const auto& [addr, size, bits] : memory.writes)
             std::cout << ' ' << addr << ' ' << size << ' ' << bits;

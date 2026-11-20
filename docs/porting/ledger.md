@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 77.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 85.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -241,10 +241,14 @@ All gameplay tests use the same muted single-instance launcher.
 | `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Reference replay passed |
 | `0x29cc0e0` | `0x124` | Read cached row value from slot 14 | `0x29cd3f0` | Reference replay passed |
 | `0x29cc210` | `0x124` | Read cached row value from slot 15 | `0x29cd400` | Reference replay passed |
-| `0x29cc340` | `0x124` | Read cached row value from slot 16 | `0x29cd410` | Reference replay passed |
-| `0x29cc470` | `0x124` | Read cached row value from slot 1 | `0x29cd420` | Reference replay passed |
-| `0x29cc5a0` | `0x124` | Read cached row value from slot 2 | `0x29cd430` | Reference replay passed |
-| `0x29cc6d0` | `0x124` | Read cached row value from slot 3 | `0x29cd440` | Reference replay passed |
+| `0x29cc340` | `0x124` | Read cached row value from slot 16 | `0x29cd410` | Verified |
+| `0x29cc470` | `0x124` | Read cached row value from slot 1 | `0x29cd420` | Verified |
+| `0x29cc5a0` | `0x124` | Read cached row value from slot 2 | `0x29cd430` | Verified |
+| `0x29cc6d0` | `0x124` | Read cached row value from slot 3 | `0x29cd440` | Verified |
+| `0x29cc800` | `0x124` | Read cached row value from slot 4 | `0x29cd450` | Verified |
+| `0x29cc930` | `0x124` | Read cached row value from slot 5 | `0x29cd460` | Verified |
+| `0x29cca60` | `0x124` | Read cached row value from slot 6 | `0x29cd470` | Verified |
+| `0x29ccb90` | `0x124` | Read cached row value from slot 7 | `0x29cd490` | Verified |
 
 The [discovery queue](batch-3-candidates.md) holds 100 candidates beyond
 the implementation entries listed here. The queue marks entries with
@@ -2356,3 +2360,41 @@ The generated stage-height base and field-item resolver remain
 on this caller path, as do recursive traversal and the 16-sector
 sweep collision callback. The collision callback is the next
 unported dependency under the typed sweep.
+
+### Cached row values under the shared field lookup
+
+Eight readers under `0x29cce10` use `CachedRowValueQuery` for
+the owner, slot, and property key. The adapter admits only the
+eight direct return sites. The caller still chooses the row,
+compares each returned value, and controls the early exit. Set
+`NX_ACNH_FIELD_VALUE_CACHE=original` to select the generated
+readers. The four earlier siblings at slots 12 through 15 are
+replay-tested and still use generated code.
+
+The first `rowcache1` trial matched all eight shovel outcomes,
+but the strict full trace found 2,976 original and 2,978 opt-in
+parent calls, with different ambient requests. The
+`rowcache2` retry recorded the exact word consulted by each warm
+reader. Original and opt-in `rowcache2` and default `rowcache3`
+matched the ordered group that resolved all eight slots and the
+19 distinct read-only inputs. Every read-only call preserved
+the cache and returned its recorded value. Ambient repeats
+varied across the three routes. The survey, neighborhood, and
+final decisions each matched on all eight shovel interactions.
+
+Each body matched 122 independent portable AArch64 cases
+and two or three additional gameplay-derived read-only cases.
+The replay also checked 363 cases for the eight-slot column
+lookup and 488 for the four earlier row readers. All 14
+Release CTests and 14 profile and replay checks passed.
+Batch 3 has 85 verified functions. The updated discovery probe
+confirmed 65 direct entries. Four moved into the ledger and
+four replacements keep 100 candidates in the discovery queue.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-rowcache2"
+$c = "$r/tree-shake-default-rowcache3"
+& private/venv/Scripts/python -m tests.acnh_field_value_cache_live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_value_cache --capture "$o/nx.log"
+```

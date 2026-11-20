@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 34.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 36.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -790,3 +790,39 @@ $c = "$r/tree-shake-default-finalshovelhalf"
 Next implementation group is the observed provider-context pair
 `0x25ee660` and `0x25ee758`. Capture their active synchronization branches
 before selecting any lower-level calls to replace.
+
+
+### Provider context acquisition and release
+
+| Entry | Scope | Independent AArch64 cases | Captures per route |
+| --- | --- | ---: | ---: |
+| `0x25ee660` | Acquire context for an ordinary read or continuation | 864 | 24 |
+| `0x25ee758` | Release context after an ordinary read or continuation | 864 | 24 |
+
+Both default to typed C++ on the shovel path.
+`NX_ACNH_PROVIDER_CONTEXT=original` selects the generated bodies.
+The independent replay checks acquire results, ordered callback targets and
+receiver arguments, and counter writes against two AArch64 executions
+per case. It covers missing handles, a disabled context, guard choices,
+and both handle modes. Lower-level synchronization still runs through
+the guest boundary.
+
+The disposable `whole` fixture reached mode 1 with both handles present
+and the guard disabled. Each of the original, opt-in and default runs
+recorded 19 ordinary and five continuation calls per entry. The four
+focal shovel outcomes at (40, 69), neighborhood records, masks, and
+final decisions matched. The fixture digest is listed above. The build
+passed 13 Release CTest checks and 14 replay and profile tests.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-providercontext1"
+$c = "$r/tree-shake-default-providercontext2"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_context --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The first remaining call in the observed acquire path is the generated
+context-flag lookup `0x2601110`. Capture its thread-selection branch
+before continuing to the paired-handle helper `0x262e9bc` and release
+helper `0x37568c0`.

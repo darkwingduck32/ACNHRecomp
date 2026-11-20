@@ -6,6 +6,7 @@
 #include "../../../games/acnh/field_provider.h"
 #include "../../../games/acnh/field_provider_anchor.h"
 #include "../../../games/acnh/field_provider_storage.h"
+#include "../../../games/acnh/field_provider_context.h"
 #include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
@@ -1731,6 +1732,99 @@ void provider_binding_adapter(CPU& cpu) {
     }
 }
 
+Fn original_provider_context_acquire = nullptr;
+Fn original_provider_context_release = nullptr;
+bool use_cpp_provider_context = false;
+bool trace_provider_context = false;
+
+struct ProviderContextServices {
+    CPU frame;
+    CPU& caller;
+
+    ProviderContextServices(CPU& cpu, bool acquire) : frame(cpu), caller(cpu) {
+        frame.x[31] -= acquire ? 0x30 : 0x20;
+        st<uint64_t>(frame.x[31], cpu.x[29]);
+        st<uint64_t>(frame.x[31] + 8, cpu.x[30]);
+        frame.x[29] = frame.x[31];
+    }
+
+    uint64_t invoke(uint64_t entry, uint64_t resume, uint64_t receiver) {
+        CPU nested = frame;
+        nested.x[0] = receiver;
+        nested.x[30] = main_base + resume;
+        call(nested, main_base + entry);
+        return nested.x[0];
+    }
+
+    uint64_t disabled_flag(acnh::ProviderContextOwner owner) {
+        return invoke(0x2601110, 0x25ee678, owner.address);
+    }
+
+    void enter_guard(uint64_t guard) { invoke(0x3f03880, 0x25ee6bc, guard); }
+    bool try_guard(uint64_t guard) { return (invoke(0x3f04c70, 0x25ee6c4, guard) & 1) != 0; }
+    void leave_guard(uint64_t guard) { invoke(0x3f038c0, 0x25ee790, guard); }
+    void enter_pair(uint64_t pair) { invoke(0x262e9bc, 0x25ee6e4, pair); }
+
+    uint64_t counter(uint64_t handle) {
+        frame.x[1] = 1;
+        return invoke(0x37567d0, 0x25ee714, handle);
+    }
+
+    void prepare_counter(uint64_t counters) { invoke(0x37e2e80, 0x25ee72c, counters); }
+    void enter_first(uint64_t handle) { invoke(0x37569c0, 0x25ee744, handle); }
+    void leave_second(uint64_t handle, bool nested) {
+        invoke(0x37568c0, nested ? 0x25ee7d8 : 0x25ee7b4, handle);
+    }
+
+    void leave_first(uint64_t handle, bool nested) {
+        caller.x[0] = handle;
+        call(caller, main_base + (nested ? 0x3756a80 : 0x37568c0));
+    }
+};
+
+std::atomic<unsigned> provider_context_samples[2]{};
+
+template<bool Acquire>
+void provider_context_adapter(CPU& cpu) {
+    const auto original = Acquire ? original_provider_context_acquire : original_provider_context_release;
+    const auto caller = cpu.x[30] - main_base;
+    const auto frame = cpu.x[29];
+    const bool shovel = Acquire
+        ? (caller == 0x11e50f4 && provider_read_frame(frame)) ||
+          (caller == 0x11e45f0 && provider_acquire_frame(frame))
+        : (caller == 0x1950414 && shovel_cell_caller(ld<uint64_t>(frame + 8) - main_base)) ||
+          (caller == 0x11e5200 && provider_read_frame(frame));
+    if (!shovel) {
+        original(cpu);
+        return;
+    }
+
+    const auto receiver = cpu.x[0];
+    const bool trace = trace_provider_context &&
+        provider_context_samples[Acquire].fetch_add(1, std::memory_order_relaxed) < 24;
+    const bool first = trace && ld<uint64_t>(receiver + 0x308) != 0;
+    const bool second = trace && ld<uint64_t>(receiver + 0x310) != 0;
+    const auto mode = trace ? ld<uint32_t>(receiver + 0x358) : 0;
+    const auto guard = trace ? ld<uint8_t>(receiver + 0x35c) : 0;
+    const auto variant = trace ? ld<uint8_t>(receiver + 0x35e) : 0;
+
+    if (!use_cpp_provider_context) {
+        original(cpu);
+    } else {
+        GuestMemory memory;
+        ProviderContextServices services{cpu, Acquire};
+        if constexpr (Acquire) cpu.x[0] = acnh::acquire_provider_context({receiver}, memory, services);
+        else acnh::release_provider_context({receiver}, memory, services);
+    }
+
+    if (trace)
+        log("acnh shovel context %s entry=%x state=caller=%llx handles=%u,%u mode=%x guard=%x,%x out=%u",
+            use_cpp_provider_context ? "cpp" : "original",
+            Acquire ? 0x25ee660u : 0x25ee758u, static_cast<unsigned long long>(caller),
+            unsigned(first), unsigned(second), mode, unsigned(guard), unsigned(variant),
+            Acquire ? unsigned(cpu.x[0] & 1) : 0);
+}
+
 Fn original_provider_storage = nullptr;
 bool use_cpp_provider_storage = false;
 bool trace_provider_storage = false;
@@ -1898,6 +1992,14 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_provider_binding || trace_provider_binding)
         for (auto& route : provider_binding_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_CONTEXT");
+    use_cpp_provider_context = !mode || std::string_view(mode) == "cpp";
+    trace_provider_context = std::getenv("NX_ACNH_PROVIDER_CONTEXT_TRACE") != nullptr;
+    if (use_cpp_provider_context || trace_provider_context) {
+        wrap_function(entries, 0x25ee660, provider_context_adapter<true>, original_provider_context_acquire);
+        wrap_function(entries, 0x25ee758, provider_context_adapter<false>, original_provider_context_release);
+    }
 
     mode = std::getenv("NX_ACNH_PROVIDER_STORAGE");
     use_cpp_provider_storage = !mode || std::string_view(mode) == "cpp";

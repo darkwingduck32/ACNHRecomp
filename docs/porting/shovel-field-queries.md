@@ -103,8 +103,8 @@ All observed dispatch targets below came from the field-cell call at
 | `0x11e4fb0`, `0x11e50b0`, `0x11e5178` | `0x261157c`, width | Verified C++ default |
 | `0x11e4fd8`, `0x11e50c4`, `0x11e519c` | `0x2611584`, height | Verified C++ default |
 | `0x11e5114`, `0x11e51cc` | `0x261158c`, record displacement | Verified C++ default |
-| `0x11e50f0`, tail `0x11e5284` | `0x260b860`, `0x260b934`, context dispatch | Verified C++ defaults. The stateful runtime callbacks remain generated. |
-| `0x11e51b4`, `0x11e51fc` | `0x11e4578`, `0x2540184`, continuation resolve and cleanup | Verified C++ defaults with generated context callbacks |
+| `0x11e50f0`, tail `0x11e5284` | `0x260b860`, `0x260b934`, context dispatch | Verified C++ defaults, including the scoped context acquisition and release routines. |
+| `0x11e51b4`, `0x11e51fc` | `0x11e4578`, `0x2540184`, continuation resolve and cleanup | Verified C++ defaults with guest synchronization calls |
 
 The typed provider read is verified in gameplay. Its independent replay
 covers bounds rejection, masking, ordinary and continuation records,
@@ -148,7 +148,7 @@ stage-key helpers `0x16f37d0` and `0x16f3a18` default to C++ on the
 observed gather path. Provider storage `0x260bd50` and table binding
 `0x1267360` also default to C++. The provider reaches the binding
 through the runtime-loaded target in `0x11ac1e8`. The context dispatch
-thunks forward to generated `0x25ee660` and `0x25ee758`.
+thunks forward to the scoped C++ implementations of `0x25ee660` and `0x25ee758`.
 
 ## Composed gameplay verification
 
@@ -157,16 +157,16 @@ and final decision in the whole-tile and half-tile fixtures. See
 `shovelpathwhole1` and `shovelpathhalf1` in the ledger. Five decisions in
 the first fixture accepted the interaction. Six decisions in the
 second rejected it. The typed queries read live stage and provider
-state through the boundary. Generated calls still handle stateful
-context acquisition and release and deeper descriptor metadata.
+state through the boundary. Generated calls still handle synchronization primitives and deeper
+descriptor metadata.
 
 ## Remaining generated dependencies
 
-The field provider's context dispatch selects `0x25ee660` and
-`0x25ee758` for stateful acquisition and release. They are the next
-priority because both appeared under normal record reads and under
-continuation handling. Preserve their synchronization calls at the guest
-boundary while comparing context selection, return values and effects.
+On the verified shovel path, context acquisition and release are typed
+C++. The context-flag lookup `0x2601110` is the first generated call
+during acquisition. The paired-handle helper `0x262e9bc` and release
+helper `0x37568c0` remain behind the runtime boundary. The live fixture
+exercised mode 1 with both handles set and the guard disabled.
 
 The generated boundary also retains the quadrant fallbacks
 `0x87a980` and `0x87aa70`, deeper item descriptor and category calls,

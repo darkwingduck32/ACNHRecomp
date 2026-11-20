@@ -12,6 +12,7 @@
 #include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_target.h"
 #include "../../../games/acnh/shovel_height.h"
+#include "../../../games/acnh/shovel_grid_height.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
 #include "../../../games/acnh/shovel_item_queries.h"
@@ -778,6 +779,63 @@ bool is_shovel_target_frame(uint64_t frame) {
     return frame && ld<uint64_t>(frame + 8) == main_base + shovel_target_resume;
 }
 
+Fn original_shovel_grid_height = nullptr;
+bool use_cpp_shovel_grid_height = false;
+bool trace_shovel_grid_height = false;
+
+bool is_shovel_grid_height_call(const CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    if (resume != 0x83b0cc && resume != 0x83aa78 && resume != 0x83aad8)
+        return false;
+    const auto sampler_frame = cpu.x[29];
+    const auto expected = resume == 0x83b0cc ? 0x15e02e0 : 0x15e02f8;
+    if (!sampler_frame || ld<uint64_t>(sampler_frame + 8) != main_base + expected) return false;
+    const auto height_frame = ld<uint64_t>(sampler_frame);
+    return height_frame && is_shovel_height_call(ld<uint64_t>(height_frame + 8))
+        && is_shovel_target_frame(ld<uint64_t>(height_frame));
+}
+
+void shovel_grid_height_adapter(CPU& cpu) {
+    if (!is_shovel_grid_height_call(cpu)) {
+        original_shovel_grid_height(cpu);
+        return;
+    }
+    const auto resume = cpu.x[30] - main_base;
+    const acnh::GridHeightQuery query{{cpu.x[0]}, cpu.x[1], cpu.x[2], cpu.x[4], (cpu.x[3] & 1) != 0};
+    if (!trace_shovel_grid_height) {
+        GuestMemory memory;
+        cpu.v[0].f32[0] = acnh::query_grid_height(query, memory);
+        return;
+    }
+
+    // Compare on the same inputs even when movement shifts the probes between runs.
+    const auto before = ld<uint32_t>(query.material);
+    const auto override_before = ld<uint8_t>(query.override_present);
+    CPU reference = cpu;
+    original_shovel_grid_height(reference);
+    const auto expected_height = std::bit_cast<uint32_t>(reference.v[0].f32[0]);
+    const auto expected_kind = ld<uint32_t>(query.material);
+    const auto expected_override = ld<uint8_t>(query.override_present);
+    const char* comparison = "stock";
+    if (use_cpp_shovel_grid_height) {
+        st<uint32_t>(query.material, before);
+        st<uint8_t>(query.override_present, override_before);
+        GuestMemory memory;
+        cpu.v[0].f32[0] = acnh::query_grid_height(query, memory);
+        comparison = std::bit_cast<uint32_t>(cpu.v[0].f32[0]) == expected_height
+                  && ld<uint32_t>(query.material) == expected_kind
+                  && ld<uint8_t>(query.override_present) == expected_override ? "match" : "mismatch";
+    } else {
+        cpu = reference;
+    }
+    log("acnh shovel height %s entry=862700 same_input=%s point=%x,%x,%x call=%llx ground=%u before=%x kind=%x override=%u out=%x",
+        use_cpp_shovel_grid_height ? "cpp" : "original", comparison,
+        ld<uint32_t>(query.point), ld<uint32_t>(query.point + 4), ld<uint32_t>(query.point + 8),
+        static_cast<unsigned long long>(resume - 4), unsigned(query.ground_only), before,
+        ld<uint32_t>(query.material), unsigned(ld<uint8_t>(query.override_present)),
+        std::bit_cast<uint32_t>(cpu.v[0].f32[0]));
+}
+
 struct HeightGuestFrame {
     CPU cpu;
 
@@ -855,7 +913,7 @@ struct ShovelSamplerServices : HeightGuestFrame {
         nested.x[2] = material;
         nested.x[3] = 1;
         nested.x[4] = material - 4;
-        trace_shovel_dependency(0x862700, 0x83b0cc);
+        if (!use_cpp_shovel_grid_height) trace_shovel_dependency(0x862700, 0x83b0cc);
         invoke(nested, main_base + 0x862700, 0x83b0cc);
         return {nested.v[0].f32[0], ld<uint32_t>(material)};
     }
@@ -883,7 +941,8 @@ struct ShovelSamplerServices : HeightGuestFrame {
         nested.x[4] = material - 4;
         const auto target = ld<uint64_t>(ld<uint64_t>(object) + 0x30);
         const auto resume = capture ? 0x83aa78 : 0x83aad8;
-        trace_shovel_dependency(target - main_base, resume);
+        if (target != main_base + 0x862700 || !use_cpp_shovel_grid_height)
+            trace_shovel_dependency(target - main_base, resume);
         invoke(nested, target, resume);
         kind = ld<uint32_t>(material);
         return {nested.v[0].f32[0], ld<uint8_t>(material - 4) != 0};
@@ -2702,6 +2761,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_terrain_level = !mode || std::string_view(mode) == "cpp";
     if (use_cpp_terrain_level || trace_terrain_helpers)
         wrap_function(entries, 0x871f80, terrain_level_adapter, original_terrain_level);
+    mode = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT");
+    use_cpp_shovel_grid_height = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
+    if (use_cpp_shovel_grid_height || trace_shovel_grid_height)
+        wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
+
     trace_shovel_height = std::getenv("NX_ACNH_SHOVEL_HEIGHT_TRACE") != nullptr;
     constexpr std::array<Fn, 5> height_adapters{
         shovel_height_adapter<0>, shovel_height_adapter<1>, shovel_height_adapter<2>,

@@ -215,3 +215,13 @@ The four added item records are at layer 0 save coordinates (82, 108)
 through (83, 109), including the three continuation records. The
 [ledger](ledger.md#host-and-deeper-item-classification-checkpoint)
 records the checks and next candidates.
+
+## Height sampling
+
+The shovel target selector's height dispatcher, ground and overlay
+samplers, parameter accessors, and shared grid-height query now run in
+handwritten C++ on the verified route. The typed grid query handles
+sector selection, interpolation, and material outputs. Locking, the
+samplers' world-position fallbacks, and the parameter object's virtual
+type check still cross the guest boundary. The selector also calls the
+generated point classifier. See the [grid-height verification](ledger.md#shovel-grid-height).

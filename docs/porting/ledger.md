@@ -1207,3 +1207,48 @@ The private `shovel-grid-height-reference.json` contains 336 stable
 AArch64 fixtures for `0x862700`, including both sampler modes,
 ground and overlay materials, tile edges, and out-of-bounds points.
 The source fixture is `private.heading.shovel_grid_height_reference`.
+
+### Shovel grid height
+
+The typed grid-height query at `0x862700` defaults to handwritten C++
+under both shovel height samplers. It selects the tile sector and
+terrain layer, computes the height, and writes the material and
+overlay flag. The ground sampler calls it at `0x83b0c8`. The overlay
+sampler reaches it through virtual dispatch at `0x83aa74`.
+Set `NX_ACNH_SHOVEL_GRID_HEIGHT=original` for the generated route.
+
+The independent replay matched 672 cases against two original
+AArch64 executions, including exact float bits, retained output on
+out-of-bounds queries, and the order and widths of the output writes.
+The first live attempt, `gridheight1`, reached both call sites but
+failed the exact input comparison. Movement changed two probe
+positions per caller between runs. The retry runs the original on the
+same input when tracing a C++ call. It restores both output values
+before executing C++ and compares the height bits, material, and flag.
+With tracing disabled the C++ route executes the typed query directly.
+
+The original and opt-in `gridheight2` runs and the default
+`gridheight3` run matched 10 focal calls at each caller. Both C++
+routes matched all same-input checks. All four neighborhoods,
+surveys, and final decisions matched, including the default against the
+whole original `classdeep2` route. The runs used one muted instance at
+a time. All 14 Release CTest checks and 14 replay and profile tests
+passed. The discovery queue holds 100 entries.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-gridheight2"
+$c = "$r/tree-shake-default-gridheight3"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_grid_height --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+$o = "$r/tree-shake-original-classdeep2"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The original direct ground call was routed through the dispatcher in
+the private `generated-dll/shovel_grid_height_port_generated.dll`.
+The height samplers still call generated material fallbacks
+`0x87a980` and `0x87aa70`. Verify the existing C++ implementations
+in this new scope, including the secondary fallback's material test
+`0x1285040`, then handle the generated parameter type check
+`0x22688e4`. The target selector still calls the generated point
+classifier `0x15f3ed0`.

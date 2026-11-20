@@ -220,3 +220,36 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 & private/venv/Scripts/python -m private.heading.compare_leaf field_case_key --live-default "$r/tree-shake-original-casekey1/nx.log" "$r/tree-shake-default-batch2final/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-half-tile "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-default-batch2final/nx.log" --live-category-mask "$r/tree-shake-original-catmask1/nx.log" "$r/tree-shake-default-batch2final/nx.log"
 ```
+
+## Active batch 3
+
+The previous batch is complete. This batch targets ten new verified ports on
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 0.
+
+The discovery trace `tree-shake-original-more1/console.log` came from a
+disposable shovel scenario and has SHA-256
+`3482eefe2937866a365f528050f49054ca0dcfb5666c6878486b66f995d93974`.
+An observed entry establishes reachability. Each port still needs a paired
+original and opt-in replay, regressions, and a check of the promoted default.
+All gameplay tests use the same muted single-instance launcher.
+
+| Main entry | Unwind size | Provisional function | Observed caller | Stage |
+| --- | --- | --- | --- | --- |
+| `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x221f0c4` and three other sites | Reference replay |
+| `0x1148db0` | `0xd4` | Resolve an eight-slot cached field | `0x114169c`, `0x114182c`, `0x1141850`, `0x1141874` | Queued |
+| `0x29cbe80` | `0x124` | Read cached row value, slot 12 | `0x29cd3d0` | Queued |
+| `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Queued |
+| `0x29cc0e0` | `0x124` | Read cached row value from slot 14 | `0x29cd3f0` | Queued |
+| `0x29cc210` | `0x124` | Read cached row value from slot 15 | `0x29cd400` | Queued |
+| `0x29cc340` | `0x124` | Read cached row value from slot 16 | `0x29cd410` | Queued |
+| `0x29cc470` | `0x124` | Read cached row value from slot 17 | `0x29cd420` | Queued |
+| `0x29cc5a0` | `0x124` | Read cached row value from slot 18 | `0x29cd430` | Queued |
+| `0x29cc6d0` | `0x124` | Read cached row value from slot 19 | `0x29cd440` | Queued |
+
+The indexed lookup takes an owner in X0 and an index in W1 and returns a
+pointer or null in X0. It reads either a direct pointer array or a packed
+record table, with no guest writes. First replay both branches and their
+bounds, then use the existing traced-memory convention to capture the
+shovel callers. For the shared-cache family, verify the hash and slot
+from each original body and independently replay every entry, including
+cold initialization and warm cache hits.

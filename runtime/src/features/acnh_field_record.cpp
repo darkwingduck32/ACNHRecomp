@@ -978,7 +978,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x195033c, field_cell_adapter, original_field_cell);
 
     mode = std::getenv("NX_ACNH_PROVIDER_CELL");
-    use_cpp_provider_cell = mode && std::string_view(mode) == "cpp";
+    use_cpp_provider_cell = !mode || std::string_view(mode) == "cpp";
     trace_provider_cell = std::getenv("NX_ACNH_PROVIDER_CELL_TRACE") != nullptr;
     if (use_cpp_provider_cell || trace_provider_cell)
         wrap_function(entries, 0x11e4f58, provider_cell_adapter, original_provider_cell);

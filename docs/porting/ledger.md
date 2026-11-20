@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 13.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 14.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -507,5 +507,34 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 $o = "$r/tree-shake-original-providermethods1/nx.log"
 $c = "$r/tree-shake-default-providermethods2/nx.log"
 & private/venv/Scripts/python -m private.heading.compare_leaf provider_methods --live $o $c
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
+```
+
+### Field provider orchestration
+
+The provider at `0x11e4f58` defaults to C++ on the four neighborhood
+field-cell call paths. `NX_ACNH_PROVIDER_CELL=original` selects the
+generated body. The typed provider owns bounds, masking, item selection
+and resolved coordinates. The guest boundary still calls the virtual
+context callbacks and the generated continuation resolver and cleanup.
+
+The independent replay compared 60 cases against two stock executions.
+The replay checked ordered dependency calls and guest writes, including
+temporary changes to the provider counter. The three muted live trials
+`tree-shake-original-providercell3`, `tree-shake-cpp-providercell3`
+and `tree-shake-default-providercell4` matched 24 calls from all four
+gather sites, including a continuation that resolves (78, 138) to
+(78, 137). They also matched the four focal outcomes and full
+neighborhood snapshots at (40, 69). The first launcher attempt omitted
+the shovel scenario and the second used an older gameplay DLL. Those
+attempts yielded no provider evidence. The original and opt-in counter
+values differed at entry (0x12 and 0x9). The trace comparison checks
+preservation of each incoming value. All 13 Release CTest tests passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-providercell3/nx.log"
+$c = "$r/tree-shake-default-providercell4/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_cell --live $o $c
 & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
 ```

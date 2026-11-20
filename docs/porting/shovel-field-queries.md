@@ -83,9 +83,10 @@ the 3-by-3 survey. The stock, opt-in and default runs matched its full
 scratch result, including the 36 records and the occupancy mask.
 Outside the shovel call site, its existing generated entry is used.
 
-The field provider `0x11e4f58` still runs generated orchestration for the
-occupancy filter and record continuation. It calls five verified
-handwritten methods for table lookup, readiness and indexing. The stage rule `0x16baf44`, item
+The field provider `0x11e4f58` runs its occupancy filter and record
+selection in C++. It calls five verified handwritten methods for table
+lookup, readiness and indexing. The runtime boundary supplies generated
+context callbacks and continuation resolution and cleanup. The stage rule `0x16baf44`, item
 initializer `0x267d4ac`, metadata predicate `0x19ee3b4`, extent helper
 `0x253fe7c`, terrain orchestration and item classification also remain
 generated. The runtime adapters keep these calls selectable and preserve
@@ -106,10 +107,16 @@ All observed dispatch targets below came from the field-cell call at
 | `0x11e50f0`, tail `0x11e5284` | `0x260b860`, `0x260b934`, context callbacks | Generated |
 | `0x11e51b4`, `0x11e51fc` | `0x11e4578`, `0x2540184`, continuation resolve and cleanup | Generated |
 
-The typed provider read is the next dependency to remove. Its independent
-replay covers bounds rejection, masking, ordinary records, continuation
-records, optional root output and context release.
-Once the provider passes the gameplay comparison, the terrain dispatcher
-at `0x877130` is the next outer dependency. Its unported helpers at
-`0x848e68` and `0x871f80` share a call to `0x862530`. Trace them at
-`0x87732c` and `0x877254` to identify which branches the shovel actually uses.
+The typed provider read is verified in gameplay. Its independent replay
+covers bounds rejection, masking, ordinary and continuation records,
+optional root output and context release.
+
+## Terrain dispatcher group
+
+The muted `tree-shake-default-terrainpath1` probe recorded two stock
+`0x877130` calls from `0x21f7788`. It observed `0x871f80` twice from
+`0x877254` and `0x848e68` eight times from `0x87732c`. Both helpers
+called the shared terrain record reader `0x862530` eight times from
+their respective sites at `0x872110` and `0x848ed0`. These four
+functions connect the shovel survey to the terrain record property and
+the layer flag check that already run in C++.

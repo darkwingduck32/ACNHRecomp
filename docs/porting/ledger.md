@@ -3051,3 +3051,43 @@ foreach ($route in 'cpp', 'default') {
     & private/venv/Scripts/python -m private.heading.compare_leaf worker_cull_predicates --live $a $b --gameplay $o "$r/tree-shake-default-worker-cull-gate-${route}1/nx.log"
 }
 ```
+
+### Terrain clearance original capture
+
+Two serial muted Windows fixtures captured 60 completed generated-route
+calls to `0x15eb1a0`. Movement captured 32 (24 in the action window),
+and shovel captured 28 (12 in the action window).
+
+| Original call site | Selector | Captured outcome | Window evidence |
+| --- | ---: | --- | --- |
+| `0x1161d64` | 1 | Zero radius center hit or full ring miss | Movement center hit. Shovel samples precede the action window. |
+| `0x1161d78` | 0 | Zero radius center hit or full ring miss | Movement center hit. Shovel samples precede the action window. |
+| `0x15f4adc` | 1 | Nonzero radius full ring miss | Movement and shovel |
+| `0x15f4af0` | 0 | Nonzero radius full ring miss | Movement and shovel |
+| `0x15f59dc` | 0 or 1 | Nonzero radius full ring miss | Movement both selectors. Shovel selector 1. |
+
+Two original AArch64 executions per capture matched W0, ordered
+half-tile arguments, and the stack slots for each `0x874bc8` call.
+Sixteen observations made one center query and 44 made nine queries.
+The replay used the observed heading step and trig rows and injected the
+observed summary byte at each callback. It used synthetic owner pointers
+and checked that the parent made no external writes. Live output S0 was
+outside this trace. Thirty additional synthetic parent controls covered
+absent owner and early and late ring hits. Six synthetic compositions ran
+both original bodies twice and checked W0 and raw S0, including signed
+zero center hits and full ring sweeps.
+
+All five sites still execute generated clearance and generated flag
+queries. The next implementation group can pair the typed clearance
+predicate with the existing terrain flag summary at its center and rim
+calls. Gate the adapters by the five observed links, keep the generated
+route selectable, and compare the original, opt-in and default routes in
+the same fixtures before promotion. Batch 4 remains at 26 verified with
+100 discovery entries.
+
+```powershell
+$r = 'private/heading/coverage-runs'
+& private/venv/Scripts/python -B -m private.heading.replay_clearance_capture `
+    "$r/tree-shake-default-terrain-clearance-movement1/console.log" `
+    "$r/tree-shake-default-terrain-clearance-shovel1/console.log"
+```

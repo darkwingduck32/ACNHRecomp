@@ -162,6 +162,15 @@ one-shard culler trace library. The second run reused the read-only
 Vulkan cache setup. The local differential command is
 `python -m private.heading.worker_cull_predicates --live <console logs>`.
 
+The terrain-clearance predicate `0x15eb1a0` has a Windows original-route
+fixture covering center hits and full ring misses. Two sites reached both
+boolean results across each fixture. Three more sites reached full ring
+misses during both the movement and shovel action windows. The capture
+preserves the point and radius bits, selector, heading step and trig rows,
+ordered half-tile arguments, and terrain flag results. Samples are capped
+per caller, selector, and result and establish call-site coverage.
+See the [original capture and replay](ledger.md#terrain-clearance-original-capture).
+
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.
 

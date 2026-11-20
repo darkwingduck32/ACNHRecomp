@@ -2662,7 +2662,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 1.
+two promoted material queries. Verified so far, 7.
 
 Implementation continues on the typed shovel traversal path.
 
@@ -2774,3 +2774,33 @@ ten surveys, ten neighborhoods, and 12 final decisions matched
 across routes. All 14 Release CTests and 14 profile and replay
 checks passed. These helpers retain their prior entries. Batch 4
 has one newly verified function and 100 discovery candidates.
+
+### Field scan metadata and tile queries
+
+Six observed helpers under `0x15786e0` now use typed metadata, tile
+conversion, and visited-cell queries. The metadata readers share the
+catalog enumeration logic. The class reader uses the existing
+field-layer grid lookup and record selection. The runtime checks nine
+observed return addresses and keeps other callers on the generated
+route. Set `NX_ACNH_FIELD_SCAN=original` to use the original bodies
+at those addresses.
+
+| Entry | Unwind size | Typed operation | Original AArch64 cases | Stage |
+| --- | --- | --- | ---: | --- |
+| `0x19d6a30` | `0xbc` | Compare the item type | 252 | Verified |
+| `0x127d59c` | `0x70` | Initialize a unit-tile descriptor | 242 | Verified |
+| `0x1596154` | `0x8c` | Mark a tile visited | 216 | Verified |
+| `0x19d9fd0` | `0xa4` | Read the item type | 252 | Verified |
+| `0x19f49bc` | `0xc0` | Test for item type 127 | 252 | Verified |
+| `0x1217cc0` | `0xe4` | Read the tile class | 240 | Verified |
+
+The 1,454 cases matched both original executions, including
+the unit-tile write order when input aliases output and the
+visited bitmap store. Independent Linux replay covered all six
+bodies. Original and opt-in `fieldscan1` and default
+`fieldscan2` matched 810 ordered gameplay samples at all nine
+sites. The trace checks the output fields from the two writers.
+The eight surveys, eight neighborhoods, and eight final decisions
+also matched. All 14 Release CTests and 14 profile and replay
+checks passed. Batch 4 has seven verified functions and 100 discovery
+candidates.

@@ -1,7 +1,9 @@
 #include "../../../games/acnh/field_column.h"
+#include "../../../games/acnh/field_column_25.h"
 #include "../../../games/acnh/field_flag.h"
 #include "../../../games/acnh/field_record.h"
 #include "../../../games/acnh/record_category.h"
+#include "../../../games/acnh/tile_record_flag.h"
 
 #include "features/camera/version_303.h"
 #include "features/module_hooks.h"
@@ -119,7 +121,7 @@ ColumnCache read_cache(uint64_t address) {
     return cache;
 }
 
-std::string cache_hex(const ColumnCache& cache) {
+std::string cache_hex(std::span<const uint8_t> cache) {
     constexpr char digits[] = "0123456789abcdef";
     std::string result;
     result.reserve(2 * cache.size());
@@ -241,6 +243,129 @@ void record_category_adapter(CPU& cpu) {
     }
 }
 
+Fn original_tile_record_flag = nullptr;
+bool use_cpp_tile_record_flag = false;
+bool trace_tile_record_flag = false;
+std::atomic<unsigned> tile_record_traces{0};
+
+void tile_record_flag_adapter(CPU& cpu) {
+    const uint64_t query = cpu.x[0];
+    const uint64_t caller = cpu.x[30] - main_base;
+    const bool trace = trace_tile_record_flag && caller == 0x14c4a74 &&
+        tile_record_traces.fetch_add(1, std::memory_order_relaxed) < 12;
+    if (use_cpp_tile_record_flag || trace) {
+        std::string reads;
+        const bool found = acnh::tile_record_flag(main_base, query, GuestMemory{trace ? &reads : nullptr});
+        if (use_cpp_tile_record_flag) cpu.x[0] = found;
+        else original_tile_record_flag(cpu);
+        if (trace) {
+            log("acnh tile record flag %s caller=%llx base=%llx query=%llx w0=%llx reads=%s",
+                use_cpp_tile_record_flag ? "cpp" : "original", static_cast<unsigned long long>(caller),
+                static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(query),
+                static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
+        }
+    } else {
+        original_tile_record_flag(cpu);
+    }
+}
+
+using ColumnSlots25 = std::array<uint8_t, 100>;
+
+struct ColumnSnapshot25 {
+    uint64_t ready_address;
+    uint64_t slot_address;
+    uint8_t ready;
+    ColumnSlots25 slots;
+    GuestMemory guest;
+
+    template<class T>
+    T read(uint64_t address) const {
+        if (address == ready_address && sizeof(T) == 1) return static_cast<T>(ready);
+        const uint64_t offset = address - slot_address;
+        if (offset > slots.size() - sizeof(T)) return guest.read<T>(address);
+        T value;
+        std::memcpy(&value, slots.data() + offset, sizeof(T));
+        return value;
+    }
+
+    template<class T>
+    void write(uint64_t address, T value) {
+        if (address == ready_address && sizeof(T) == 1) {
+            ready = static_cast<uint8_t>(value);
+        } else {
+            std::memcpy(slots.data() + (address - slot_address), &value, sizeof(T));
+        }
+    }
+};
+
+template<size_t Index>
+void cached_field_adapter(CPU& cpu);
+
+struct CachedFieldRoute {
+    uint64_t entry;
+    uint64_t caller;
+    Fn adapter;
+    Fn original = nullptr;
+    bool use_cpp = false;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<CachedFieldRoute, 2> cached_field_routes{{
+    {0x1146470, 0x34ae588, cached_field_adapter<0>},
+    {0x113d890, 0x267ec88, cached_field_adapter<1>},
+}};
+bool trace_cached_field = false;
+
+template<size_t Index>
+void cached_field_adapter(CPU& cpu) {
+    auto& route = cached_field_routes[Index];
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint64_t row = cpu.x[0];
+    const uint32_t index = static_cast<uint32_t>(cpu.x[1]);
+    const uint32_t hash = static_cast<uint32_t>(cpu.x[2]);
+    const auto evaluate = [&](auto& memory) -> uint64_t {
+        if constexpr (Index == 0) return acnh::field_column_25(main_base, row, index, hash, memory);
+        else return acnh::cached_field_bit(main_base, row, static_cast<int32_t>(index), memory);
+    };
+    const auto apply = [&] {
+        if (route.use_cpp) {
+            GuestMemory memory;
+            cpu.x[0] = evaluate(memory);
+        } else {
+            route.original(cpu);
+        }
+    };
+
+    if (!trace_cached_field || caller != route.caller || !row || !ld<uint32_t>(row) ||
+        route.samples.fetch_add(1, std::memory_order_relaxed) >= 12) {
+        apply();
+        return;
+    }
+
+    const uint64_t ready = ld<uint64_t>(main_base + 0x4abbc70);
+    const uint64_t slots = ld<uint64_t>(main_base + 0x4abbc78);
+    const auto read_slots = [slots] {
+        ColumnSlots25 snapshot;
+        std::memcpy(snapshot.data(), reinterpret_cast<const void*>(slots), snapshot.size());
+        return snapshot;
+    };
+    const auto ready_before = ld<uint8_t>(ready);
+    const auto slots_before = read_slots();
+    std::string reads;
+    ColumnSnapshot25 snapshot{ready, slots, ready_before, slots_before, GuestMemory{&reads}};
+    evaluate(snapshot);
+    apply();
+
+    log("acnh extended field %s entry=%llx caller=%llx base=%llx row=%llx index=%x hash=%x "
+        "ready=%llx slots=%llx initial=%x final=%x before=%s after=%s out=%llx reads=%s",
+        route.use_cpp ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+        static_cast<unsigned long long>(caller), static_cast<unsigned long long>(main_base),
+        static_cast<unsigned long long>(row), index, hash, static_cast<unsigned long long>(ready),
+        static_cast<unsigned long long>(slots), unsigned(ready_before), unsigned(ld<uint8_t>(ready)),
+        cache_hex(slots_before).c_str(), cache_hex(read_slots()).c_str(),
+        static_cast<unsigned long long>(cpu.x[0]), reads.c_str());
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -265,6 +390,22 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_field_flag = std::getenv("NX_ACNH_FIELD_FLAG_TRACE") != nullptr;
     if (use_cpp_field_flag || trace_field_flag)
         wrap_function(entries, field_flag_entry, field_flag_adapter, original_field_flag);
+
+    mode = std::getenv("NX_ACNH_TILE_RECORD_FLAG");
+    use_cpp_tile_record_flag = !mode || std::string_view(mode) == "cpp";
+    trace_tile_record_flag = std::getenv("NX_ACNH_TILE_RECORD_FLAG_TRACE") != nullptr;
+    if (use_cpp_tile_record_flag || trace_tile_record_flag)
+        wrap_function(entries, 0x1218220, tile_record_flag_adapter, original_tile_record_flag);
+
+    trace_cached_field = std::getenv("NX_ACNH_EXTENDED_FIELD_TRACE") != nullptr;
+    const char* const cache_modes[]{"NX_ACNH_FIELD_COLUMN_25", "NX_ACNH_CACHED_FIELD_BIT"};
+    for (size_t i = 0; i < cached_field_routes.size(); ++i) {
+        auto& route = cached_field_routes[i];
+        mode = std::getenv(cache_modes[i]);
+        route.use_cpp = mode && std::string_view(mode) == "cpp";
+        if (route.use_cpp || trace_cached_field)
+            wrap_function(entries, route.entry, route.adapter, route.original);
+    }
 
     mode = std::getenv("NX_ACNH_RECORD_CATEGORY");
     use_cpp_categories = !mode || std::string_view(mode) == "cpp";

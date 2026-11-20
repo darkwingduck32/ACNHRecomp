@@ -4,22 +4,26 @@
 
 namespace nx::acnh {
 
-// Resolves a field by its hash and remembers its row-relative offset.
-template<class Memory>
-uint64_t field_column(uint64_t row, uint32_t column, uint32_t hash, uint64_t cache, Memory& memory) {
-    if (!memory.template read<uint32_t>(row)) return 0;
-    const uint64_t slots = cache + 4;
-    if (!memory.template read<uint8_t>(cache)) {
+// Resolve a field by its hash and cache its row-relative offset.
+template<uint32_t SlotCount, class Memory>
+uint64_t cached_column(uint64_t row, uint32_t column, uint32_t hash,
+                       uint64_t ready, uint64_t slots, Memory& memory) {
+    static_assert(SlotCount == 14 || SlotCount == 25);
+    if (!memory.template read<uint8_t>(ready)) {
         constexpr uint64_t unresolved = UINT64_MAX;
+        constexpr uint64_t last = 4ull * (SlotCount & ~uint32_t{3});
         memory.template write<uint64_t>(slots, unresolved);
         memory.template write<uint64_t>(slots + 8, unresolved);
-        memory.template write<uint8_t>(cache, 1);
-        memory.template write<uint64_t>(slots + 48, unresolved);
-        for (uint64_t offset = 16; offset < 48; offset += 8)
+        memory.template write<uint8_t>(ready, 1);
+        if constexpr (SlotCount == 14)
+            memory.template write<uint64_t>(slots + last, unresolved);
+        else
+            memory.template write<uint32_t>(slots + last, UINT32_MAX);
+        for (uint64_t offset = 16; offset < last; offset += 8)
             memory.template write<uint64_t>(slots + offset, unresolved);
     }
 
-    const uint64_t entry = slots + 4ull * (column <= 13 ? column : 0);
+    const uint64_t entry = slots + 4ull * (column < SlotCount ? column : 0);
     const int32_t cached = memory.template read<int32_t>(entry);
     if (cached >= 0) return row + cached;
     if (cached != -1) return 0;
@@ -42,6 +46,12 @@ uint64_t field_column(uint64_t row, uint32_t column, uint32_t hash, uint64_t cac
         return resolved >= 0 ? row + resolved : 0;
     }
     return 0;
+}
+
+template<class Memory>
+uint64_t field_column(uint64_t row, uint32_t column, uint32_t hash, uint64_t cache, Memory& memory) {
+    if (!memory.template read<uint32_t>(row)) return 0;
+    return cached_column<14>(row, column, hash, cache, cache + 4, memory);
 }
 
 }  // namespace nx::acnh

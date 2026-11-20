@@ -45,3 +45,6 @@ include features/camera/hooks-3.0.3.txt
 21c12ac  # refresh fractional plant after the field write
 21c3044  # refresh fractional burial after the field write
 # dispatch 24699b8 # Initialize working action bits
+# dispatch 1218220 # Read a tile record bit flag
+# dispatch 1146470 # Resolve a column using the 25-slot cache
+# dispatch 113d890 # Read a bit through the 25-slot column cache

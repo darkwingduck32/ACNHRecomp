@@ -174,6 +174,13 @@ The dispatch at other sites, rendering, worker claim and publication
 remain generated. The sampled gameplay gates establish the execution
 of the typed path. See the [verification ledger](ledger.md#terrain-clearance-and-flag-queries).
 
+The shared worker culler now has a repeatable generated-route capture
+at five links. The tree action window reached both warm visibility
+outcomes after the volume miss, including ten-plane checks and the
+second predicate when all planes passed. The next native boundary is
+the two visibility bytes before the enqueue call. See the
+[handoff capture and replay](ledger.md#terrain-worker-visibility-handoff-capture).
+
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.
 

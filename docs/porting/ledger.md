@@ -3133,3 +3133,45 @@ $r = 'private/heading/coverage-runs'
     "$r/tree-shake-default-terrain-clearance-gate-cpp3/nx.log" `
     "$r/tree-shake-default-terrain-clearance-gate-default4/nx.log"
 ```
+
+### Terrain worker visibility handoff capture
+
+The muted original tree fixture recorded 16 completed `0x146a660`
+calls across five worker return sites. Eight records came from field
+loading and eight from the action window. The trace capped each
+phase at eight records and sampled one record per caller and
+observed branch class. Repeated counts from the trace establish
+coverage of those branches.
+
+| Visibility bytes at `0x146aa88` | Field loading | Action window | Original replay |
+| --- | ---: | ---: | --- |
+| `00 01`, volume miss and margin hit | 3 | 3 | All six matched twice |
+| `00 00`, volume miss with plane rejection | 1 | 4 | All five matched twice |
+| `01 01`, volume hit | 4 | 1 | Live observations |
+
+The first completed `00 01` sample returned to `0x11fd40c`.
+Equivalent samples also reached `0x11fced0`, `0x11fd2e8`,
+`0x11fc710`, and `0x11fc944`. The action-window `00 01` cases
+passed all ten warm selector planes before calling the margin leaf.
+The `00 00` cases exited through the selected plane checks before
+that leaf. The live capture confirmed the original enqueue returned.
+
+Two AArch64 replays per captured case ran the original culler and
+each reached leaf with reconstructed field data and object pointers.
+They matched the ordered call links, the original leaf inputs and
+W0/S0 bits, both visibility bytes at SP+0x18, and no external writes
+before enqueue. The replay injected the observed getter, trigonometry
+and selector returns. It stopped at the enqueue call.
+
+The next implementation group is the warm visibility calculation
+through the two-byte handoff. Current gameplay still runs the culler
+and enqueue through generated code, with the two independently
+verified predicate bodies selectable. Worker claim, selector
+initialization and queue publication remain generated. Batch 4 has
+27 verified functions and 100 discovery candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
+& private/venv/Scripts/python -B -m private.heading.replay_worker_visibility `
+    "$r/tree-shake-default-worker-visibility-original1/console.log"
+```

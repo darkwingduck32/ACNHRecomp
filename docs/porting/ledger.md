@@ -1600,3 +1600,46 @@ The portable fixtures run without the capture argument. The next
 observed step dependency is intermediate acceptance `0x15e9c80`.
 The separate collision query `0x15ed290` and overlay sampling in
 the newer classifier scopes remain at the guest boundary.
+
+### Shovel intermediate point acceptance
+
+The step probe's intermediate check `0x15e9c80` now defaults to
+C++ on the shovel classifier path. It checks the center and eight
+radial heights, preserves the original radius cutoff, and orders
+the stage and obstruction callbacks as on AArch64. Guest frame
+construction and selectable original routing remain in the adapter.
+Set `NX_ACNH_SHOVEL_INTERMEDIATE=original` for the generated check.
+
+| Entry | Independent AArch64 cases | Focal calls per route |
+| --- | ---: | ---: |
+| `0x15e9c80` | 108 | 40 |
+
+Two fresh Unicorn runs agreed on each of the 52 captures and 56
+portable cases, including callback order and argument words. The
+no-op candidate failed the first portable case. The focal gameplay
+reached the first step probe at `0x15f0fe0` with surface mode on.
+Portable cases exercise the zero-radius exit, stage selection,
+failed center and offset casts, and skipped offsets.
+
+The original and opt-in intermediate1 and default intermediate2
+runs matched all 40 focal calls. All four neighborhoods, surveys,
+and final decisions matched across routes, including the default
+comparison against the whole-original classdeep2 run. Gameplay
+used one muted instance at a time. All 14 Release CTests and 14
+Python replay and profile tests passed. The queue remains at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-intermediate1"
+$c = "$r/tree-shake-default-intermediate2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_intermediate --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+Intermediate height sampling still reaches the generated
+`0x15e026c` in this caller scope. Collision casts `0x15ed290`
+and step traversal fallback `0x15f10f0` also remain generated.
+The next group follows the observed center-marker call at
+`0x15e9ccc` through `0x15ea0c8`, the shared mask predicate
+`0x849ac8`, wrapper `0x876320`, and quadrant query `0x8493f8`.
+The quadrant query also provides scoped reuse opportunities for
+the verified terrain sampler and primary fallback.

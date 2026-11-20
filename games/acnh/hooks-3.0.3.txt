@@ -91,5 +91,6 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 15e80f0 # Sample the selected shovel stage height
 # dispatch 15e7980 # Lookup the stage item under the shovel point
 # dispatch 195190c # Lookup a stage field record and root coordinate
+# dispatch 15e9c80 # Validate the intermediate shovel point and its rim heights
 # dispatch 15f0c64 # Check the candidate shovel step and intermediate points
 # dispatch 11eb21c # Read a record and anchor from the selected field provider view

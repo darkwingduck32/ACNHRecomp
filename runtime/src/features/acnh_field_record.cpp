@@ -16,6 +16,7 @@
 #include "../../../games/acnh/shovel_stage_height.h"
 #include "../../../games/acnh/shovel_stage_context.h"
 #include "../../../games/acnh/shovel_step.h"
+#include "../../../games/acnh/shovel_intermediate.h"
 #include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
@@ -1669,6 +1670,97 @@ void shovel_step_adapter(CPU& cpu) {
         log("acnh shovel step %s entry=15f0c64 call=15f418c options=%x y=%x out=%x",
             use_cpp_shovel_step ? "cpp" : "original", options,
             query.output ? ld<uint32_t>(query.output + 4) : 0, unsigned(cpu.x[0]));
+}
+
+
+struct ShovelIntermediateServices : HeightGuestFrame {
+    explicit ShovelIntermediateServices(const CPU& caller) : HeightGuestFrame(caller, 0xc0, 0x60) {}
+
+    uint64_t stack(size_t offset) const { return cpu.x[31] + offset; }
+
+    void put_point(uint64_t address, acnh::ShovelTargetPoint point) const {
+        st<float>(address, point.x);
+        st<float>(address + 4, point.y);
+        st<float>(address + 8, point.z);
+    }
+
+    void prepare_offset(acnh::ShovelTargetPoint point) const { put_point(stack(8), point); }
+
+    bool blocked_at_center(uint64_t point, float radius) const {
+        return (invoke_child(main_base + 0x15ea0c8, 0x15e9cd0, {point}, radius).x[0] & 1) != 0;
+    }
+
+    float surface_height(uint64_t point, acnh::ShovelIntermediateHeight kind) const {
+        constexpr std::array resumes{0x15e9cf0u, 0x15e9d6cu, 0x15e9fa0u};
+        return invoke_child(main_base + 0x15e026c, resumes[static_cast<size_t>(kind)], {point, 0, 0}).v[0].f32[0];
+    }
+
+    float offset_surface_height() const {
+        return surface_height(stack(8), acnh::ShovelIntermediateHeight::offset);
+    }
+
+    uint32_t stage_hash(uint64_t owner, uint32_t index, bool center) const {
+        const auto getter = ld<uint64_t>(ld<uint64_t>(owner) + 0x18);
+        const uint64_t resume = center ? 0x15e9d30 : 0x15e9fe4;
+        const auto name = invoke_child(getter, resume, {owner, index}).x[0];
+        return uint32_t(invoke_child(main_base + 0x5bd550, resume + 0xc, {ld<uint64_t>(name), 0}).x[0]);
+    }
+
+    float stage_height_at(uint64_t point, uint16_t ordinal, uint64_t resume) const {
+        const auto context = stack(0x14);
+        st<uint16_t>(context, ordinal);
+        st<uint16_t>(context + 2, 0);
+        st<uint8_t>(context + 4, 1);
+        return invoke_child(main_base + 0x15e06d0, resume, {point, 0, 0, context, 0}).v[0].f32[0];
+    }
+
+    float stage_height(uint64_t point, uint16_t ordinal) const {
+        return stage_height_at(point, ordinal, 0x15e9dfc);
+    }
+
+    float offset_stage_height(uint16_t ordinal) const {
+        return stage_height_at(stack(8), ordinal, 0x15ea08c);
+    }
+
+    bool cast(acnh::ShovelTargetPoint point, float radius, acnh::ShovelIntermediateCast kind) const {
+        constexpr std::array resumes{0x15e9e6cu, 0x15e9f84u, 0x15e9ee0u};
+        const auto args = stack(0x14);
+        put_point(args, point);
+        st<float>(args + 0xc, radius);
+        st<float>(args + 0x10, 1.f);
+        st<uint32_t>(args + 0x14, kind == acnh::ShovelIntermediateCast::skip_offset ? 1 : 0x10);
+        st<uint32_t>(args + 0x18, 0);
+        return uint32_t(invoke_child(main_base + 0x15ed290, resumes[static_cast<size_t>(kind)], {args, 0, 0, 0}).x[0]) != 0;
+    }
+};
+
+Fn original_shovel_intermediate = nullptr;
+bool use_cpp_shovel_intermediate = false;
+bool trace_shovel_intermediate = false;
+
+void shovel_intermediate_adapter(CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    const auto frame = cpu.x[29];
+    if ((resume != 0x15f0fe4 && resume != 0x15f1044 && resume != 0x15f10a8)
+        || !frame || ld<uint64_t>(frame + 8) != main_base + 0x15f4190
+        || !is_shovel_point_classifier_frame(ld<uint64_t>(frame))) {
+        original_shovel_intermediate(cpu);
+        return;
+    }
+
+    const auto flags = unsigned((cpu.x[1] & 1) | ((cpu.x[2] & 1) << 1) | ((cpu.x[3] & 1) << 2));
+    const acnh::ShovelIntermediateQuery query{cpu.x[0], cpu.v[0].f32[0],
+        (flags & 1) == 0, (flags & 2) != 0, (flags & 4) != 0};
+    if (use_cpp_shovel_intermediate) {
+        ShovelIntermediateServices services{cpu};
+        cpu.x[0] = acnh::shovel_intermediate_point(main_base, query, GuestMemory{}, services);
+    } else {
+        original_shovel_intermediate(cpu);
+    }
+    if (trace_shovel_intermediate)
+        log("acnh shovel intermediate %s entry=15e9c80 call=%llx flags=%x radius=%x out=%x",
+            use_cpp_shovel_intermediate ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+            flags, std::bit_cast<uint32_t>(query.radius), unsigned(cpu.x[0]));
 }
 
 
@@ -3554,6 +3646,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_shovel_step = std::getenv("NX_ACNH_SHOVEL_STEP_TRACE") != nullptr;
     if (use_cpp_shovel_step || trace_shovel_step)
         wrap_function(entries, 0x15f0c64, shovel_step_adapter, original_shovel_step);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_INTERMEDIATE");
+    use_cpp_shovel_intermediate = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_intermediate = std::getenv("NX_ACNH_SHOVEL_INTERMEDIATE_TRACE") != nullptr;
+    if (use_cpp_shovel_intermediate || trace_shovel_intermediate)
+        wrap_function(entries, 0x15e9c80, shovel_intermediate_adapter, original_shovel_intermediate);
 
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_CONTEXT");
     use_cpp_shovel_stage_context = !mode || std::string_view(mode) == "cpp";

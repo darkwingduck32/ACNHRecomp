@@ -57,6 +57,15 @@ class FunctionReplayTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unexpected call"):
             function_replay.run(0x10000, code, regs, (), {}, callees={0x10004: (0x10200, callee)})
 
+    def test_replays_a_declared_indirect_tail_call(self):
+        code = bytes.fromhex("20001fd6")  # br x1
+        callee = bytes.fromhex("001c0091c0035fd6")
+        regs = {UC_ARM64_REG_X0: 35, UC_ARM64_REG_X1: 0x10100}
+        result = function_replay.run(0x10000, code, regs, (UC_ARM64_REG_X0,), {},
+                                     callees={0x10000: (0x10100, callee)})
+        self.assertEqual(result.registers[UC_ARM64_REG_X0], 42)
+        self.assertEqual(result.calls, ((0x10000, 0x10100, 35),))
+
     def test_replays_a_declared_tail_call(self):
         code = bytes.fromhex("40000014")  # b 0x10100
         callee = bytes.fromhex("001c0091c0035fd6")  # add x0, x0, #7; ret

@@ -3,6 +3,7 @@
 #include "../../../games/acnh/field_flag.h"
 #include "../../../games/acnh/field_record.h"
 #include "../../../games/acnh/field_queries.h"
+#include "../../../games/acnh/field_provider.h"
 #include "../../../games/acnh/record_category.h"
 #include "../../../games/acnh/tile_record_flag.h"
 
@@ -694,6 +695,201 @@ void field_cell_adapter(CPU& cpu) {
             ld<unsigned long long>(item.address));
 }
 
+template<size_t Index>
+void provider_method_adapter(CPU& cpu);
+
+struct ProviderMethodRoute {
+    uint64_t entry;
+    Fn adapter;
+    Fn original = nullptr;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<ProviderMethodRoute, 5> provider_methods{{
+    {0x11ac1e8, provider_method_adapter<0>},
+    {0x11ac290, provider_method_adapter<1>},
+    {0x261157c, provider_method_adapter<2>},
+    {0x2611584, provider_method_adapter<3>},
+    {0x261158c, provider_method_adapter<4>},
+}};
+bool use_cpp_provider_methods = false;
+bool trace_provider_methods = false;
+
+template<size_t Index>
+void provider_method_adapter(CPU& cpu) {
+    auto& route = provider_methods[Index];
+    const uint64_t caller = cpu.x[30] - main_base;
+    if (caller < 0x11e4fa8 || caller > 0x11e51d0 ||
+        ld<uint64_t>(cpu.x[29] + 8) != main_base + 0x1950414 ||
+        !shovel_cell_caller(ld<uint64_t>(ld<uint64_t>(cpu.x[29]) + 8) - main_base)) {
+        route.original(cpu);
+        return;
+    }
+
+    const uint64_t object = cpu.x[0];
+    const acnh::ProviderCell cell{static_cast<uint32_t>(cpu.x[1]), static_cast<uint32_t>(cpu.x[2])};
+    const bool trace = trace_provider_methods && route.samples.fetch_add(1, std::memory_order_relaxed) < 12;
+    uint64_t data = 0;
+    if (trace) {
+        if constexpr (Index == 0) data = ld<uint64_t>(object + 8);
+        if constexpr (Index == 4) data = ld<uint64_t>(object + 0x10);
+    }
+
+    if (use_cpp_provider_methods) {
+        const GuestMemory memory;
+        if constexpr (Index == 0) {
+            cpu.x[0] = acnh::provider_table({object}, memory, [&](uint64_t target) {
+                cpu.x[0] = target;
+                call(cpu, target);
+                return acnh::ProviderTable{cpu.x[0]};
+            }).address;
+        } else if constexpr (Index == 1) {
+            cpu.x[0] = acnh::provider_ready();
+        } else if constexpr (Index == 2) {
+            cpu.x[0] = acnh::provider_width();
+        } else if constexpr (Index == 3) {
+            cpu.x[0] = acnh::provider_height();
+        } else {
+            cpu.x[0] = acnh::provider_cell_offset({object}, cell, memory);
+        }
+    } else {
+        route.original(cpu);
+    }
+
+    if (trace)
+        log("acnh shovel provider method %s entry=%llx caller=%llx base=%llx object=%llx x=%x z=%x data=%llx out=%llx",
+            use_cpp_provider_methods ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+            static_cast<unsigned long long>(caller), static_cast<unsigned long long>(main_base),
+            static_cast<unsigned long long>(object), cell.x, cell.z,
+            static_cast<unsigned long long>(data), static_cast<unsigned long long>(cpu.x[0]));
+}
+
+struct ProviderReadServices {
+    const CPU& caller;
+    CPU cpu;
+    uint64_t stack;
+
+    explicit ProviderReadServices(const CPU& source)
+        : caller(source), cpu(source), stack(source.x[31] - 0x90) {
+        cpu.x[31] = stack;
+        cpu.x[29] = stack + 0x30;
+        st<uint64_t>(cpu.x[29], caller.x[29]);
+        st<uint64_t>(cpu.x[29] + 8, caller.x[30]);
+    }
+
+    uint64_t invoke(uint64_t object, uint64_t slot, uint64_t resume, acnh::ProviderCell cell = {}) const {
+        CPU nested = cpu;
+        nested.x[0] = object;
+        nested.x[1] = cell.x;
+        nested.x[2] = cell.z;
+        nested.x[30] = main_base + resume;
+        const auto target = ld<uint64_t>(ld<uint64_t>(object) + slot);
+        nested.x[8] = target;
+        call(nested, target);
+        return nested.x[0];
+    }
+
+    acnh::ProviderTable table(acnh::ProviderReader reader, acnh::ProviderTableUse use) const {
+        constexpr std::array resumes{0x11e4fa8, 0x11e4fd0, 0x11e5008, 0x11e50a4, 0x11e5170, 0x11e5194};
+        return {invoke(reader.address, 0, resumes[static_cast<size_t>(use)])};
+    }
+
+    uint32_t width(acnh::ProviderTable table, acnh::ProviderDimensionUse use) const {
+        constexpr std::array resumes{0x11e4fb4, 0x11e50b4, 0x11e517c};
+        return static_cast<uint32_t>(invoke(table.address, 0x18, resumes[static_cast<size_t>(use)]));
+    }
+
+    uint32_t height(acnh::ProviderTable table, acnh::ProviderDimensionUse use) const {
+        constexpr std::array resumes{0x11e4fdc, 0x11e50c8, 0x11e51a0};
+        return static_cast<uint32_t>(invoke(table.address, 0x20, resumes[static_cast<size_t>(use)]));
+    }
+
+    bool ready(acnh::ProviderReader reader) const {
+        return (invoke(reader.address, 0x10, 0x11e4ff4) & 1) != 0;
+    }
+
+    bool release_required(acnh::ProviderContext context) const {
+        return (invoke(context.address, 0, 0x11e50f4) & 1) != 0;
+    }
+
+    uint64_t offset(acnh::ProviderTable table, acnh::ProviderCell cell, bool anchor) const {
+        return invoke(table.address, 0x28, anchor ? 0x11e51d0 : 0x11e5118, cell);
+    }
+
+    acnh::ProviderAnchor resolve_anchor(acnh::FieldCellProvider provider, acnh::ProviderCell position) const {
+        const uint64_t point = stack + 0x20;
+        st<uint64_t>(point, main_base + 0x488d600);
+        st<uint32_t>(point + 8, position.x);
+        st<uint32_t>(point + 12, position.z);
+        CPU nested = cpu;
+        nested.x[0] = provider.address;
+        nested.x[1] = point;
+        nested.x[8] = stack;
+        nested.x[30] = main_base + 0x11e51b8;
+        call(nested, main_base + 0x11e4578);
+        return {{ld<uint64_t>(stack + 8)}, {ld<uint32_t>(stack + 0x14), ld<uint32_t>(stack + 0x18)}};
+    }
+
+    void cleanup_anchor() const {
+        CPU nested = cpu;
+        nested.x[0] = stack;
+        nested.x[30] = main_base + 0x11e5200;
+        call(nested, main_base + 0x2540184);
+    }
+
+    void release(acnh::ProviderContext context) const {
+        CPU nested = caller;
+        nested.x[0] = context.address;
+        nested.x[8] = ld<uint64_t>(context.address);
+        nested.x[1] = ld<uint64_t>(nested.x[8]);
+        call(nested, nested.x[1]);
+    }
+};
+
+Fn original_provider_cell = nullptr;
+bool use_cpp_provider_cell = false;
+bool trace_provider_cell = false;
+std::atomic<unsigned> provider_cell_samples{0};
+
+void provider_cell_adapter(CPU& cpu) {
+    const uint64_t parent = cpu.x[30] == main_base + 0x1950414
+        ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
+    if (!shovel_cell_caller(parent)) {
+        original_provider_cell(cpu);
+        return;
+    }
+
+    const acnh::ProviderQuery query{{cpu.x[0]}, {cpu.x[1]}, {cpu.x[2]}, {cpu.x[8]}};
+    const bool trace = trace_provider_cell && provider_cell_samples.fetch_add(1, std::memory_order_relaxed) < 24;
+    int32_t x = 0, z = 0, root_x = 0, root_z = 0;
+    uint32_t counter = 0;
+    if (trace) {
+        x = ld<int32_t>(query.point.address + 8);
+        z = ld<int32_t>(query.point.address + 12);
+        counter = ld<uint32_t>(query.provider.address + 0x1c4);
+        if (query.root.address) {
+            root_x = ld<int32_t>(query.root.address + 8);
+            root_z = ld<int32_t>(query.root.address + 12);
+        }
+    }
+
+    if (use_cpp_provider_cell) {
+        GuestMemory memory;
+        ProviderReadServices services{cpu};
+        acnh::read_provider_cell(main_base, query, memory, services);
+    } else {
+        original_provider_cell(cpu);
+    }
+
+    if (trace)
+        log("acnh shovel provider cell %s parent=%llx pos=%d,%d root_present=%u root=%d,%d resolved=%d,%d item=%llx counter=%x,%x",
+            use_cpp_provider_cell ? "cpp" : "original", static_cast<unsigned long long>(parent),
+            x, z, unsigned(query.root.address != 0), root_x, root_z,
+            query.root.address ? ld<int32_t>(query.root.address + 8) : 0,
+            query.root.address ? ld<int32_t>(query.root.address + 12) : 0,
+            ld<unsigned long long>(query.output.address), counter, ld<uint32_t>(query.provider.address + 0x1c4));
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -780,6 +976,19 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_field_cell = std::getenv("NX_ACNH_SHOVEL_FIELD_CELL_TRACE") != nullptr;
     if (use_cpp_field_cell || trace_field_cell)
         wrap_function(entries, 0x195033c, field_cell_adapter, original_field_cell);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_CELL");
+    use_cpp_provider_cell = mode && std::string_view(mode) == "cpp";
+    trace_provider_cell = std::getenv("NX_ACNH_PROVIDER_CELL_TRACE") != nullptr;
+    if (use_cpp_provider_cell || trace_provider_cell)
+        wrap_function(entries, 0x11e4f58, provider_cell_adapter, original_provider_cell);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_METHODS");
+    use_cpp_provider_methods = !mode || std::string_view(mode) == "cpp";
+    trace_provider_methods = std::getenv("NX_ACNH_PROVIDER_METHODS_TRACE") != nullptr;
+    if (use_cpp_provider_methods || trace_provider_methods)
+        for (auto& route : provider_methods)
+            wrap_function(entries, route.entry, route.adapter, route.original);
 
     mode = std::getenv("NX_ACNH_RECORD_CATEGORY");
     use_cpp_categories = !mode || std::string_view(mode) == "cpp";

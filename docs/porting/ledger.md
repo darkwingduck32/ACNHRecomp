@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 8.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 13.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -476,3 +476,36 @@ gather. This is the main remaining generated dependency inside the
 neighborhood query. Other pending paths include the alternate terrain
 predicate, the auxiliary item selector and the survey's outer
 classification routine.
+
+### Field provider methods
+
+The muted target probe in `tree-shake-default-shovelprovider1` observed
+318 virtual dispatch edges from 24 field-provider calls under the shovel
+gather. Five observed methods now default to handwritten C++ on this
+path. Set `NX_ACNH_PROVIDER_METHODS=original` to select the generated
+methods. The table accessor preserves its runtime-loaded tail target.
+
+| Entry | Live role | Independent replay cases | Captures per route |
+| --- | --- | ---: | ---: |
+| `0x11ac1e8` | Resolve the provider table | 27 | 12 |
+| `0x11ac290` | Report reader readiness | 27 | 12 |
+| `0x261157c` | Report table width | 27 | 12 |
+| `0x2611584` | Report table height | 27 | 12 |
+| `0x261158c` | Calculate the field record displacement | 74 | 12 |
+
+The original and opt-in runs are `tree-shake-original-providermethods1`
+and `tree-shake-cpp-providermethods1`. The default run is
+`tree-shake-default-providermethods2`. Each replay compares the native
+result with two runs of the pinned AArch64 function. The table accessor
+cases also check the dynamic target and argument forwarding. The
+normalized comparisons matched the full neighborhood and four shovel
+outcomes at tile (40, 69). All 13 CTest tests and all 14 replay and
+profile tests passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-providermethods1/nx.log"
+$c = "$r/tree-shake-default-providermethods2/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_methods --live $o $c
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-neighborhood $o $c --live-survey $o $c --survey-tile 40 69
+```

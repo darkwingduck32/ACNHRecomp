@@ -15,7 +15,7 @@ The action engine continues to own item removal, inventory, and hole creation.
 | `0x21f787c` | `0x1281c54` | Find the field record at a half-tile position | Verified C++ default through typed field queries |
 | `0x21f790c`, `0x21f7bb8` | `0x8773f0` | Check the alternate terrain condition | Generated, with leaf `0x880a10` |
 
-The shovel survey hook at `main+0x21f7618` consumes the generated
+The shovel survey hook at `main+0x21f7618` consumes the
 neighborhood results. Its fractional-placement path also uses the generated
 anchor lookup `main+0x15e1014` via the 3.0.3 field helper. This call does
 not appear among the survey's original direct BL instructions.
@@ -83,11 +83,33 @@ the 3-by-3 survey. The stock, opt-in and default runs matched its full
 scratch result, including the 36 records and the occupancy mask.
 Outside the shovel call site, its existing generated entry is used.
 
-The field provider `0x11e4f58` is still generated, including its virtual
-provider methods, occupancy filters and continuation resolution. Map
-those virtual targets from the gameplay trace before selecting the group
-that will replace the provider. The stage rule `0x16baf44`, item
+The field provider `0x11e4f58` still runs generated orchestration for the
+occupancy filter and record continuation. It calls five verified
+handwritten methods for table lookup, readiness and indexing. The stage rule `0x16baf44`, item
 initializer `0x267d4ac`, metadata predicate `0x19ee3b4`, extent helper
 `0x253fe7c`, terrain orchestration and item classification also remain
 generated. The runtime adapters keep these calls selectable and preserve
 the guest ABI. The shovel action engine continues after the survey.
+
+## Field provider dependencies
+
+All observed dispatch targets below came from the field-cell call at
+`0x1950410` under a shovel neighborhood gather.
+
+| Provider call sites | Runtime entry | State |
+| --- | --- | --- |
+| `0x11e4fa4`, `0x11e4fcc`, `0x11e5004`, `0x11e50a0`, `0x11e516c`, `0x11e5190` | `0x11ac1e8`, table lookup | Verified C++ default. The table resolver remains dynamic. |
+| `0x11e4ff0` | `0x11ac290`, readiness | Verified C++ default |
+| `0x11e4fb0`, `0x11e50b0`, `0x11e5178` | `0x261157c`, width | Verified C++ default |
+| `0x11e4fd8`, `0x11e50c4`, `0x11e519c` | `0x2611584`, height | Verified C++ default |
+| `0x11e5114`, `0x11e51cc` | `0x261158c`, record displacement | Verified C++ default |
+| `0x11e50f0`, tail `0x11e5284` | `0x260b860`, `0x260b934`, context callbacks | Generated |
+| `0x11e51b4`, `0x11e51fc` | `0x11e4578`, `0x2540184`, continuation resolve and cleanup | Generated |
+
+The typed provider read is the next dependency to remove. Its independent
+replay covers bounds rejection, masking, ordinary records, continuation
+records, optional root output and context release.
+Once the provider passes the gameplay comparison, the terrain dispatcher
+at `0x877130` is the next outer dependency. Its unported helpers at
+`0x848e68` and `0x871f80` share a call to `0x862530`. Trace them at
+`0x87732c` and `0x877254` to identify which branches the shovel actually uses.

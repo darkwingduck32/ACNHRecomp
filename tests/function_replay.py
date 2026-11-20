@@ -87,9 +87,10 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000, cal
         last_instruction = word
         opcode = word & 0xfc000000
         indirect = word & 0xfffffc1f == 0xd63f0000
+        indirect_tail = word & 0xfffffc1f == 0xd61f0000
         linked = opcode == 0x94000000 or indirect
-        if linked or (opcode == 0x14000000 and address in declared_calls):
-            if indirect:
+        if linked or ((opcode == 0x14000000 or indirect_tail) and address in declared_calls):
+            if indirect or indirect_tail:
                 register = (word >> 5) & 31
                 target = machine.reg_read(X_REGISTERS[register]) if register < 31 else 0
             else:

@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 72.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 74.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -1913,3 +1913,47 @@ actor on the original centerline. Retry with lateral movement after
 the first shovel action. The next group follows the previously
 observed alternate terrain property pair at `0x880630` and
 `0x881090` and its shared cache.
+
+### Alternate terrain material predicates
+
+The two predicates under `0x87bf30` now call the typed field
+query at all eight observed sites. They share the original column
+cache. The first checks slot 13 and returns false for a missing
+column. The second checks slot 6 and returns true for a missing
+column on a valid row. An absent row returns false for both.
+Set `NX_ACNH_SHOVEL_TERRAIN_PAIR=original` to select the generated
+predicates.
+
+| Entry | Independent standalone AArch64 cases | Calls per gameplay route |
+| --- | ---: | ---: |
+| `0x880630` | 585 | 9296 |
+| `0x881090` | 585 | 9296 |
+
+Each standalone suite includes nine distinct gameplay inputs. The
+48 additional paired replays pass the first result's cache into the
+second predicate and match the full order and values of the writes.
+Independent Linux and Windows replays also verified that the two
+existing terrain property modes preserve their earlier results and
+cache writes.
+
+The first two gameplay attempts recorded zero traces because the
+new adapters lacked dispatch registration. The archived probe
+reproduced all 24 sampled leaf calls on the half-tile fixture and
+identified the working scope. After registration, the original
+and opt-in terrainpair3 and default terrainpair4 runs matched all
+18,592 calls in order. Each requirement call consumed the prior
+rejection call's final cache. All eight neighborhoods, surveys,
+and final decisions matched. All 14 Release CTests and 14 Python
+profile and replay checks passed. The discovery scan replaced the
+two verified entries and the queue remains at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-terrainpair3"
+$c = "$r/tree-shake-default-terrainpair4"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_pair --live "$o/nx.log" "$c/nx.log"
+```
+
+The default run captured 12 calls into the generated alternate
+terrain rectangle check `0x87bf30` at `0x1288bd0`. The next
+group follows that rectangle check and its level and layer tests.

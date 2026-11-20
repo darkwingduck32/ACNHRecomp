@@ -527,6 +527,50 @@ void terrain_property_adapter(CPU& cpu) {
         cache_hex(read_cache(cache)).c_str(), reads.c_str());
 }
 
+constexpr std::array<uint64_t, 2> shovel_terrain_pair_entries{0x880630, 0x881090};
+std::array<Fn, 2> original_shovel_terrain_pair{};
+bool use_cpp_shovel_terrain_pair = false;
+bool trace_shovel_terrain_pair = false;
+
+template<size_t Index>
+void shovel_terrain_pair_adapter(CPU& cpu) {
+    constexpr std::array<std::array<uint64_t, 4>, 2> resumes{{
+        {0x87c0c0, 0x87c100, 0x87c140, 0x87c180},
+        {0x87c0f0, 0x87c130, 0x87c170, 0x87c1b0},
+    }};
+    const auto resume = cpu.x[30] - main_base;
+    if (std::find(resumes[Index].begin(), resumes[Index].end(), resume) == resumes[Index].end()) {
+        original_shovel_terrain_pair[Index](cpu);
+        return;
+    }
+    constexpr auto property = Index == 0 ? acnh::TerrainProperty::alternate_rejection
+                                         : acnh::TerrainProperty::alternate_requirement;
+    const acnh::TerrainTable table{cpu.x[0]};
+    const auto index = uint32_t(cpu.x[1]);
+    const auto cache = main_base + column_cache_offset;
+    std::string reads;
+    ColumnCache before{};
+    if (trace_shovel_terrain_pair) {
+        before = read_cache(cache);
+        ColumnSnapshot snapshot{cache, before, GuestMemory{&reads}};
+        acnh::FieldQueries{main_base, snapshot}.terrain_has(table, index, property);
+    }
+    if (use_cpp_shovel_terrain_pair) {
+        GuestMemory memory;
+        cpu.x[0] = acnh::FieldQueries{main_base, memory}.terrain_has(table, index, property);
+    } else {
+        original_shovel_terrain_pair[Index](cpu);
+    }
+    if (trace_shovel_terrain_pair)
+        log("acnh shovel terrain pair %s entry=%llx call=%llx index=%x out=%x before=%s after=%s base=%llx table=%llx reads=%s",
+            use_cpp_shovel_terrain_pair ? "cpp" : "original",
+            static_cast<unsigned long long>(shovel_terrain_pair_entries[Index]),
+            static_cast<unsigned long long>(resume - 4), index, unsigned(cpu.x[0]),
+            cache_hex(before).c_str(), cache_hex(read_cache(cache)).c_str(),
+            static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(table.address), reads.c_str());
+}
+
+
 constexpr uint64_t shovel_terrain_caller = 0x21f778c;
 Fn original_shovel_terrain = nullptr;
 Fn original_terrain_sample = nullptr;
@@ -4353,6 +4397,15 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_terrain_materials = !mode || std::string_view(mode) == "cpp";
     if (use_cpp_terrain_materials || trace_terrain_helpers)
         wrap_function(entries, 0x848e68, terrain_materials_adapter, original_terrain_materials);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_PAIR");
+    use_cpp_shovel_terrain_pair = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_terrain_pair = std::getenv("NX_ACNH_SHOVEL_TERRAIN_PAIR_TRACE") != nullptr;
+    if (use_cpp_shovel_terrain_pair || trace_shovel_terrain_pair) {
+        constexpr std::array<Fn, 2> pair{shovel_terrain_pair_adapter<0>, shovel_terrain_pair_adapter<1>};
+        for (size_t i = 0; i < pair.size(); ++i)
+            wrap_function(entries, shovel_terrain_pair_entries[i], pair[i], original_shovel_terrain_pair[i]);
+    }
 
     trace_terrain = std::getenv("NX_ACNH_SHOVEL_TERRAIN_TRACE") != nullptr;
     const char* const terrain_modes[]{"NX_ACNH_TERRAIN_DIGGABLE", "NX_ACNH_TERRAIN_ALTERNATE"};

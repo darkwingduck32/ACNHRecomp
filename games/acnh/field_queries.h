@@ -4,6 +4,7 @@
 #include "field_record.h"
 #include "tile_record_flag.h"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 
@@ -62,7 +63,7 @@ struct TerrainTable {
     uint64_t address;
 };
 
-enum class TerrainProperty { diggable, alternate };
+enum class TerrainProperty { diggable, alternate, alternate_rejection, alternate_requirement };
 
 struct HalfTileRecord {
     uint64_t address;
@@ -125,11 +126,17 @@ public:
     bool terrain_has(TerrainTable table, uint32_t index, TerrainProperty property) const {
         const uint64_t row = field_record(table.address + 8, index, memory_);
         if (!row) return false;
-        const bool diggable = property == TerrainProperty::diggable;
-        const uint32_t slot = diggable ? 4 : 9;
-        const uint32_t hash = diggable ? 0x472724ed : 0x0254bd05;
-        const uint64_t field = field_column(row, slot, hash, base_ + 0x4bfab80, memory_);
-        return field && memory_.template read<uint8_t>(field) != 0;
+        struct Column { uint32_t slot, hash; bool missing; };
+        constexpr std::array<Column, 4> columns{{
+            {4, 0x472724ed, false},
+            {9, 0x0254bd05, false},
+            {13, 0x58da05ed, false},
+            {6, 0x3e78dc38, true},
+        }};
+        const auto mode = static_cast<std::size_t>(property);
+        const auto& column = columns[mode < columns.size() ? mode : 1];
+        const uint64_t field = field_column(row, column.slot, column.hash, base_ + 0x4bfab80, memory_);
+        return field ? memory_.template read<uint8_t>(field) != 0 : column.missing;
     }
 
     uint32_t auxiliary_item_index(uint32_t kind) const {

@@ -40,12 +40,12 @@ with the [candidate queue](next-candidates.md). Verified so far, 4.
 | `0x1218220` | Read a tile record's bit flag | Verified | The extended-field trial replayed the promoted default. |
 | `0x1146470` | Resolve a column using a 25-slot cache | Verified | The muted trial replayed the promoted default. |
 | `0x113d890` | Test a bit in a cached record column | Verified | The muted trial replayed the promoted default. |
-| `0x1632d80` | Initialize four inline string buffers and descriptors | Queued | Validate self-relative pointers and exact writes. |
-| `0x5bd550` | Hash a terminated byte string with a seed | Queued | Capture a field-key call and validate dispatch costs. |
-| `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Queued | Establish repeatable input state and compare ordered writes. |
-| `0x24642a8` | Set or clear an action-mask bit | Queued | Find a scenario reaching a known caller. |
-| `0x1281c54` | Look up a half-tile record | Queued | Exercise the shovel survey caller. |
-| `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Queued | Establish live reachability, then compare fused operations. |
+| `0x1632d80` | Initialize four inline string buffers and descriptors | Default validation | Replay the default on the same tree-shake fixture. |
+| `0x5bd550` | Hash a terminated byte string with a seed | Default validation | Replay the default through the combined generated library. |
+| `0x112b8ec` | Advance the gameplay RNG and draw below 100 | Default validation | Compare the default with the original for each captured seed. |
+| `0x24642a8` | Set or clear an action-mask bit | Synthetic comparison | Find a player or NPC state that reaches a known caller. |
+| `0x1281c54` | Look up a half-tile record | Live trial | Compare both routes during the shovel survey. |
+| `0x3db4ed0` | Multiply a three-vector by a 3-by-3 matrix | Synthetic comparison | Find a scene that reaches the matrix multiply at `main+0x3dafc64`. |
 
 The action-mask no-op candidate failed case 0. The C++ implementation
 matched all 228 fixtures against two fresh Unicorn runs, including the
@@ -79,7 +79,8 @@ Use `NX_ACNH_ACTION_MASK=original` for the stock path.
 The tile query's constant-false candidate failed case 1. All 242
 synthetic cases and 24 paired live snapshots passed against two fresh
 original executions. Both opt-in gameplay runs hit the query 12 times
-from `main+0x14c4a70`. The default matched all 266 cases in the comparison with tree-shake-original-ext1/nx.log. `NX_ACNH_TILE_RECORD_FLAG=original` selects the original.
+from `main+0x14c4a70`. The default also matched all 266 cases against the original capture.
+Its capture is "tree-shake-original-ext1/nx.log". `NX_ACNH_TILE_RECORD_FLAG=original` selects the original.
 The captures are `tree-shake-original-tile1/nx.log` and
 `tree-shake-cpp-tile1/nx.log` in the campaign artifact directory.
 
@@ -99,3 +100,59 @@ with `NX_ACNH_FIELD_COLUMN_25=original` and `NX_ACNH_CACHED_FIELD_BIT=original`.
 & private/venv/Scripts/python -m private.heading.compare_leaf tile_record_flag
 & private/venv/Scripts/python -m private.heading.compare_leaf field_column_25
 ```
+
+### Inline string initialization, gameplay RNG and string hash
+
+The no-op string initializer, RNG and hash candidates failed their
+first differing reference cases. The native replacements matched 18,
+512 and 209 synthetic inputs respectively. The muted tree-shake trial
+in `tree-shake-{original,cpp}-state2/nx.log` captured 12 string
+initializations and three RNG draws per route, for 42 and 518 total
+cases against two Unicorn executions. The replay uses each exact
+observed seed and allocated object snapshot. The RNG output and all
+ordered state writes matched. The constructor replay compared all
+512 object bytes and descriptor writes.
+
+The terminated hash comparison of `tree-shake-{original,cpp}-hash1/nx.log`
+matched 48 calls covering the startup and field-key callers, all with a zero
+seed. The 257 total cases include synthetic nonzero seeds, alignment,
+and lengths around four-byte boundaries. Redirecting the 9,107 static
+hash call sites added about 75 KiB to the full generated DLL. Both routes
+completed the live scenario. The Release build passed all 13 CTest tests,
+and the dispatch, hook profile and replay suites passed nine tests.
+The three defaults are undergoing replay through the combined DLL.
+
+The `treewhole` fixture's `main.dat` SHA-256 is
+`070c4b0ea8cb6078fa1e1132b7e3106860d67db6c66fdd4089ca261728e6b0d3`.
+Use `NX_ACNH_INLINE_STRINGS=original`, `NX_ACNH_GAMEPLAY_PERCENT=original`
+or `NX_ACNH_TERMINATED_HASH=original` to select each original function.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+& private/venv/Scripts/python -m private.heading.compare_leaf field_state --live "$r/tree-shake-original-state2/nx.log" "$r/tree-shake-cpp-state2/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf terminated_hash --live "$r/tree-shake-original-hash1/nx.log" "$r/tree-shake-cpp-hash1/nx.log"
+```
+
+### Half-tile lookup, action bit updates and vector multiplication
+
+The synthetic no-op candidates left expected writes missing or returned
+null for a populated record. Two reference runs agreed with the native
+implementations on 455 half-tile, 90 action-bit and 256 finite-vector
+cases. The offline vector cases cover input and output aliasing.
+
+A muted shovel survey using the disposable `half` fixture recorded 12
+calls to `main+0x1281c54` from `main+0x21f787c` in
+`tree-shake-original-shovel1/console.log`. Its `main.dat` SHA-256 is
+`5e2c0538fdd036a28d6fbe733723002a7ad75cb7e37134cdb7a8cfaF9c34fe4f`.
+The test runner sets `NX_MUTE=1`. The paired shovel trial uses
+`PORT_FIXTURE=half`, `PORT_SCENARIO=shovel` and `PORT_TRACE_HALF_TILE=1`.
+The opt-in path is `NX_ACNH_HALF_TILE_RECORD=cpp`.
+
+```powershell
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives
+```
+
+The tree-shake and shovel probes did not reach the action-bit writer or
+matrix multiply. The original behavior remains active for those entries.
+The next discovery probe includes nearby field predicates and both
+outstanding call sites.

@@ -48,3 +48,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 1218220 # Read a tile record bit flag
 # dispatch 1146470 # Resolve a column using the 25-slot cache
 # dispatch 113d890 # Read a bit through the 25-slot column cache
+# dispatch 1632d80 # Initialize inline string storage
+# dispatch 112b8ec # Draw a gameplay percentage
+# dispatch 5bd550 # Hash a terminated field key
+# dispatch 1281c54 # Look up a half-tile field record

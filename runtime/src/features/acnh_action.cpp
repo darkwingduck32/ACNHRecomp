@@ -1,4 +1,7 @@
 #include "../../../games/acnh/action_mask.h"
+#include "../../../games/acnh/field_primitives.h"
+#include "../../../games/acnh/field_state.h"
+#include "../../../games/acnh/terminated_hash.h"
 
 #include "features/camera/version_303.h"
 #include "features/module_hooks.h"
@@ -6,6 +9,8 @@
 #include "mod_package.h"
 #include "platform.h"
 
+#include <atomic>
+#include <string>
 #include <cstdlib>
 #include <string_view>
 #include <nx/runtime.h>
@@ -53,15 +58,165 @@ void action_mask_adapter(CPU& cpu) {
         ld<unsigned long long>(object + 0x20), unsigned(ld<uint8_t>(object + 0x28)));
 }
 
+Fn original_inline_strings = nullptr;
+Fn original_gameplay_percent = nullptr;
+bool use_cpp_strings = false;
+bool use_cpp_percent = false;
+bool trace_field_state = false;
+std::atomic<unsigned> string_samples{0};
+std::atomic<unsigned> percent_samples{0};
+
+std::string field_bytes(uint64_t address, size_t size) {
+    constexpr char digits[] = "0123456789abcdef";
+    std::string result;
+    result.reserve(2 * size);
+    for (size_t i = 0; i < size; ++i) {
+        const auto value = ld<uint8_t>(address + i);
+        result.push_back(digits[value >> 4]);
+        result.push_back(digits[value & 0xf]);
+    }
+    return result;
+}
+
+void inline_strings_adapter(CPU& cpu) {
+    const uint64_t object = cpu.x[0];
+    const auto apply = [&] {
+        if (use_cpp_strings) {
+            GuestMemory memory;
+            acnh::initialize_inline_strings(main_base, object, memory);
+        } else original_inline_strings(cpu);
+    };
+    if (!trace_field_state || cpu.x[30] - main_base != 0x15fd47c) {
+        apply();
+        return;
+    }
+    const auto sample = string_samples.fetch_add(1, std::memory_order_relaxed);
+    if (sample >= 12) {
+        apply();
+        return;
+    }
+    log("acnh field state %s entry=1632d80 sample=%u base=%llx object=%llx descriptor=%llx before=%s",
+        use_cpp_strings ? "cpp" : "original", sample,
+        static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(object),
+        ld<unsigned long long>(main_base + 0x4ab2bc0), field_bytes(object, 0x200).c_str());
+    apply();
+    log("acnh field state result sample=%u after=%s out=%llx", sample,
+        field_bytes(object, 0x200).c_str(), static_cast<unsigned long long>(cpu.x[0]));
+}
+
+void gameplay_percent_adapter(CPU& cpu) {
+    const auto apply = [&] {
+        if (use_cpp_percent) {
+            GuestMemory memory;
+            cpu.x[0] = acnh::draw_gameplay_percent(main_base, memory);
+        } else original_gameplay_percent(cpu);
+    };
+    if (!trace_field_state || cpu.x[30] - main_base != 0x21bc414 ||
+        percent_samples.fetch_add(1, std::memory_order_relaxed) >= 12) {
+        apply();
+        return;
+    }
+    const uint64_t address = main_base + 0x504cb58;
+    const auto before = field_bytes(address, 16);
+    apply();
+    log("acnh field state %s entry=112b8ec base=%llx object=0 descriptor=0 before=%s after=%s out=%llx",
+        use_cpp_percent ? "cpp" : "original", static_cast<unsigned long long>(main_base),
+        before.c_str(), field_bytes(address, 16).c_str(), static_cast<unsigned long long>(cpu.x[0]));
+}
+
+Fn original_terminated_hash = nullptr;
+bool use_cpp_hash = false;
+bool trace_hash = false;
+std::atomic<unsigned> hash_samples{0};
+
+void terminated_hash_adapter(CPU& cpu) {
+    const uint64_t address = cpu.x[0];
+    const uint32_t seed = static_cast<uint32_t>(cpu.x[1]);
+    const uint64_t caller = cpu.x[30] - main_base;
+    const bool trace = trace_hash && (caller == 0x5bd7a8 ||
+        (caller >= 0x15dec40 && caller < 0x15e026c)) &&
+        hash_samples.fetch_add(1, std::memory_order_relaxed) < 48;
+    std::string bytes;
+    if (trace) {
+        size_t length = 0;
+        while (length < 512 && ld<uint8_t>(address + length)) ++length;
+        if (length < 512) bytes = field_bytes(address, length + 1);
+    }
+    if (use_cpp_hash) cpu.x[0] = acnh::terminated_hash(address, seed, GuestMemory{});
+    else original_terminated_hash(cpu);
+    if (!bytes.empty())
+        log("acnh terminated hash %s caller=%llx seed=%x w0=%x bytes=%s",
+            use_cpp_hash ? "cpp" : "original", static_cast<unsigned long long>(caller), seed,
+            static_cast<uint32_t>(cpu.x[0]), bytes.c_str());
+}
+
+Fn original_half_tile = nullptr;
+bool use_cpp_half_tile = false;
+bool trace_half_tile = false;
+std::atomic<unsigned> half_tile_samples{0};
+
+void half_tile_adapter(CPU& cpu) {
+    const uint64_t grid = cpu.x[0];
+    const uint64_t query = cpu.x[1];
+    GuestMemory memory;
+    const auto apply = [&] {
+        if (use_cpp_half_tile) cpu.x[0] = acnh::half_tile_record(main_base, grid, query, memory);
+        else original_half_tile(cpu);
+    };
+    const uint64_t caller = cpu.x[30] - main_base;
+    if (!trace_half_tile || caller != 0x21f7880 ||
+        half_tile_samples.fetch_add(1, std::memory_order_relaxed) >= 24) {
+        apply();
+        return;
+    }
+
+    const auto x = acnh::half_tile_coordinate(ld<int32_t>(query + 8));
+    const auto z = acnh::half_tile_coordinate(ld<int32_t>(query + 12));
+    const uint64_t record = acnh::tile_record(main_base + 0x50a50f0, grid, x, z, memory);
+    const auto grid_bytes = field_bytes(grid, 0xa8);
+    const auto query_bytes = field_bytes(query, 16);
+    const auto record_bytes = field_bytes(record, 0x68);
+    apply();
+    log("acnh half tile %s caller=%llx base=%llx grid=%llx query=%llx record=%llx out=%llx g=%s q=%s r=%s",
+        use_cpp_half_tile ? "cpp" : "original", static_cast<unsigned long long>(caller),
+        static_cast<unsigned long long>(main_base), static_cast<unsigned long long>(grid),
+        static_cast<unsigned long long>(query), static_cast<unsigned long long>(record),
+        static_cast<unsigned long long>(cpu.x[0]), grid_bytes.c_str(), query_bytes.c_str(),
+        record_bytes.c_str());
+}
+
 void install_action_mask(const ModuleInfo& module, FuncEntry* entries) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
+    main_base = module.base;
+    const std::span<FuncEntry> functions{entries, module.func_count};
     const char* mode = std::getenv("NX_ACNH_ACTION_MASK");
     use_cpp = !mode || std::string_view(mode) == "cpp";
     trace_mask = std::getenv("NX_ACNH_ACTION_MASK_TRACE") != nullptr;
-    if (!use_cpp && !trace_mask) return;
-    main_base = module.base;
-    wrap_function({entries, module.func_count}, mask_entry, action_mask_adapter, original_mask);
+    if (use_cpp || trace_mask)
+        wrap_function(functions, mask_entry, action_mask_adapter, original_mask);
+
+    mode = std::getenv("NX_ACNH_INLINE_STRINGS");
+    use_cpp_strings = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_GAMEPLAY_PERCENT");
+    use_cpp_percent = !mode || std::string_view(mode) == "cpp";
+    trace_field_state = std::getenv("NX_ACNH_FIELD_STATE_TRACE") != nullptr;
+    if (use_cpp_strings || trace_field_state)
+        wrap_function(functions, 0x1632d80, inline_strings_adapter, original_inline_strings);
+    if (use_cpp_percent || trace_field_state)
+        wrap_function(functions, 0x112b8ec, gameplay_percent_adapter, original_gameplay_percent);
+
+    mode = std::getenv("NX_ACNH_TERMINATED_HASH");
+    use_cpp_hash = !mode || std::string_view(mode) == "cpp";
+    trace_hash = std::getenv("NX_ACNH_TERMINATED_HASH_TRACE") != nullptr;
+    if (use_cpp_hash || trace_hash)
+        wrap_function(functions, 0x5bd550, terminated_hash_adapter, original_terminated_hash);
+
+    mode = std::getenv("NX_ACNH_HALF_TILE_RECORD");
+    use_cpp_half_tile = mode && std::string_view(mode) == "cpp";
+    trace_half_tile = std::getenv("NX_ACNH_HALF_TILE_RECORD_TRACE") != nullptr;
+    if (use_cpp_half_tile || trace_half_tile)
+        wrap_function(functions, 0x1281c54, half_tile_adapter, original_half_tile);
 }
 
 }  // namespace

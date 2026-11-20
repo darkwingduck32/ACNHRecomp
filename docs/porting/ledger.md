@@ -2041,3 +2041,45 @@ The collision probes still reach the generated stage-specific
 height and stage field lookup calls at `0x15e12bc` and
 `0x15ec8b4`. The next group follows those calls and their
 observed record and sampler dependencies.
+
+### Stage height and field lookup inside the collision probes
+
+The collision height probe now uses the typed stage-height query
+at `0x15e12bc`. Its base-height sampler and primary item lookup
+also run in C++, along with the current-stage overlay and grid
+sampling. The stage record selection runs in C++ both under the
+item resolver and at the collision item probe's direct
+`0x15ec8b4` call. Set `NX_ACNH_SHOVEL_COLLISION_STAGE=original`
+to select the generated route for these six functions.
+
+| Entry | Independent AArch64 cases | Focal calls per gameplay route |
+| --- | ---: | ---: |
+| `0x15e06d0` | 124 | 720 |
+| `0x15e80f0` | 59 | 720 |
+| `0x15e7980` | 73 | 720 |
+| `0x195190c` | 240 | 888 |
+| `0x83a950` | 128 | 720 |
+| `0x862700` | 672 | 720 |
+
+The first collisionstage1 run sent inventory input during scene
+loading, so it produced no shovel surveys. With a wait before
+equipping, the original and opt-in collisionstage2 runs and the
+default collisionstage3 run matched all 4,488 calls at tile
+(40,69). The four surveys, neighborhoods, and final decisions
+also matched the whole-original classdeep2 fixture. All 14
+Release CTests and 14 Python profile and replay checks passed.
+The six bodies retain their original entries. The Batch 3
+count is 75, and the discovery queue contains 100 candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-collisionstage2"
+$c = "$r/tree-shake-default-collisionstage3"
+& private/venv/Scripts/python -m tests.acnh_shovel_collision_stage_live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The original trace did not capture the provider tail call
+`0x11eb21c` at `0x19519ec` because the test library called it
+directly. The provider still uses generated code in this scope.
+Retry the provider and its paired bounds predicate in a smaller
+group with both calls routed through dispatch.

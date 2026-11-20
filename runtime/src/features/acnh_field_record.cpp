@@ -754,13 +754,15 @@ bool trace_sampler_terrain = false;
 bool use_cpp_sampler_terrain = false;
 
 enum class ShovelHeightScope {
-    unrelated, target, classifier, intermediate, stage_base = 5, obstacle, cast, collision_probe,
+    unrelated, target, classifier, intermediate, stage_base = 5, obstacle, cast, collision_probe, collision_stage,
 };
 
 bool use_cpp_shovel_cast_height = false;
 bool trace_shovel_cast_height = false;
 bool use_cpp_shovel_collision_height = false;
 bool trace_shovel_collision_height = false;
+bool use_cpp_shovel_collision_stage = false;
+bool trace_shovel_collision_stage = false;
 bool is_shovel_collision_probe_frame(uint64_t frame);
 bool is_cast_sampler_frame(uint64_t frame, bool ground);
 bool is_shovel_step_cast_frame(uint64_t frame);
@@ -936,12 +938,14 @@ ShovelHeightScope shovel_surface_frame(uint64_t frame) {
 bool use_cpp_height_scope(ShovelHeightScope scope) {
     if (scope == ShovelHeightScope::cast) return use_cpp_shovel_cast_height;
     if (scope == ShovelHeightScope::collision_probe) return use_cpp_shovel_collision_height;
+    if (scope == ShovelHeightScope::collision_stage) return use_cpp_shovel_collision_stage;
     return use_cpp_shovel_height_chain;
 }
 
 bool trace_height_scope(ShovelHeightScope scope) {
     if (scope == ShovelHeightScope::cast) return trace_shovel_cast_height;
     if (scope == ShovelHeightScope::collision_probe) return trace_shovel_collision_height;
+    if (scope == ShovelHeightScope::collision_stage) return trace_shovel_collision_stage;
     return trace_shovel_height_chain;
 }
 
@@ -1448,6 +1452,11 @@ bool is_shovel_stage_height_frame(uint64_t frame) {
         && is_shovel_point_classifier_frame(ld<uint64_t>(frame));
 }
 
+bool is_shovel_collision_stage_height_frame(uint64_t frame) {
+    return frame && ld<uint64_t>(frame + 8) == main_base + 0x15e12c0
+        && is_shovel_collision_probe_frame(ld<uint64_t>(frame));
+}
+
 bool is_shovel_stage_item_resume(uint64_t resume) {
     return resume == 0x15e0798 || resume == 0x15e0c54;
 }
@@ -1458,6 +1467,13 @@ bool is_shovel_stage_record_call(uint64_t resume, uint64_t frame) {
     return resume == 0x15e7bf4 && frame
         && is_shovel_stage_item_resume(ld<uint64_t>(frame + 8) - main_base)
         && is_shovel_stage_height_frame(ld<uint64_t>(frame));
+}
+
+bool is_shovel_collision_stage_record_call(uint64_t resume, uint64_t frame) {
+    if (resume == 0x15ec8b8) return is_shovel_collision_probe_frame(frame);
+    return resume == 0x15e7bf4 && frame
+        && is_shovel_stage_item_resume(ld<uint64_t>(frame + 8) - main_base)
+        && is_shovel_collision_stage_height_frame(ld<uint64_t>(frame));
 }
 
 Fn original_shovel_provider_record = nullptr;
@@ -1545,55 +1561,68 @@ struct ShovelStageContextServices : HeightGuestFrame {
 template<size_t Index>
 void shovel_stage_context_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
-    bool scoped;
-    if constexpr (Index == 0) scoped = resume == 0x15e0724 && is_shovel_stage_height_frame(cpu.x[29]);
-    if constexpr (Index == 1) scoped = is_shovel_stage_item_resume(resume) && is_shovel_stage_height_frame(cpu.x[29]);
-    if constexpr (Index == 2) scoped = is_shovel_stage_record_call(resume, cpu.x[29]);
-    if (!scoped) {
+    const auto frame = cpu.x[29];
+    bool scoped, collision;
+    if constexpr (Index == 0) {
+        scoped = resume == 0x15e0724 && is_shovel_stage_height_frame(frame);
+        collision = resume == 0x15e0724 && is_shovel_collision_stage_height_frame(frame);
+    }
+    if constexpr (Index == 1) {
+        scoped = is_shovel_stage_item_resume(resume) && is_shovel_stage_height_frame(frame);
+        collision = is_shovel_stage_item_resume(resume) && is_shovel_collision_stage_height_frame(frame);
+    }
+    if constexpr (Index == 2) {
+        scoped = is_shovel_stage_record_call(resume, frame);
+        collision = is_shovel_collision_stage_record_call(resume, frame);
+    }
+    if (!scoped && !collision) {
         original_shovel_stage_context[Index](cpu);
         return;
     }
 
     GuestMemory memory;
-    const char* route = use_cpp_shovel_stage_context ? "cpp" : "original";
+    const bool native = use_cpp_shovel_stage_context && (!collision || use_cpp_shovel_collision_stage);
+    const bool trace = collision ? trace_shovel_collision_stage : trace_shovel_stage_context;
+    const char* route = native ? "cpp" : "original";
+    const char* scope = collision ? "collision stage" : "stage context";
     const auto site = static_cast<unsigned long long>(resume - 4);
     if constexpr (Index == 0) {
         const acnh::ShovelStageBaseHeightQuery query{cpu.x[0], cpu.x[1], {cpu.x[2]}};
-        if (use_cpp_shovel_stage_context) {
+        if (native) {
             ShovelStageContextServices services{cpu, Index};
             cpu.v[0].f32[0] = acnh::ShovelStageContextQueries{main_base, memory}.base_height(query, services);
         } else {
             original_shovel_stage_context[Index](cpu);
         }
-        if (trace_shovel_stage_context)
-            log("acnh shovel stage context %s entry=15e80f0 call=%llx stage=%x flag=%x material=%x out=%x",
-                route, site, unsigned(ld<uint16_t>(query.context.address)), unsigned(ld<uint8_t>(query.context.address + 2)),
+        if (trace)
+            log("acnh shovel %s %s entry=15e80f0 call=%llx stage=%x flag=%x material=%x out=%x",
+                scope, route, site, unsigned(ld<uint16_t>(query.context.address)), unsigned(ld<uint8_t>(query.context.address + 2)),
                 query.material ? ld<uint32_t>(query.material) : 0, std::bit_cast<uint32_t>(cpu.v[0].f32[0]));
     } else if constexpr (Index == 1) {
         const acnh::ShovelStageFieldQuery query{{cpu.x[0]}, {cpu.x[1]}, uint32_t(cpu.x[2]), {cpu.x[3]}};
-        if (use_cpp_shovel_stage_context) {
+        if (native) {
             ShovelStageContextServices services{cpu, Index};
             cpu.x[0] = acnh::ShovelStageContextQueries{main_base, memory}.field_item(query, services).address;
         } else {
             original_shovel_stage_context[Index](cpu);
         }
-        if (trace_shovel_stage_context)
-            log("acnh shovel stage context %s entry=15e7980 call=%llx stage=%x layer=%x root=%d,%d out=%llx",
-                route, site, unsigned(ld<uint16_t>(query.context.address)), query.layer,
+        if (trace)
+            log("acnh shovel %s %s entry=15e7980 call=%llx stage=%x layer=%x root=%d,%d out=%llx",
+                scope, route, site, unsigned(ld<uint16_t>(query.context.address)), query.layer,
                 query.root.address ? ld<int32_t>(query.root.address + 8) : 0,
                 query.root.address ? ld<int32_t>(query.root.address + 12) : 0,
                 ld<unsigned long long>(cpu.x[0]));
     } else {
         const acnh::ShovelStageCellQuery query{cpu.x[0], uint32_t(cpu.x[1]), {cpu.x[2]}, {cpu.x[3]}};
-        if (use_cpp_shovel_stage_context) {
+        if (native) {
             ShovelStageContextServices services{cpu, Index};
             cpu.x[0] = acnh::shovel_stage_cell(main_base, query, memory, services).address;
         } else {
             original_shovel_stage_context[Index](cpu);
         }
-        if (trace_shovel_stage_context)
-            log("acnh shovel stage context %s entry=195190c call=%llx table=%x stage=%x layer=%x root=%d,%d out=%llx",
-                route, site, ld<uint32_t>(query.stage + 8), ld<uint32_t>(query.stage + 12), query.layer,
+        if (trace)
+            log("acnh shovel %s %s entry=195190c call=%llx table=%x stage=%x layer=%x root=%d,%d out=%llx",
+                scope, route, site, ld<uint32_t>(query.stage + 8), ld<uint32_t>(query.stage + 12), query.layer,
                 query.root.address ? ld<int32_t>(query.root.address + 8) : 0,
                 query.root.address ? ld<int32_t>(query.root.address + 12) : 0,
                 ld<unsigned long long>(cpu.x[0]));
@@ -1720,21 +1749,26 @@ struct ShovelStageHeightServices : HeightGuestFrame {
 };
 
 void shovel_stage_height_adapter(CPU& cpu) {
-    if (cpu.x[30] != main_base + 0x15f3ffc || !is_shovel_point_classifier_frame(cpu.x[29])) {
+    const auto resume = cpu.x[30] - main_base;
+    const bool collision = resume == 0x15e12c0 && is_shovel_collision_probe_frame(cpu.x[29]);
+    const bool classifier = resume == 0x15f3ffc && is_shovel_point_classifier_frame(cpu.x[29]);
+    if (!classifier && !collision) {
         original_shovel_stage_height(cpu);
         return;
     }
     const acnh::ShovelStageHeightQuery query{cpu.x[0], cpu.x[1], cpu.x[3], uint32_t(cpu.x[2]), (cpu.x[4] & 1) != 0};
-    if (use_cpp_shovel_stage_height) {
+    const bool native = use_cpp_shovel_stage_height && (!collision || use_cpp_shovel_collision_stage);
+    if (native) {
         GuestMemory memory;
         ShovelStageHeightServices services{cpu};
         cpu.v[0].f32[0] = acnh::ShovelStageHeight{main_base, memory, services}.sample(query);
     } else {
         original_shovel_stage_height(cpu);
     }
-    if (trace_shovel_stage_height)
-        log("acnh shovel stage height %s entry=15e06d0 call=15f3ff8 flags=%x stage=%x extra=%u material=%x out=%x",
-            use_cpp_shovel_stage_height ? "cpp" : "original", query.flags, unsigned(ld<uint16_t>(query.stage)),
+    if (collision ? trace_shovel_collision_stage : trace_shovel_stage_height)
+        log("acnh shovel %s %s entry=15e06d0 call=%llx flags=%x stage=%x extra=%u material=%x out=%x",
+            collision ? "collision stage" : "stage height", native ? "cpp" : "original",
+            static_cast<unsigned long long>(resume - 4), query.flags, unsigned(ld<uint16_t>(query.stage)),
             unsigned(query.include_special_items), query.material ? ld<uint32_t>(query.material) : 0,
             std::bit_cast<uint32_t>(cpu.v[0].f32[0]));
 }
@@ -1958,6 +1992,7 @@ ShovelHeightScope shovel_sampler_scope(bool ground, uint64_t resume, uint64_t fr
         return ShovelHeightScope::cast;
     if (ground || !frame) return ShovelHeightScope::unrelated;
     if (resume == 0x15e0724 && is_shovel_stage_height_frame(frame)) return ShovelHeightScope::stage_base;
+    if (resume == 0x15e0724 && is_shovel_collision_stage_height_frame(frame)) return ShovelHeightScope::collision_stage;
     constexpr std::array resumes{0x15ea86cu, 0x15ea8d0u, 0x15ea954u, 0x15ea9c8u, 0x15eaa40u,
                                  0x15eaab4u, 0x15eab2cu, 0x15eaba8u, 0x15eac24u};
     if (std::find(resumes.begin(), resumes.end(), resume) != resumes.end()
@@ -4357,6 +4392,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x877130, shovel_terrain_adapter, original_shovel_terrain);
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_SAMPLE");
     use_cpp_terrain_sample = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_STAGE");
+    use_cpp_shovel_collision_stage = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_collision_stage = std::getenv("NX_ACNH_SHOVEL_COLLISION_STAGE_TRACE") != nullptr;
+
     mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_HEIGHT");
     use_cpp_shovel_collision_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_collision_height = std::getenv("NX_ACNH_SHOVEL_COLLISION_HEIGHT_TRACE") != nullptr;
@@ -4393,7 +4432,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT");
     use_cpp_shovel_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
-    if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height)
+    if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
 
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_PROVIDER");
@@ -4435,7 +4474,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_CONTEXT");
     use_cpp_shovel_stage_context = !mode || std::string_view(mode) == "cpp";
     trace_shovel_stage_context = std::getenv("NX_ACNH_SHOVEL_STAGE_CONTEXT_TRACE") != nullptr;
-    if (use_cpp_shovel_stage_context || trace_shovel_stage_context) {
+    if (use_cpp_shovel_stage_context || trace_shovel_stage_context || trace_shovel_collision_stage) {
         constexpr std::array<Fn, 3> context_adapters{
             shovel_stage_context_adapter<0>, shovel_stage_context_adapter<1>, shovel_stage_context_adapter<2>};
         for (size_t i = 0; i < context_adapters.size(); ++i)
@@ -4445,7 +4484,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_STAGE_HEIGHT");
     use_cpp_shovel_stage_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_stage_height = std::getenv("NX_ACNH_SHOVEL_STAGE_HEIGHT_TRACE") != nullptr;
-    if (use_cpp_shovel_stage_height || trace_shovel_stage_height)
+    if (use_cpp_shovel_stage_height || trace_shovel_stage_height || trace_shovel_collision_stage)
         wrap_function(entries, 0x15e06d0, shovel_stage_height_adapter, original_shovel_stage_height);
 
     mode = std::getenv("NX_ACNH_SHOVEL_POINT_HEIGHT");
@@ -4475,7 +4514,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     for (size_t i = 0; i < height_adapters.size(); ++i) {
         const char* setting = std::getenv(shovel_height_switches[i]);
         use_cpp_shovel_height[i] = !setting || std::string_view(setting) == "cpp";
-        if (use_cpp_shovel_height[i] || trace_shovel_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || (i == 0 && trace_shovel_point_height))
+        if (use_cpp_shovel_height[i] || trace_shovel_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || (i == 0 && trace_shovel_point_height))
             wrap_function(entries, shovel_height_entries[i], height_adapters[i], original_shovel_height[i]);
     }
 

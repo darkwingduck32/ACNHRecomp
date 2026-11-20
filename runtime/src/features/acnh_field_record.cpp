@@ -5,7 +5,7 @@
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
 #include "../../../games/acnh/field_provider_anchor.h"
-#include "../../../games/acnh/field_provider_binding.h"
+#include "../../../games/acnh/field_provider_storage.h"
 #include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
@@ -1731,6 +1731,33 @@ void provider_binding_adapter(CPU& cpu) {
     }
 }
 
+Fn original_provider_storage = nullptr;
+bool use_cpp_provider_storage = false;
+bool trace_provider_storage = false;
+std::atomic<unsigned> provider_storage_samples{0};
+
+void provider_storage_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint64_t frame = cpu.x[29];
+    if ((caller != 0x1267394 && caller != 0x12673c4) ||
+        !provider_table_binding_caller(ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame))) {
+        original_provider_storage(cpu);
+        return;
+    }
+
+    const acnh::ProviderBinding binding{cpu.x[0]};
+    const bool trace = trace_provider_storage && provider_storage_samples.fetch_add(1, std::memory_order_relaxed) < 24;
+    const auto expected = (use_cpp_provider_storage || trace)
+        ? acnh::provider_bound_storage(binding, GuestMemory{}).address : 0;
+    if (use_cpp_provider_storage) cpu.x[0] = expected;
+    else original_provider_storage(cpu);
+    if (trace)
+        log("acnh shovel provider storage %s caller=%llx binding=%llx input=%llx out=%llx",
+            use_cpp_provider_storage ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(binding.address), static_cast<unsigned long long>(expected),
+            static_cast<unsigned long long>(cpu.x[0]));
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -1871,6 +1898,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_provider_binding || trace_provider_binding)
         for (auto& route : provider_binding_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_STORAGE");
+    use_cpp_provider_storage = !mode || std::string_view(mode) == "cpp";
+    trace_provider_storage = std::getenv("NX_ACNH_PROVIDER_STORAGE_TRACE") != nullptr;
+    if (use_cpp_provider_storage || trace_provider_storage)
+        wrap_function(entries, 0x260bd50, provider_storage_adapter, original_provider_storage);
 
     mode = std::getenv("NX_ACNH_PROVIDER_METHODS");
     use_cpp_provider_methods = !mode || std::string_view(mode) == "cpp";

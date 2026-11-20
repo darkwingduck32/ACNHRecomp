@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 32.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 33.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -730,3 +730,16 @@ The smaller `shovelmissretry1` trial used the disposable `exactfixed`
 fixture. It captured 48 diggable property calls and 19 item-ID
 calls. It did not reach the deferred alternate terrain
 `0x880a10` or auxiliary item index `0x1a03610`.
+
+### Provider storage access
+
+`0x260bd50` now defaults to C++ under the observed table resolver.
+The original route is selectable with `NX_ACNH_PROVIDER_STORAGE=original`.
+Both AArch64 replays matched all 12 synthetic cases and the 48 live
+pointer snapshots in each original comparison. The original, opt-in and
+default runs captured 24 calls per route. The complete focal surveys,
+neighborhoods and final decisions matched.
+
+The same runs observed stage-name accessor `0x5cb0a0` at the gather's
+virtual call `0x127cb2c`; every recorded call used stage index 1.
+That fixed-stride lookup is the next eligible stage dependency.

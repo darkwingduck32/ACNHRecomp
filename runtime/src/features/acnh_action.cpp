@@ -333,6 +333,9 @@ void survey_items_adapter(CPU& cpu) {
             before.c_str(), field_bytes(first.address, 36 * 8).c_str());
 }
 
+bool trace_shovel_stage_lookup = false;
+std::atomic<unsigned> shovel_stage_lookup_samples{0};
+
 struct ShovelGatherServices {
     CPU cpu;
     uint64_t stack;
@@ -354,7 +357,11 @@ struct ShovelGatherServices {
         nested.x[0] = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab2640));
         nested.x[1] = index;
         nested.x[30] = main_base + 0x127cb30;
-        call(nested, ld<uint64_t>(ld<uint64_t>(nested.x[0]) + 0x18));
+        const auto target = ld<uint64_t>(ld<uint64_t>(nested.x[0]) + 0x18);
+        call(nested, target);
+        if (trace_shovel_stage_lookup && shovel_stage_lookup_samples.fetch_add(1, std::memory_order_relaxed) < 12)
+            log("acnh shovel stage lookup target=%llx index=%x",
+                static_cast<unsigned long long>(target - main_base), index);
         nested.x[0] = ld<uint64_t>(nested.x[0]);
         nested.x[1] = 0;
         nested.x[30] = main_base + 0x127cb3c;
@@ -521,6 +528,7 @@ void install_acnh_action(const ModuleInfo& module, FuncEntry* entries) {
     if (use_cpp_survey_items || trace_survey_items)
         wrap_function(functions, 0x127c524, survey_items_adapter, original_survey_items);
 
+    trace_shovel_stage_lookup = std::getenv("NX_ACNH_SHOVEL_STAGE_LOOKUP_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_SHOVEL_GATHER");
     use_cpp_shovel_gather = !mode || std::string_view(mode) == "cpp";
     trace_shovel_gather = std::getenv("NX_ACNH_SHOVEL_GATHER_TRACE") != nullptr;

@@ -60,7 +60,7 @@ shovel survey consumes these outputs at `0x21f7618`.
 
 | Gather call site | Target | Status |
 | --- | --- | --- |
-| `0x127cb2c` | Virtual stage lookup | Generated |
+| `0x127cb2c` | Virtual stage lookup, observed `0x5cb0a0` | Generated |
 | `0x127cb38` | Hash the stage key | Verified C++ default |
 | `0x127cb68` | `0x16baf44` stage predicate | Verified C++ default with both stage-key helpers |
 | `0x127cc84`, `0x127cf84`, `0x127cfd0`, `0x127cff8` | `0x195033c` field-cell lookup | Verified C++ default on these four call sites |
@@ -147,8 +147,8 @@ The neighborhood stage filter `0x16baf44` and both stage-key helpers
 `0x16f37d0` and `0x16f3a18` now default to C++. The virtual stage
 lookup still returns the runtime stage name. The continuation
 resolver and cleanup are also verified on the shovel path. The next
-group is the storage accessor `0x260bd50` beneath the now-native table
-resolver `0x1267360`. The provider calls the resolver through the
+stage group is the observed name lookup `0x5cb0a0`. The provider storage
+accessor `0x260bd50` and table resolver `0x1267360` default to C++. The provider calls the resolver through the
 runtime-loaded target in `0x11ac1e8`. The context dispatch thunks also
 default to C++, and forward to generated `0x25ee660` and `0x25ee758`.
 

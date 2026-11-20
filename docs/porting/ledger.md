@@ -2662,7 +2662,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 15.
+two promoted material queries. Verified so far, 20.
 
 Implementation continues on the typed shovel traversal path.
 
@@ -2848,3 +2848,34 @@ verified functions and 100 discovery candidates. The separate
 `traversalwest1` fixture reached nine outer traversals and 342
 sweep casts with a raised west strip. It produced no alternate-axis
 calls, so that route still uses generated code.
+
+### Terrain properties and field bookkeeping
+
+Five functions now run in typed C++ at eight observed call sites.
+The terrain property pair shares the existing column-cache resolver.
+Its first result feeds the second as a zero-extended value. The other
+operations resolve layer bounds, build a terrain flag summary, and
+enqueue a half tile. Set `NX_ACNH_FIELD_BOOKKEEPING=original` to
+select the generated bodies for the measured calls.
+
+| Entry | Unwind size | Typed operation | Original AArch64 cases | Stage |
+| --- | --- | --- | ---: | --- |
+| `0x16bfae0` | `0x198` | Resolve the cached terrain property | 324 | Verified |
+| `0x16c0910` | `0x120` | Read the cached terrain flag | 324 | Verified |
+| `0x194fa00` | `0xfc` | Resolve field-layer bounds | 14 | Verified |
+| `0x874bc8` | `0x150` | Write a terrain flag summary | 168 | Verified |
+| `0x128367c` | `0xe4` | Enqueue a half tile | 288 | Verified |
+
+The 1,118 cases matched both original AArch64 executions, including
+cache stores, overlapping flag outputs, and queue and bitmap
+write order. A separate original replay ran the two property
+calls together and verified that the cold cache populated slots
+7 and 8 in order, while the warm calls made no cache writes.
+
+Original and opt-in `fieldbook1` and default `fieldbook2`
+matched 1,792 records in per-function order across all eight
+sites. The eight surveys, neighborhoods, and final decisions
+also matched. All 14 Release CTests and 14 profile and replay
+checks passed. Batch 4 has 20 verified functions and 100
+discovery candidates. The catalog attribute and description
+queries are the next observed group.

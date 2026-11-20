@@ -111,6 +111,11 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 15f27e0 # Sample the highest point near a shovel traversal position
 # dispatch 15f23b0 # Sweep positions along a shovel traversal segment
 # dispatch 11eb21c # Read a record and anchor from the selected field provider view
+# dispatch 16bfae0 # Read a cached terrain property value
+# dispatch 16c0910 # Check a cached terrain property flag
+# dispatch 194fa00 # Resolve field layer bounds
+# dispatch 874bc8 # Fill a terrain flag summary
+# dispatch 128367c # Enqueue a half tile for field work
 # dispatch 21e094 # Advance a field action ring index
 # dispatch 21e0f8 # Check the first field action slot
 # dispatch 21e17c # Check the second field action slot

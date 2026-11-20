@@ -4,6 +4,7 @@
 #include "../../../games/acnh/field_record.h"
 #include "../../../games/acnh/field_value_cache.h"
 #include "../../../games/acnh/field_action_state.h"
+#include "../../../games/acnh/field_bookkeeping.h"
 #include "../../../games/acnh/field_scan_queries.h"
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
@@ -272,7 +273,7 @@ struct FieldWritePreview {
         uint64_t value;
     };
 
-    std::array<Write, 4> writes{};
+    std::array<Write, 10> writes{};
     size_t count = 0;
 
     template<class T>
@@ -504,6 +505,118 @@ void field_action_adapter(CPU& cpu) {
         use_cpp_field_action ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
         static_cast<unsigned long long>(resume - 4), event, writes.c_str(), match ? "match" : "mismatch",
         static_cast<unsigned long long>(output - base_position), inputs.empty() ? "" : " inputs=", inputs.c_str());
+}
+
+struct FieldBookkeepingRoute { uint64_t entry; std::array<uint64_t, 4> resumes; };
+constexpr std::array<FieldBookkeepingRoute, 5> field_bookkeeping_routes{{
+    {0x16bfae0, {0x852aec}}, {0x16c0910, {0x852af8}}, {0x194fa00, {0x144c9bc}},
+    {0x874bc8, {0x87e188, 0x87e1c8, 0x87e208, 0x87e244}}, {0x128367c, {0x12622ac}},
+}};
+std::array<Fn, field_bookkeeping_routes.size()> original_field_bookkeeping{};
+bool use_cpp_field_bookkeeping = false;
+bool trace_field_bookkeeping = false;
+
+template<size_t Index, class Memory>
+uint64_t field_bookkeeping_query(uint64_t object, uint64_t first, uint64_t second, Memory& memory) {
+    if constexpr (Index == 0) {
+        return acnh::terrain_property_u16(main_base, {object}, uint32_t(first), memory);
+    } else if constexpr (Index == 1) {
+        return acnh::terrain_property_flag(main_base, {object}, uint32_t(first), memory);
+    } else if constexpr (Index == 2) {
+        return acnh::field_layer_bounds(main_base, {object}, memory).address;
+    } else if constexpr (Index == 3) {
+        acnh::terrain_flag_summary({object}, {first}, {second}, memory);
+    } else {
+        acnh::enqueue_half_tile({object}, uint32_t(first), uint32_t(second), memory);
+    }
+    return object;
+}
+
+template<size_t Index>
+void field_bookkeeping_adapter(CPU& cpu) {
+    constexpr auto route = field_bookkeeping_routes[Index];
+    const auto original = original_field_bookkeeping[Index];
+    const auto resume = cpu.x[30] - main_base;
+    const auto site = std::find(route.resumes.begin(), route.resumes.end(), resume);
+    if (!resume || site == route.resumes.end() || (!use_cpp_field_bookkeeping && !trace_field_bookkeeping)) {
+        original(cpu);
+        return;
+    }
+    const auto object = cpu.x[0], first = cpu.x[1], second = cpu.x[2];
+    bool trace = false;
+    if (trace_field_bookkeeping) {
+        static std::array<std::atomic<uint64_t>, route.resumes.size()> calls{};
+        const auto count = calls[size_t(site - route.resumes.begin())].fetch_add(1, std::memory_order_relaxed) + 1;
+        trace = count <= 256 || std::has_single_bit(count);
+    }
+    GuestMemory memory;
+    FieldWritePreview preview;
+    uint64_t expected = trace ? field_bookkeeping_query<Index>(object, first, second, preview) : 0;
+    uint32_t key = 0, extra = 0;
+    if (trace) {
+        if constexpr (Index < 2) key = uint32_t(first);
+        if constexpr (Index == 2) key = ld<uint32_t>(object + 8);
+        if constexpr (Index == 3) {
+            key = ld<uint32_t>(first + 8);
+            extra = ld<uint32_t>(first + 12);
+        }
+        if constexpr (Index == 4) {
+            key = uint16_t(first);
+            extra = uint16_t(second);
+        }
+    }
+    if (use_cpp_field_bookkeeping) {
+        if constexpr (Index == 2) {
+            if (trace) {
+                CPU reference = cpu;
+                original(reference);
+                expected = reference.x[0];
+            }
+        }
+        cpu.x[0] = field_bookkeeping_query<Index>(object, first, second, memory);
+    } else {
+        original(cpu);
+    }
+    if (!trace) return;
+
+    bool match = cpu.x[0] == expected;
+    std::string writes;
+    for (size_t i = 0; i < preview.count; ++i) {
+        const auto& write = preview.writes[i];
+        uint64_t actual, wanted, offset;
+        switch (write.size) {
+        case 1: actual = ld<uint8_t>(write.address); wanted = preview.read<uint8_t>(write.address); break;
+        case 4: actual = ld<uint32_t>(write.address); wanted = preview.read<uint32_t>(write.address); break;
+        default: actual = ld<uint64_t>(write.address); wanted = preview.read<uint64_t>(write.address); break;
+        }
+        if constexpr (Index < 2) {
+            const auto ready = ld<uint64_t>(main_base + 0x4ab5c58);
+            const auto slots = ld<uint64_t>(main_base + 0x4ab5c60);
+            offset = write.address == ready ? 0x38 : write.address - slots;
+        } else if constexpr (Index == 3) {
+            offset = write.address - second;
+        } else {
+            offset = write.address - object;
+            if (offset > 0x30) {
+                const auto bitmap = ld<uint64_t>(object + 0x10);
+                const auto records = ld<uint64_t>(object + 0x20);
+                const auto bitmap_size = 4ull * ((uint64_t(ld<uint32_t>(object + 0x18)) + 31) / 32);
+                offset = write.address - bitmap < bitmap_size
+                   ? 0x100000000ull + write.address - bitmap
+                   : 0x200000000ull + write.address - records;
+            }
+        }
+        match &= actual == wanted;
+        char field[80];
+        std::snprintf(field, sizeof(field), "%llx:%zu:%llx,", static_cast<unsigned long long>(offset),
+                      write.size, static_cast<unsigned long long>(actual));
+        writes.append(field);
+    }
+    const uint64_t output = Index < 2 ? cpu.x[0] : Index == 2 ? cpu.x[0] != main_base + 0x5200388 : 0;
+    log("acnh field bookkeeping %s entry=%llx call=%llx key=%x,%x writes=%s same_input=%s out=%llx",
+        use_cpp_field_bookkeeping ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+        static_cast<unsigned long long>(resume - 4), key, extra, writes.c_str(),
+        match ? "match" : "mismatch", static_cast<unsigned long long>(output));
 }
 
 void field_column_adapter(CPU& cpu) {
@@ -5897,6 +6010,18 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         };
         for (size_t i = 0; i < adapters.size(); ++i)
             wrap_function(entries, field_action_routes[i].entry, adapters[i], original_field_action[i]);
+    }
+
+    mode = std::getenv("NX_ACNH_FIELD_BOOKKEEPING");
+    use_cpp_field_bookkeeping = !mode || std::string_view(mode) == "cpp";
+    trace_field_bookkeeping = std::getenv("NX_ACNH_FIELD_BOOKKEEPING_TRACE") != nullptr;
+    if (use_cpp_field_bookkeeping || trace_field_bookkeeping) {
+        constexpr std::array<Fn, field_bookkeeping_routes.size()> adapters{
+            field_bookkeeping_adapter<0>, field_bookkeeping_adapter<1>,
+            field_bookkeeping_adapter<2>, field_bookkeeping_adapter<3>, field_bookkeeping_adapter<4>,
+        };
+        for (size_t i = 0; i < adapters.size(); ++i)
+            wrap_function(entries, field_bookkeeping_routes[i].entry, adapters[i], original_field_bookkeeping[i]);
     }
 
     mode = std::getenv("NX_ACNH_FIELD_SCAN");

@@ -163,8 +163,8 @@ descriptor metadata.
 ## Remaining generated dependencies
 
 On the verified shovel path, context acquisition and release are typed
-C++. The context-flag lookup `0x2601110` is the first generated call
-during acquisition. The paired-handle helper `0x262e9bc` and release
+C++. The context-flag lookup `0x2601110` also uses C++. Its imported thread
+resolver and virtual name refresh calls stay at the guest boundary. The paired-handle helper `0x262e9bc` and release
 helper `0x37568c0` remain behind the runtime boundary. The live fixture
 exercised mode 1 with both handles set and the guard disabled.
 

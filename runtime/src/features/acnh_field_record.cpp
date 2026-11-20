@@ -7,6 +7,7 @@
 #include "../../../games/acnh/field_provider_anchor.h"
 #include "../../../games/acnh/field_provider_storage.h"
 #include "../../../games/acnh/field_provider_context.h"
+#include "../../../games/acnh/field_provider_context_flag.h"
 #include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
@@ -1736,6 +1737,37 @@ Fn original_provider_context_acquire = nullptr;
 Fn original_provider_context_release = nullptr;
 bool use_cpp_provider_context = false;
 bool trace_provider_context = false;
+bool use_cpp_provider_context_flag = false;
+bool trace_provider_context_flag = false;
+std::atomic<unsigned> provider_context_flag_samples{0};
+
+struct ProviderContextFlagServices {
+    CPU frame;
+
+    explicit ProviderContextFlagServices(const CPU& caller) : frame(caller) {
+        frame.x[31] -= 0x30;
+        st<uint64_t>(frame.x[31], caller.x[29]);
+        st<uint64_t>(frame.x[31] + 8, main_base + 0x25ee678);
+        frame.x[29] = frame.x[31];
+    }
+
+    uint64_t resolve_thread(uint32_t id) const {
+        CPU nested = frame;
+        nested.x[0] = id;
+        nested.x[30] = main_base + 0x260113c;
+        call(nested, main_base + 0x3f033a0);
+        return nested.x[0];
+    }
+
+    void refresh_thread_name(uint64_t receiver, unsigned index) const {
+        constexpr uint64_t resumes[]{0x2601174, 0x2601184, 0x26011f8, 0x2601208};
+        CPU nested = frame;
+        nested.x[0] = receiver;
+        nested.x[8] = ld<uint64_t>(ld<uint64_t>(receiver) + 0x18);
+        nested.x[30] = main_base + resumes[index];
+        call(nested, nested.x[8]);
+    }
+};
 
 struct ProviderContextServices {
     CPU frame;
@@ -1757,7 +1789,22 @@ struct ProviderContextServices {
     }
 
     uint64_t disabled_flag(acnh::ProviderContextOwner owner) {
-        return invoke(0x2601110, 0x25ee678, owner.address);
+        uint64_t result;
+        if (use_cpp_provider_context_flag) {
+            ProviderContextFlagServices services{frame};
+            result = acnh::provider_context_flag(main_base, owner, GuestMemory{}, services);
+        } else {
+            result = invoke(0x2601110, 0x25ee678, owner.address);
+        }
+        if (trace_provider_context_flag &&
+            provider_context_flag_samples.fetch_add(1, std::memory_order_relaxed) < 24) {
+            log("acnh shovel context flag %s caller=%llx out=%llx value=%u",
+                use_cpp_provider_context_flag ? "cpp" : "original",
+                static_cast<unsigned long long>(caller.x[30] - main_base),
+                static_cast<unsigned long long>(result ? result - owner.address : 0),
+                result ? unsigned(ld<uint8_t>(result)) : 0);
+        }
+        return result;
     }
 
     void enter_guard(uint64_t guard) { invoke(0x3f03880, 0x25ee6bc, guard); }
@@ -1993,6 +2040,9 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         for (auto& route : provider_binding_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
 
+    mode = std::getenv("NX_ACNH_PROVIDER_CONTEXT_FLAG");
+    use_cpp_provider_context_flag = !mode || std::string_view(mode) == "cpp";
+    trace_provider_context_flag = std::getenv("NX_ACNH_PROVIDER_CONTEXT_FLAG_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_PROVIDER_CONTEXT");
     use_cpp_provider_context = !mode || std::string_view(mode) == "cpp";
     trace_provider_context = std::getenv("NX_ACNH_PROVIDER_CONTEXT_TRACE") != nullptr;

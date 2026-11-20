@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 36.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 37.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -826,3 +826,33 @@ The first remaining call in the observed acquire path is the generated
 context-flag lookup `0x2601110`. Capture its thread-selection branch
 before continuing to the paired-handle helper `0x262e9bc` and release
 helper `0x37568c0`.
+
+
+### Provider context-flag lookup
+
+The lookup at `0x2601110` defaults to C++ inside native shovel context
+acquisition. The generated route is selectable with
+`NX_ACNH_PROVIDER_CONTEXT_FLAG=original`. The import at `0x3f033a0`
+and virtual name refreshes remain at the guest boundary.
+
+The independent replay matched two AArch64 executions in each of 64
+cases, including manager and thread selection, pointer equality, string
+matching, and callback effects that clear the manager slot or switch
+the vtable. The `providerflag1` original and opt-in runs and
+`providerflag2` default run each captured 24 lookups (19 ordinary
+reads and five continuation reads), all returning flag offset `0x450`
+with value zero. Each run matched all four focal shovel surveys,
+neighborhoods, and final decisions at (40, 69). All 13 Release CTest
+checks passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-providerflag1"
+$c = "$r/tree-shake-default-providerflag2"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_context_flag --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+Next, exercise the paired-handle helper `0x262e9bc`. The live mode-1
+acquire route with a clear flag and guard reaches it after thread
+resolution. The intermediate target `0x3f033a0` is a guest import thunk.

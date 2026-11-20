@@ -90,6 +90,12 @@ order, arguments, atomic state transitions, and output writes before
 selecting a typed boundary. `0x146b080` is a related game-thread
 capture candidate. Its four direct sites are in `0x1461a34`.
 
+The worker-grid checkpoint routes `0x11fca98`, `0x11fcac0` and
+`0x11fd70c` to the typed height sampler. The worker parents,
+`0x146a660`, and `0x146ab80` still run generated. The next capture
+will identify the callback and enqueue effects of one complete
+`0x146a660` invocation. See the [verification ledger](ledger.md#terrain-worker-grid-sampling).
+
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.
 

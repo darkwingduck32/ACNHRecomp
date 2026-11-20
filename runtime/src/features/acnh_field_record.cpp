@@ -1767,6 +1767,28 @@ bool is_shovel_height_child_frame(uint64_t frame, uint64_t expected_resume) {
 Fn original_shovel_grid_height = nullptr;
 bool use_cpp_shovel_grid_height = false;
 bool trace_shovel_grid_height = false;
+bool use_cpp_worker_grid_height = false;
+bool trace_worker_grid_height = false;
+constexpr std::array worker_grid_height_resumes{0x11fca9cu, 0x11fcac4u, 0x11fd710u};
+
+bool worker_grid_height_site(const CPU& cpu, uint64_t resume) {
+    const auto sp = cpu.x[31];
+    const auto fp = cpu.x[29];
+    if (!sp || (sp & 15) || uint32_t(cpu.x[3]) != 1)
+        return false;
+
+    switch (resume) {
+    case 0x11fca9c:
+    case 0x11fcac4:
+        return fp == sp + 0x60 && cpu.x[1] == sp + 0x3c
+            && cpu.x[2] == sp + 0x4c && cpu.x[4] == sp + 0x48;
+    case 0x11fd710:
+        return fp == sp + 0xb0 && cpu.x[4] == sp + 0x64
+            && cpu.x[1] == sp + 0x58 && cpu.x[2] == sp + 0x28;
+    default:
+        return false;
+    }
+}
 
 ShovelHeightScope shovel_grid_scope(const CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
@@ -1778,16 +1800,44 @@ ShovelHeightScope shovel_grid_scope(const CPU& cpu) {
 }
 
 void shovel_grid_height_adapter(CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    const bool worker_frame = (use_cpp_worker_grid_height || trace_worker_grid_height)
+        && worker_grid_height_site(cpu, resume);
+    const auto worker_material = worker_frame ? ld<uint32_t>(cpu.x[2]) : 0;
+    const bool worker = worker_frame && (worker_material == 5 || worker_material == 7);
+    if (trace_worker_grid_height && !worker) {
+        const auto site = std::find(worker_grid_height_resumes.begin(), worker_grid_height_resumes.end(), resume);
+        if (site != worker_grid_height_resumes.end()) {
+            static std::array<std::atomic<unsigned>, worker_grid_height_resumes.size()> misses{};
+            if (misses[size_t(site - worker_grid_height_resumes.begin())].fetch_add(
+                    1, std::memory_order_relaxed) < 3) {
+                const auto sp = cpu.x[31];
+                log("acnh worker grid rejected call=%llx frame=%u w3=%x fp=%llx point=%llx material=%llx override=%llx seed=%x",
+                    static_cast<unsigned long long>(resume - 4), unsigned(worker_frame), uint32_t(cpu.x[3]),
+                    static_cast<unsigned long long>(cpu.x[29] - sp), static_cast<unsigned long long>(cpu.x[1] - sp),
+                    static_cast<unsigned long long>(cpu.x[2] - sp), static_cast<unsigned long long>(cpu.x[4] - sp),
+                    worker_material);
+            }
+        }
+    }
     const auto scope = shovel_grid_scope(cpu);
-    if (scope == ShovelHeightScope::unrelated) {
+    if (!worker && scope == ShovelHeightScope::unrelated) {
         original_shovel_grid_height(cpu);
         return;
     }
-    const auto resume = cpu.x[30] - main_base;
     const acnh::GridHeightQuery query{{cpu.x[0]}, cpu.x[1], cpu.x[2], cpu.x[4], (cpu.x[3] & 1) != 0};
     const bool extended = is_new_height_scope(scope);
-    const bool native = use_cpp_shovel_grid_height && (!extended || use_cpp_height_scope(scope));
-    const bool trace = extended ? trace_height_scope(scope) : trace_shovel_grid_height;
+    const bool native = worker ? use_cpp_worker_grid_height
+        : use_cpp_shovel_grid_height && (!extended || use_cpp_height_scope(scope));
+    bool trace = worker ? trace_worker_grid_height
+        : (extended ? trace_height_scope(scope) : trace_shovel_grid_height);
+    if (worker && trace) {
+        static std::array<std::atomic<uint64_t>, worker_grid_height_resumes.size()> samples{};
+        const auto site = std::find(worker_grid_height_resumes.begin(), worker_grid_height_resumes.end(), resume);
+        const auto count = samples[size_t(site - worker_grid_height_resumes.begin())].fetch_add(
+            1, std::memory_order_relaxed) + 1;
+        trace = count <= 256 || std::has_single_bit(count);
+    }
     if (!trace) {
         if (native) {
             GuestMemory memory;
@@ -1817,7 +1867,13 @@ void shovel_grid_height_adapter(CPU& cpu) {
     } else {
         cpu = reference;
     }
-    if (extended) {
+    if (worker) {
+        log("acnh worker grid height %s same_input=%s call=%llx point=%x,%x,%x ground=%u before=%x override_before=%x kind=%x override=%u out=%x",
+            native ? "cpp" : "original", comparison, static_cast<unsigned long long>(resume - 4),
+            ld<uint32_t>(query.point), ld<uint32_t>(query.point + 4), ld<uint32_t>(query.point + 8),
+            unsigned(query.ground_only), before, unsigned(override_before), ld<uint32_t>(query.material),
+            unsigned(ld<uint8_t>(query.override_present)), std::bit_cast<uint32_t>(cpu.v[0].f32[0]));
+    } else if (extended) {
         log("acnh shovel height chain %s entry=862700 same_input=%s call=%llx scope=%u ground=%u kind=%x override=%u out=%x",
             native ? "cpp" : "original", comparison, static_cast<unsigned long long>(resume - 4), unsigned(scope),
             unsigned(query.ground_only), ld<uint32_t>(query.material), unsigned(ld<uint8_t>(query.override_present)),
@@ -5804,7 +5860,11 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT");
     use_cpp_shovel_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
-    if (use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_stage || trace_shovel_traversal_legs)
+    mode = std::getenv("NX_ACNH_WORKER_GRID_HEIGHT");
+    use_cpp_worker_grid_height = !mode || std::string_view(mode) == "cpp";
+    trace_worker_grid_height = std::getenv("NX_ACNH_WORKER_GRID_HEIGHT_TRACE") != nullptr;
+    if (use_cpp_worker_grid_height || trace_worker_grid_height
+        || use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_stage || trace_shovel_traversal_legs)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
 
     mode = std::getenv("NX_ACNH_SHOVEL_SWEEP_RECORD");

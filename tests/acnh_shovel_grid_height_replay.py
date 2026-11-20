@@ -28,7 +28,7 @@ def compare_grid_live(paths, tile):
         compare_live(paths, tuple(tile) if tile else None, (ENTRY,), TRACE)
 
 
-def fixture(point, mode, variant, slopes):
+def fixture(point, mode, variant, slopes, initial_material=0xa1b2c3d4):
     grid = bytearray(0x78)
     struct.pack_into("<f", grid, 0x28, (4.0, 5.0, 7.0)[variant % 3])
     struct.pack_into("<f", grid, 0x2c, (2.5 if slopes else 0.0))
@@ -47,7 +47,7 @@ def fixture(point, mode, variant, slopes):
             records.extend(struct.pack("<12f4B", *floats, *kinds))
         tables[start] = bytes(records)
     return {GRID: bytes(grid), POINT: struct.pack("<3f", point[0], 0, point[1]),
-            MATERIAL: struct.pack("<I", 0xa1b2c3d4), OVERRIDE: b"\xEE", FLAGS: struct.pack("<4I", *([bits]*4)),
+            MATERIAL: struct.pack("<I", initial_material), OVERRIDE: b"\xEE", FLAGS: struct.pack("<4I", *([bits]*4)),
             **tables}
 
 
@@ -57,6 +57,8 @@ def main():
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
     parser.add_argument("--survey-tile", nargs=2, type=int, metavar=("X", "Z"))
+    parser.add_argument("--worker", action="store_true",
+                        help="Use the worker's ground-only mode and initial materials 5 and 7.")
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
@@ -68,17 +70,21 @@ def main():
     points = ((-0.2, 1), (1, -0.2), (50, 50), (0, 0), (1, 0.5), (0.5, 1), (2, 2),
               (4, 1), (1, 4), (4, 4), (4.999, 4.999), (5, 5), (7.5, 6), (9.9, 9.99))
     cases = []
-    for point, mode, variant, ground_only, slopes in itertools.product(points, range(3), range(4), (0, 1), (0, 1)):
-        cases.append((point, mode, variant, ground_only, slopes, fixture(point, mode, variant, slopes)))
+    ground_modes = (1,) if args.worker else (0, 1)
+    materials = (5, 7) if args.worker else (0xa1b2c3d4,)
+    for point, mode, variant, ground_only, slopes, material in itertools.product(
+            points, range(3), range(4), ground_modes, (0, 1), materials):
+        memory = fixture(point, mode, variant, slopes, material)
+        cases.append((point, mode, variant, ground_only, slopes, material, memory))
     payload = []
-    for _, _, _, ground_only, _, memory in cases:
+    for _, _, _, ground_only, _, _, memory in cases:
         pairs = [(a+i, byte) for a,data in memory.items() for i,byte in enumerate(data)]
         payload.append(" ".join(map(str, [ground_only, len(pairs), *(v for pair in pairs for v in pair)])))
     results = subprocess.run([str(args.candidate.resolve())], input="\n".join(payload)+"\n",
                              capture_output=True, text=True, check=True, timeout=45).stdout.splitlines()
     if len(results) != len(cases):
         raise SystemExit("candidate returned the wrong number of cases")
-    for (point, mode, variant, ground_only, slopes, memory), line in zip(cases, results):
+    for (point, mode, variant, ground_only, slopes, material, memory), line in zip(cases, results):
         regs = {UC_ARM64_REG_X0: GRID, UC_ARM64_REG_X1: POINT, UC_ARM64_REG_X2: MATERIAL,
                 UC_ARM64_REG_X3: ground_only, UC_ARM64_REG_X4: OVERRIDE}
         first = run(BASE+ENTRY, code, regs, (UC_ARM64_REG_S0,), memory)
@@ -88,7 +94,7 @@ def main():
                     first.memory[OVERRIDE][0], *(value for write in first.writes for value in write)]
         actual = list(map(int, line.split()))
         if actual != expected:
-            raise SystemExit(f"{point=}, {mode=}, {variant=}, {ground_only=}, {slopes=}: "
+            raise SystemExit(f"{point=}, {mode=}, {variant=}, {ground_only=}, {slopes=}, {material=}: "
                              f"original {expected}; C++ {actual}")
     print(f"{ENTRY:#x}: {len(cases)} cases match both original AArch64 runs")
 

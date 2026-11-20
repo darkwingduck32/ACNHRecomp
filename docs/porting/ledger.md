@@ -2946,3 +2946,51 @@ on its return, 24 ordered stores and nine ordered callbacks. The
 callback effects remain modeled, and the selector remains generated.
 Batch 4 stays at 24 verified. See [gameplay coverage](gameplay-coverage.md)
 for the live branch counts, replay boundary, and fixture recipes.
+
+### Terrain worker grid sampling
+
+The existing typed grid-height body at `0x862700` now also handles
+three observed terrain worker calls. Guest register decoding, ABI
+checks and original fallback stay in the runtime adapter.
+
+| Worker entry | Observed calls | Frame and input |
+| --- | --- | --- |
+| `0x11fc610` | `0x11fca98`, `0x11fcac0` | FP=SP+0x60, stack point and outputs, W3=1 |
+| `0x11fcb00` | `0x11fd70c` | FP=SP+0xb0, swapped stack point/material, W3=1 |
+
+The deeper shovel run yielded no eligible samples with the initial
+seed-7 guard. A tree-fixture retry reached all three frames and
+exposed a predecessor that seeds 5 instead. Original branch decoding
+confirmed both 5 and 7 reach the common material store. The tracked
+`--worker` differential matches two original AArch64 executions for
+each of 672 ground-only cases, 336 per seed, including return S0 bits
+and ordered material and override stores. The existing 672-case
+grid-height differential also passed.
+
+The serial muted tree runs captured 800 original, 798 opt-in and
+799 default samples. Every C++ sample matched the original on
+identical guest input. Opt-in matched 335 shared site/point/material
+inputs across runs, and default matched 451. Worker scheduling
+changed which other points were sampled. All live samples seeded 5,
+and seed 7 is covered by independent replay. The three routes also
+matched five ordered tree-shake heading records. The sampling budget
+exposed most calls during field loading. The three activity CPU
+shares in the coverage report remain the pre-change baseline.
+
+The default gameplay library linked the two fresh worker callers
+unchanged from the generator, with all five grid edges dispatched.
+The original frame setup synchronizes X29 and SP before those calls.
+Sites `0x11fd270` and `0x11fd75c` stayed on the generated route
+after missing live capture. Set `NX_ACNH_WORKER_GRID_HEIGHT=original`
+to restore the three verified worker calls independently of the
+shovel scopes. All 14 Release CTests and 14 profile/replay tests passed.
+The body was already counted, so Batch 4 stays at 24 verified.
+
+```powershell
+$r = 'private/heading/coverage-runs'
+$o = "$r/tree-shake-default-workergrid-original3/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_grid_height --worker
+foreach ($run in 'cpp3', 'default4') {
+    & private/venv/Scripts/python -m tests.acnh_worker_grid_height_live $o "$r/tree-shake-default-workergrid-$run/nx.log" --sites 11fca98 11fcac0 11fd70c
+}
+```

@@ -246,11 +246,13 @@ query and 16-sector scan run in C++ for the observed calls with
 separate outputs and no destination root. The center and rim
 probes use the C++ surface chain. Their stage heights and the
 outer traversal's stage calls use typed base and grid sampling,
-item resolution, and bounds and provider lookup. The generated
-traversal parent, recursive calls, and stage-name and filter
-callbacks remain.
+item resolution, and bounds and provider lookup. The direct
+traversal fallback coordinates the height, rectangle, and sweep
+decisions in C++. Recursive traversal, rectangle checks, and
+stage-name and filter callbacks still use generated code.
 
 [Traversal height verification](ledger.md#direct-heights-inside-outer-shovel-traversal)
 [Sweep collision verification](ledger.md#sixteen-sector-sweep-collision)
 [Sweep probe verification](ledger.md#height-probes-inside-the-sixteen-sector-sweep)
 [Traversal stage verification](ledger.md#shared-stage-subtree-under-shovel-traversal)
+[Direct traversal verification](ledger.md#direct-shovel-traversal-fallback)

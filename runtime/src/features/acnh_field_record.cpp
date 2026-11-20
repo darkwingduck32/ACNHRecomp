@@ -18,6 +18,7 @@
 #include "../../../games/acnh/shovel_stage_context.h"
 #include "../../../games/acnh/shovel_step.h"
 #include "../../../games/acnh/shovel_traversal_peak.h"
+#include "../../../games/acnh/shovel_traversal.h"
 #include "../../../games/acnh/shovel_traversal_sweep.h"
 #include "../../../games/acnh/shovel_intermediate.h"
 #include "../../../games/acnh/shovel_marker.h"
@@ -1212,6 +1213,133 @@ void shovel_traversal_peak_adapter(CPU& cpu) {
         log("acnh shovel traversal peak %s entry=15f27e0 call=15f11e0 input=%x,%x,%x out=%x,%x,%x",
             use_cpp_shovel_traversal_peak ? "cpp" : "original", before[0], before[1], before[2],
             cpu.v[0].u32[0], cpu.v[1].u32[0], cpu.v[2].u32[0]);
+}
+
+struct ShovelTraversalServices : HeightGuestFrame {
+    explicit ShovelTraversalServices(const CPU& caller) : HeightGuestFrame(caller, 0x120, 0xc0) {}
+
+    uint64_t local(uint64_t offset) const { return cpu.x[31] + offset; }
+
+    acnh::ShovelTraversalScratch scratch() const {
+        return {local(0x1c), local(0x28), local(0x38), local(0x60), local(0x88)};
+    }
+
+    void heading(float dx, float dz) const {
+        CPU closed = cpu;
+        closed.v[0].f32[0] = dx;
+        closed.v[1].f32[0] = dz;
+        invoke(closed, main_base + 0x5f0400, 0x15f115c);
+    }
+
+    bool rectangle(acnh::TraversalRectangleCheck query) const {
+        constexpr std::array resumes{
+            std::array{0x15f12fcu, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+            std::array{0x15f1400u, 0x15f1428u, 0x15f1474u, 0x15f149cu, 0x15f1504u, 0x15f152cu, 0x15f1574u, 0x15f159cu},
+            std::array{0x15f1630u, 0x15f1658u, 0x15f16b4u, 0x15f16dcu, 0x15f1748u, 0x15f1770u, 0x15f1b64u, 0x15f1b8cu},
+            std::array{0x15f1808u, 0x15f1830u, 0x15f187cu, 0x15f18a4u, 0x15f1914u, 0x15f193cu, 0x15f1b64u, 0x15f1b8cu},
+            std::array{0x15f19e4u, 0x15f1a0cu, 0x15f1a58u, 0x15f1a80u, 0x15f1af0u, 0x15f1b18u, 0x15f1b64u, 0x15f1b8cu},
+        };
+        const auto resume = resumes[static_cast<size_t>(query.side)][query.corner * 2 + query.wide];
+        const auto descriptor = local(query.wide ? 0x38 : 0x60);
+        const auto rectangle_type = ld<uint64_t>(main_base + 0x4abc1a0) + 0x10;
+        const auto point_type = ld<uint64_t>(main_base + 0x4ab2010) + 0x10;
+        st<uint64_t>(descriptor, rectangle_type);
+        st<uint64_t>(descriptor + 8, point_type);
+        st<int32_t>(descriptor + 0x10, query.bounds.first.x);
+        st<int32_t>(descriptor + 0x14, query.bounds.first.z);
+        st<uint64_t>(descriptor + 0x18, point_type);
+        st<int32_t>(descriptor + 0x20, query.bounds.last.x);
+        st<int32_t>(descriptor + 0x24, query.bounds.last.z);
+        const auto world = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab27c8));
+        const auto terrain = world ? ld<uint64_t>(world + 0xa8) : 0;
+        return terrain && (invoke_child(main_base + 0x8721a0, resume, {terrain, descriptor, 0}).x[0] & 1);
+    }
+
+    float surface(uint64_t point, acnh::TraversalSurface site) const {
+        constexpr std::array resumes{0x15f11d4u, 0x15f1374u, 0x15f1bd0u, 0x15f1d20u, 0x15f1d38u,
+                                     0x15f1e40u, 0x15f20d4u, 0x15f20ecu, 0x15f2048u, 0x15f233cu, 0x15f2354u};
+        return invoke_child(main_base + 0x15e026c, resumes[static_cast<size_t>(site)], {point, 0, 0}).v[0].f32[0];
+    }
+
+    acnh::ShovelTargetPoint peak(uint64_t point, acnh::TraversalPeak site) const {
+        constexpr std::array resumes{0x15f11e4u, 0x15f1384u, 0x15f2254u, 0x15f2264u};
+        const auto result = invoke_child(main_base + 0x15f27e0, resumes[static_cast<size_t>(site)], {point});
+        return {result.v[0].f32[0], result.v[1].f32[0], result.v[2].f32[0]};
+    }
+
+    float stage(uint64_t point, acnh::TraversalStage site, float bias) const {
+        constexpr std::array name_resumes{0x15f1c10u, 0x15f1e80u, 0x15f2088u};
+        constexpr std::array height_resumes{0x15f1cbcu, 0x15f1f2cu, 0x15f21ecu};
+        const auto index = static_cast<size_t>(site);
+        const auto scene = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab2720));
+        auto record = main_base + 0x54c04a0;
+        if (scene && ld<uint64_t>(scene + 0x330)) {
+            const auto owner = ld<uint64_t>(ld<uint64_t>(main_base + 0x4ab2640));
+            const auto getter = ld<uint64_t>(ld<uint64_t>(owner) + 0x18);
+            const auto name = invoke_child(getter, name_resumes[index], {owner, ld<uint32_t>(scene + 0x338)}, bias);
+            const auto hash = invoke_child(main_base + 0x5bd550, name_resumes[index] + 0xc,
+                                           {ld<uint64_t>(name.x[0]), 0}, name.v[0].f32[0]);
+            if (uint32_t(hash.x[0]) == 0x758f7eaf) record = ld<uint64_t>(main_base + 0x4ac3a80);
+            bias = hash.v[0].f32[0];
+        }
+        const auto ordinal = acnh::shovel_stage_ordinal(main_base, record, GuestMemory{});
+        const auto context = local(0x60);
+        st<uint16_t>(context, ordinal);
+        st<uint16_t>(context + 2, 0);
+        st<uint8_t>(context + 4, 1);
+        const auto result = invoke_child(main_base + 0x15e06d0, height_resumes[index], {point, 0, 0, context, 0}, bias);
+        // Preserve the later scene-marker read in the original parent.
+        if (ld<int16_t>(ld<uint64_t>(main_base + 0x4ab6298)) != -1) st<uint32_t>(context, 0x19);
+        return result.v[0].f32[0];
+    }
+
+    bool recurse(uint64_t descriptor, uint64_t output, acnh::TraversalLeg leg) const {
+        constexpr std::array resumes{0x15f1ddcu, 0x15f1e28u, 0x15f1fe8u, 0x15f2030u};
+        return invoke_child(main_base + 0x15f10f0, resumes[static_cast<size_t>(leg)], {descriptor, output}).x[0] & 1;
+    }
+
+    bool sweep(uint64_t descriptor, uint64_t output, bool second) const {
+        return invoke_child(main_base + 0x15f23b0, second ? 0x15f2160 : 0x15f2144, {descriptor, output, uint64_t(second)}).x[0] & 1;
+    }
+};
+
+Fn original_shovel_traversal = nullptr;
+bool use_cpp_shovel_traversal = false;
+bool trace_shovel_traversal = false;
+
+void shovel_traversal_adapter(CPU& cpu) {
+    const auto frame = cpu.x[29];
+    if (cpu.x[30] != main_base + 0x15f10c0 || !frame
+        || ld<uint64_t>(frame + 8) != main_base + 0x15f4190
+        || !is_shovel_point_classifier_frame(ld<uint64_t>(frame))) {
+        original_shovel_traversal(cpu);
+        return;
+    }
+    const acnh::ShovelTraversalQuery query{cpu.x[0], cpu.x[1]};
+    const auto finite_position = [&](uint64_t point) {
+        return std::isfinite(ld<float>(point)) && std::isfinite(ld<float>(point + 8));
+    };
+    const bool native = use_cpp_shovel_traversal
+        && finite_position(query.descriptor) && finite_position(query.descriptor + 12);
+    std::array<uint8_t, 32> descriptor{};
+    std::array<uint32_t, 3> initial{};
+    if (trace_shovel_traversal) {
+        std::memcpy(descriptor.data(), reinterpret_cast<const void*>(query.descriptor), descriptor.size());
+        if (query.output) initial = shovel_xyz_bits(query.output);
+    }
+    if (native) {
+        GuestMemory memory;
+        ShovelTraversalServices services{cpu};
+        cpu.x[0] = acnh::ShovelTraversal{query, services.scratch(), memory, services}.run();
+    } else {
+        original_shovel_traversal(cpu);
+    }
+    if (trace_shovel_traversal) {
+        const auto final = query.output ? shovel_xyz_bits(query.output) : std::array<uint32_t, 3>{};
+        log("acnh shovel traversal parent %s entry=15f10f0 call=15f10bc descriptor=%s writable=%u initial=%x,%x,%x final=%x,%x,%x out=%x",
+            native ? "cpp" : "original", cache_hex(descriptor).c_str(), unsigned(query.output != 0),
+            initial[0], initial[1], initial[2], final[0], final[1], final[2], unsigned(cpu.x[0]));
+    }
 }
 
 struct ShovelTraversalSweepServices : HeightGuestFrame {
@@ -4885,6 +5013,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_COLLISION_STAGE");
     use_cpp_shovel_collision_stage = !mode || std::string_view(mode) == "cpp";
     trace_shovel_collision_stage = std::getenv("NX_ACNH_SHOVEL_COLLISION_STAGE_TRACE") != nullptr;
+
+    mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL");
+    use_cpp_shovel_traversal = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_traversal = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_TRACE") != nullptr;
+    if (use_cpp_shovel_traversal || trace_shovel_traversal)
+        wrap_function(entries, 0x15f10f0, shovel_traversal_adapter, original_shovel_traversal);
 
     mode = std::getenv("NX_ACNH_SHOVEL_TRAVERSAL_HEIGHT");
     use_cpp_shovel_traversal_height = !mode || std::string_view(mode) == "cpp";

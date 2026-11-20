@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 85.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 86.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -2522,3 +2522,42 @@ The stage-name and predicate calls
 from this subtree remain generated. The next group ports the
 direct traversal parent that coordinates the height checks,
 recursive legs, and two sweeps.
+
+### Direct shovel traversal fallback
+
+The step's call at `0x15f10bc` now enters the typed
+`ShovelTraversal` query. It coordinates the initial peak,
+same-tile and boundary rectangles, stage split, recursive
+legs, and both sweep modes. The adapter handles the guest
+frame, vector registers, and scoped routing. The null-output
+slot is at SP+0x88. Intermediate points use separate slots.
+Set `NX_ACNH_SHOVEL_TRAVERSAL=original` to choose the generated
+parent. Recursive calls and other callers still use generated
+code.
+
+Two independent original AArch64 runs per case matched 152
+portable cases and nine gameplay-derived calls, including
+callback order and arguments, return values, and external
+writes. Portable controls cover the rectangle branches,
+thresholds, overlapping output, null output, both split axes,
+sweep exits, and peak tie-breaking. The nine measured gameplay
+calls returned 1 with unchanged output.
+
+Original and opt-in `typedtraversal1` and default
+`typedtraversal2` matched all nine descriptors, outputs and
+returns, 342 sweep casts, ten surveys, ten neighborhoods,
+and 12 final decisions. All 14 Release CTests and 14 profile
+and replay checks passed. Batch 3 has 86 verified functions
+and 100 discovery candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-typedtraversal1"
+$c = "$r/tree-shake-default-typedtraversal2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_traversal --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log"
+```
+
+The first two recursive legs reached by this fixture are the
+next traversal dependencies. The discovery queue also contains
+eight observed terrain triangle readers that share one query
+implementation.

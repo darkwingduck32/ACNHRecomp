@@ -8,6 +8,7 @@
 #include "../../../games/acnh/field_provider_storage.h"
 #include "../../../games/acnh/field_provider_context.h"
 #include "../../../games/acnh/field_provider_context_flag.h"
+#include "../../../games/acnh/field_provider_context_handle.h"
 #include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
@@ -1772,6 +1773,13 @@ struct ProviderContextFlagServices {
     }
 };
 
+bool use_cpp_provider_handle = false;
+bool trace_provider_handle = false;
+std::atomic<unsigned> provider_handle_samples[2]{};
+
+template<bool Acquire>
+void provider_handle_call(CPU& cpu);
+
 struct ProviderContextServices {
     CPU frame;
     CPU& caller;
@@ -1837,8 +1845,7 @@ struct ProviderContextServices {
         struct PairCallbacks {
             ProviderContextServices& paired;
             uint64_t counter(uint64_t handle, bool first) {
-                paired.frame.x[1] = 1;
-                return paired.invoke(0x37567d0, first ? 0x262ea38 : 0x262e9f8, handle);
+                return paired.handle_counter(handle, first ? 0x262ea38 : 0x262e9f8);
             }
             void prepare_counter(uint64_t counters, bool first) {
                 paired.invoke(0x37e2e80, first ? 0x262ea50 : 0x262ea10, counters);
@@ -1848,22 +1855,87 @@ struct ProviderContextServices {
         acnh::acquire_provider_pair({pair}, memory, callbacks);
     }
 
-    uint64_t counter(uint64_t handle, bool) {
-        frame.x[1] = 1;
-        return invoke(0x37567d0, 0x25ee714, handle);
+    uint64_t handle_counter(uint64_t handle, uint64_t resume) {
+        CPU nested = frame;
+        nested.x[0] = handle;
+        nested.x[1] = 1;
+        nested.x[30] = main_base + resume;
+        provider_handle_call<true>(nested);
+        return nested.x[0];
     }
+
+    uint64_t counter(uint64_t handle, bool) { return handle_counter(handle, 0x25ee714); }
 
     void prepare_counter(uint64_t counters, bool) { invoke(0x37e2e80, 0x25ee72c, counters); }
     void enter_first(uint64_t handle) { invoke(0x37569c0, 0x25ee744, handle); }
     void leave_second(uint64_t handle, bool nested) {
-        invoke(0x37568c0, nested ? 0x25ee7d8 : 0x25ee7b4, handle);
+        CPU call_state = frame;
+        call_state.x[0] = handle;
+        call_state.x[30] = main_base + (nested ? 0x25ee7d8 : 0x25ee7b4);
+        provider_handle_call<false>(call_state);
     }
 
     void leave_first(uint64_t handle, bool nested) {
         caller.x[0] = handle;
-        call(caller, main_base + (nested ? 0x3756a80 : 0x37568c0));
+        if (nested) call(caller, main_base + 0x3756a80);
+        else provider_handle_call<false>(caller);
     }
 };
+
+struct ProviderHandleCallbacks {
+    ProviderContextServices& services;
+    bool acquire;
+
+    uint64_t resolve_thread(uint32_t id, bool second = false) {
+        const uint64_t resume = acquire ? (second ? 0x375680c : 0x37567fc) : 0x37568e8;
+        return services.invoke(0x3f033a0, resume, id);
+    }
+
+    void enter_records(uint64_t guard) { services.invoke(0x3f03880, 0x375684c, guard); }
+    void leave_records(uint64_t guard) { services.invoke(0x3f038c0, 0x37568ac, guard); }
+    void release_shared(uint64_t holders) { services.invoke(0x37e3040, 0x3756998, holders); }
+    void signal_waiter(uint64_t waiter) { services.invoke(0x3f05830, 0x3756990, waiter); }
+    void barrier() { nx::barrier(); }
+
+    uint32_t decrement(uint64_t address) {
+        uint32_t before;
+        do {
+            before = nx::ldxr<uint32_t>(services.caller, address);
+        } while (nx::stxr<uint32_t>(services.caller, address, before - 1));
+        return before;
+    }
+};
+
+template<bool Acquire>
+void provider_handle_call(CPU& cpu) {
+    constexpr uint64_t entry = Acquire ? 0x37567d0 : 0x37568c0;
+    const auto handle = cpu.x[0];
+    const auto resume = cpu.x[30] - main_base;
+    const bool trace = trace_provider_handle &&
+        provider_handle_samples[Acquire].fetch_add(1, std::memory_order_relaxed) < 48;
+    const auto capacity = trace ? ld<uint32_t>(handle + 8) : 0;
+    const auto records = trace && Acquire ? ld<uint64_t>(handle + 0x10) : 0;
+    if (!use_cpp_provider_handle) {
+        call(cpu, main_base + entry);
+    } else {
+        GuestMemory memory;
+        ProviderContextServices services{cpu, true};
+        ProviderHandleCallbacks callbacks{services, Acquire};
+        if constexpr (Acquire)
+            cpu.x[0] = acnh::acquire_provider_handle_record(main_base, {handle},
+                static_cast<uint32_t>(cpu.x[1]), memory, callbacks);
+        else acnh::release_provider_handle(main_base, {handle}, memory, callbacks);
+    }
+
+    if (trace) {
+        const auto record = Acquire ? cpu.x[0] : 0;
+        log("acnh shovel handle %s entry=%llx state=caller=%llx capacity=%u found=%u record=%llx count=%d",
+            use_cpp_provider_handle ? "cpp" : "original", static_cast<unsigned long long>(entry),
+            static_cast<unsigned long long>(resume), capacity, unsigned(record != 0),
+            static_cast<unsigned long long>(record ? record - records : 0),
+            record ? ld<int32_t>(record + 0xc) : 0);
+    }
+}
 
 std::atomic<unsigned> provider_context_samples[2]{};
 
@@ -2075,6 +2147,10 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_provider_binding || trace_provider_binding)
         for (auto& route : provider_binding_routes)
             wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_HANDLE");
+    use_cpp_provider_handle = !mode || std::string_view(mode) == "cpp";
+    trace_provider_handle = std::getenv("NX_ACNH_PROVIDER_HANDLE_TRACE") != nullptr;
 
     mode = std::getenv("NX_ACNH_PROVIDER_CONTEXT_PAIR");
     use_cpp_provider_context_pair = !mode || std::string_view(mode) == "cpp";

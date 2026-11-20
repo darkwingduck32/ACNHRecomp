@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 38.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 40.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -884,3 +884,44 @@ $c = "$r/tree-shake-default-providerpair2"
 
 Both live mode-2 handles reach record selection at `0x37567d0` inside the
 mode-1 pair. It precedes the release helper `0x37568c0` on this path.
+
+
+### Provider-handle record lookup and release
+
+| Entry | Scope | AArch64 replay cases | Gameplay captures per route |
+| --- | --- | ---: | ---: |
+| `0x37567d0` | Find or claim the current thread's handle record | 160 | 48 |
+| `0x37568c0` | Decrement the record and release the handle | 360 | 48 |
+
+Both default to C++ under the verified shovel provider. Set
+`NX_ACNH_PROVIDER_HANDLE=original` to select the generated bodies.
+The runtime keeps thread resolution, lock and wake calls at the guest
+boundary. The release path uses the same exclusive-monitor helpers
+and barrier as the generated runtime.
+
+Each replay case matched two AArch64 runs. The lookup fixtures include
+a manager change between thread resolutions and a table replacement
+under the record guard. The release fixtures cover the shared and
+exclusive branches, ordered writes, and counter overflow boundaries.
+Gameplay record selection matched the selected slot and count. Release
+captures establish caller and slot capacity, with release effects
+compared in replay and at the four focal shovel decisions at (40, 69).
+Original and opt-in `providerhandle1` and default `providerhandle2`
+used the same muted fixture, one instance at a time. All 13 Release
+CTest checks and 14 replay and profile tests passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-providerhandle1"
+$c = "$r/tree-shake-default-providerhandle2"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_context_handle --acquire --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf provider_context_handle --live "$o/nx.log" "$c/nx.log"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+Counter initialization `0x37e2e80` is the next observed dependency. The
+ordinary-read captures returned a zero count from record selection,
+which enters initialization before incrementing the record. Its C++
+candidate and independent `provider_context_handle --prepare` replay
+matched 64 cases against two original runs each. Gameplay still uses
+the generated initializer and this entry awaits route verification.

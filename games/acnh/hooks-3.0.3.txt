@@ -88,3 +88,6 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 15f3ed0 # Classify a target point for the shovel field query
 # dispatch 15ea82c # Check shovel point obstruction materials
 # dispatch 15e06d0 # Resolve shovel height with stage-specific items
+# dispatch 15e80f0 # Sample the selected shovel stage height
+# dispatch 15e7980 # Lookup the stage item under the shovel point
+# dispatch 195190c # Lookup a stage field record and root coordinate

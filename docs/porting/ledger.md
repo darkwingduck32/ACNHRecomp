@@ -1466,3 +1466,48 @@ child bodies reproduced their captured results and ordered calls
 in two independent AArch64 runs. The base sampler reaches the
 current-stage overlay through a tail call, and the record lookup
 reaches `0x195190c`. Start the next group with those dependencies.
+
+### Stage base sampling and field-record lookup
+
+The stage base sampler, stage item resolver, and field-record
+selection now run in typed C++ on the shovel height and classifier
+routes. They choose the stage view, apply the field query flags,
+and produce the record and root half tile. Their original routes
+remain selectable with `NX_ACNH_SHOVEL_STAGE_CONTEXT=original`.
+
+| Entry | Independent AArch64 cases | Focal calls per route | Observed calls |
+| --- | ---: | ---: | --- |
+| `0x15e80f0` | 59 | 40 | `0x15e0720` |
+| `0x15e7980` | 73 | 40 | `0x15e0794` |
+| `0x195190c` | 240 | 80 | `0x15e7bf0`, `0x15f462c` |
+
+For the first two entries, each replay includes 52 scoped gameplay
+captures from stageheight2. The shared harness also provides 7, 21
+and 240 portable synthetic cases respectively. The comparisons
+check the return value, output material or root bytes, ordered
+writes, and child calls. The no-op controls failed the initial
+base-sampler case and the initial field-cell case.
+
+The original and opt-in stagecontext1 runs and default stagecontext2
+run matched all focal calls. Their neighborhoods, surveys and final
+decisions matched the four outcomes from the whole-original
+classdeep2 route. Gameplay used one muted instance at a time.
+All 14 Release CTest checks and 14 replay and profile tests passed.
+The queue remains at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-stagecontext1"
+$c = "$r/tree-shake-default-stagecontext2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_stage_context --capture "$r/stage-height-children-live.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The portable cases run without the capture argument. The private
+`generated-dll/shovel_stage_context_port_generated.dll` routes
+the observed direct record calls through runtime dispatch.
+
+The current-stage overlay call `0x83a950`, stage-name and filter
+callbacks, record acceptance `0x194f798` and provider lookup
+`0x11eb21c` still cross the guest boundary. Step geometry
+`0x15f0c64` remains a generated classifier dependency. Its input,
+result, and callback shapes are the next verification target.

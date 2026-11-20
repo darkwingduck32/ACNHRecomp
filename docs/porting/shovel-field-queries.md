@@ -228,7 +228,8 @@ handwritten C++. Locking, stage-specific material overrides, and the
 base-type fallback stay at the guest boundary. The selector also uses the
 typed point classifier, which checks stage height and item metadata.
 The classifier uses the C++ surface height, obstruction and
-stage-specific height decisions. The latter retains the stage base
-sampler and record provider. Step geometry, the obstruction overlay
-sampler and field-record lookup also cross the guest boundary. See the
-[stage height checks](ledger.md#stage-specific-height-under-the-classifier).
+stage-specific height decisions. Stage selection and field-record
+resolution also run in typed C++. Step geometry, the overlay
+sampler, record acceptance, and the underlying field provider lookup
+remain at the guest boundary. See the
+[stage context checks](ledger.md#stage-base-sampling-and-field-record-lookup).

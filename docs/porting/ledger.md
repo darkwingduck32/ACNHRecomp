@@ -1511,3 +1511,43 @@ callbacks, record acceptance `0x194f798` and provider lookup
 `0x11eb21c` still cross the guest boundary. Step geometry
 `0x15f0c64` remains a generated classifier dependency. Its input,
 result, and callback shapes are the next verification target.
+
+### Shovel step geometry
+
+The classifier's step check `0x15f0c64` now defaults to C++.
+The typed routine calculates the projected step, checks the
+endpoint and intermediate positions, and delegates collision
+and traversal queries through the ABI boundary. Set
+`NX_ACNH_SHOVEL_STEP=original` to select the original step.
+
+The independent replay matched 104 captured calls and 320
+portable synthetic cases. It compared return values, position
+writes, and the exact input words at the heading, collision,
+intermediate point and traversal callbacks. The first candidate
+changed the intermediate probe height by the horizontal offset.
+The original retains the starting height for those probes, as
+confirmed by the first captured AArch64 argument trace.
+
+The original and opt-in step1 runs and the default step2 run each
+matched 40 focal calls at `0x15f418c`. Gameplay accepted the first
+intermediate point. The synthetic cases cover endpoint rejection,
+later probes, alternate distance and heading modes, and the
+generated traversal fallback. All four neighborhoods, surveys
+and final decisions matched the whole-original classdeep2 route.
+The runs used one muted gameplay instance at a time. All 14
+Release CTest checks and 14 replay and profile tests passed.
+Discovery remains at 100 candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-step1"
+$c = "$r/tree-shake-default-step2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_step --capture "$r/tree-shake-default-pointheightcapture1/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The portable cases run without the capture argument. The step
+retains generated collision `0x15ed290`, intermediate acceptance
+`0x15e9c80`, and traversal fallback `0x15f10f0`. The step2
+default run captured 52 intermediate acceptance calls and 104
+provider lookup calls to `0x11eb21c`. The next field group can
+remove the underlying provider lookup and stage acceptance.

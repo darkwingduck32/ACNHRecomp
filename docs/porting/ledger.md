@@ -1693,3 +1693,51 @@ other scenes. The next group widens the verified height sampling
 path to the classifier, intermediate point, stage base, and
 obstruction probes. The step's collision query and traversal
 fallback remain generated.
+
+### Height sampling under the classifier and intermediate point
+
+The typed height chain now handles the intermediate center and rim,
+the classifier's surface children, the current-stage overlay tail,
+and the obstruction probes. The original route for these new scopes
+is selectable with `NX_ACNH_SHOVEL_HEIGHT_CHAIN=original`. Existing
+root switches still select the generated bodies where supported.
+
+| Entry | Function | Independent AArch64 cases | Focal calls per route |
+| --- | --- | ---: | ---: |
+| `0x15e026c` | Select surface height and material | 768 | 360 |
+| `0x83b024` | Sample ground height and material | 128 | 400 |
+| `0x83a950` | Sample overlay height and material | 128 | 480 |
+| `0x241e98c` | Resolve height parameters | 30 | 800 |
+| `0x60cba4` | Read a height parameter value | 3 | 1200 |
+| `0x862700` | Sample the terrain grid | 672 | 880 |
+| `0x22688e4` | Match the height parameter type | 180 | 800 |
+
+The runs exercised intermediate surface calls `0x15e9d68` and
+`0x15e9f9c`, the classifier surface call `0x15f4010`, the current
+stage overlay tail returning to `0x15e0724`, and the obstruction's
+center sampler. Avoid counting these seven functions a second time.
+
+The original and opt-in heightchain1 and default heightchain2
+runs matched every focal trace, including same-input grid checks.
+All four neighborhoods, surveys, and final decisions matched the
+whole-original classdeep2 route. All 14 Release CTests and 14
+Python replay and profile checks passed. The discovery queue remains
+at 100 and gameplay used one muted instance at a time.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-heightchain1"
+$c = "$r/tree-shake-default-heightchain2"
+& private/venv/Scripts/python -m tests.acnh_shovel_height_chain_live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_height
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_height_dependencies
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_grid_height
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_height_parameter_type
+```
+
+The separate stage-item surface call at
+`0x15e08c0` had zero hits and retains its generated path. Retry with an
+item setup that reaches the stage descriptor height branch. The step
+cast `0x15ed290` and traversal fallback `0x15f10f0` still cross the
+guest boundary. The next replay group follows the cast's height
+difference and stage-item probes.

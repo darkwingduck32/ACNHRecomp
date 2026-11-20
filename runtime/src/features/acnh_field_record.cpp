@@ -668,7 +668,7 @@ bool trace_terrain_fallbacks = false;
 bool trace_sampler_terrain = false;
 bool use_cpp_sampler_terrain = false;
 
-bool is_shovel_sampler_frame(uint64_t frame, uint64_t expected_resume);
+bool is_shovel_height_child_frame(uint64_t frame, uint64_t expected_resume);
 
 constexpr std::array terrain_primary_resumes{0x848fe8u, 0x849044u, 0x84909cu, 0x8490f4u};
 constexpr std::array terrain_secondary_resumes{0x849004u, 0x849060u, 0x8490b8u, 0x849110u};
@@ -681,7 +681,7 @@ void terrain_field_material_adapter(CPU& cpu) {
     const auto quadrant_frame = from_quadrants ? ld<uint64_t>(cpu.x[29]) : 0;
     const bool shovel_quadrants = quadrant_frame && ld<uint64_t>(quadrant_frame + 8) == main_base + 0x877330
         && ld<uint64_t>(ld<uint64_t>(quadrant_frame) + 8) == main_base + shovel_terrain_caller;
-    const bool shovel_sampler = parent == 0x83ab2c && is_shovel_sampler_frame(ld<uint64_t>(cpu.x[29]), 0x15e02f8);
+    const bool shovel_sampler = parent == 0x83ab2c && is_shovel_height_child_frame(ld<uint64_t>(cpu.x[29]), 0x15e02f8);
     if (!shovel_quadrants && !shovel_sampler) {
         original_terrain_field_material(cpu);
         return;
@@ -801,7 +801,7 @@ bool is_shovel_target_frame(uint64_t frame) {
     return frame && ld<uint64_t>(frame + 8) == main_base + shovel_target_resume;
 }
 
-bool is_shovel_sampler_frame(uint64_t frame, uint64_t expected_resume) {
+bool is_shovel_height_child_frame(uint64_t frame, uint64_t expected_resume) {
     if (!frame || ld<uint64_t>(frame + 8) != main_base + expected_resume) return false;
     const auto height_frame = ld<uint64_t>(frame);
     return height_frame && is_shovel_height_call(ld<uint64_t>(height_frame + 8))
@@ -817,7 +817,7 @@ bool is_shovel_grid_height_call(const CPU& cpu) {
     if (resume != 0x83b0cc && resume != 0x83aa78 && resume != 0x83aad8)
         return false;
     const auto expected = resume == 0x83b0cc ? 0x15e02e0 : 0x15e02f8;
-    return is_shovel_sampler_frame(cpu.x[29], expected);
+    return is_shovel_height_child_frame(cpu.x[29], expected);
 }
 
 void shovel_grid_height_adapter(CPU& cpu) {
@@ -996,6 +996,14 @@ struct ShovelSamplerServices : HeightGuestFrame {
     }
 };
 
+Fn original_shovel_height_parameter_type = nullptr;
+bool use_cpp_shovel_height_parameter_type = false;
+bool trace_shovel_height_parameter_type = false;
+
+bool is_shovel_height_parameter_resume(uint64_t resume) {
+    return resume == 0x15e0304 || resume == 0x15e0680;
+}
+
 struct ShovelHeightParameterServices : HeightGuestFrame {
     explicit ShovelHeightParameterServices(const CPU& caller) : HeightGuestFrame(caller, 0x30, 0x10) {}
 
@@ -1020,7 +1028,8 @@ struct ShovelHeightParameterServices : HeightGuestFrame {
         nested.x[0] = object;
         nested.x[1] = type;
         const auto target = ld<uint64_t>(ld<uint64_t>(object) + 0x10);
-        trace_shovel_dependency(target - main_base, 0x241e9e8);
+        if (target != main_base + 0x22688e4 || !use_cpp_shovel_height_parameter_type)
+            trace_shovel_dependency(target - main_base, 0x241e9e8);
         invoke(nested, target, 0x241e9e8);
         return (nested.x[0] & 1) != 0;
     }
@@ -1043,6 +1052,64 @@ struct ShovelHeightParameterServices : HeightGuestFrame {
     }
 };
 
+struct ShovelHeightParameterTypeServices : HeightGuestFrame {
+    const CPU& caller;
+
+    explicit ShovelHeightParameterTypeServices(const CPU& context)
+        : HeightGuestFrame(context, 0x20, 0x10), caller(context) {}
+
+    uint8_t guard_byte(uint64_t address) const { return nx::ld_acq<uint8_t>(address); }
+
+    bool acquire_guard(uint64_t address, acnh::HeightParameterType kind) const {
+        CPU nested = cpu;
+        nested.x[0] = address;
+        const auto resume = kind == acnh::HeightParameterType::primary ? 0x2268960 : 0x22689ac;
+        invoke(nested, main_base + 0x3f030d0, resume);
+        return static_cast<uint32_t>(nested.x[0]) != 0;
+    }
+
+    void release_guard(uint64_t address, acnh::HeightParameterType kind) const {
+        CPU nested = cpu;
+        nested.x[0] = address;
+        const auto resume = kind == acnh::HeightParameterType::primary ? 0x226898c : 0x22689d8;
+        invoke(nested, main_base + 0x3f030e0, resume);
+    }
+
+    uint32_t matches_base_type(uint64_t requested) const {
+        CPU nested = caller;
+        nested.x[0] = requested;
+        trace_shovel_dependency(0x6521f0, 0x2268940);
+        call(nested, main_base + 0x6521f0);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+};
+
+void shovel_height_parameter_type_adapter(CPU& cpu) {
+    const auto parent = cpu.x[30] == main_base + 0x241e9e8 && cpu.x[29]
+        ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
+    if (!is_shovel_height_parameter_resume(parent) || !is_shovel_height_child_frame(cpu.x[29], parent)) {
+        original_shovel_height_parameter_type(cpu);
+        return;
+    }
+    const auto requested = cpu.x[1];
+    unsigned type = 0;
+    if (trace_shovel_height_parameter_type) {
+        if (requested == ld<uint64_t>(main_base + 0x4ac3108)) type = 1;
+        else if (requested == ld<uint64_t>(main_base + 0x4ab35f0)) type = 2;
+    }
+    if (use_cpp_shovel_height_parameter_type) {
+        GuestMemory memory;
+        ShovelHeightParameterTypeServices services{cpu};
+        cpu.x[0] = acnh::height_parameter_type_matches(main_base, requested, memory, services);
+    } else {
+        original_shovel_height_parameter_type(cpu);
+    }
+    if (trace_shovel_height_parameter_type)
+        log("acnh shovel height type %s entry=22688e4 call=241e9e4 from=%llx type=%u out=%x",
+            use_cpp_shovel_height_parameter_type ? "cpp" : "original",
+            static_cast<unsigned long long>(parent - 4), type, static_cast<unsigned>(cpu.x[0]));
+}
+
 template<size_t Index>
 void shovel_height_adapter(CPU& cpu) {
     const uint64_t resume = cpu.x[30] - main_base;
@@ -1053,7 +1120,7 @@ void shovel_height_adapter(CPU& cpu) {
         bool from_height;
         if constexpr (Index == 1) from_height = resume == 0x15e02e0;
         if constexpr (Index == 2) from_height = resume == 0x15e02f8;
-        if constexpr (Index == 3) from_height = resume == 0x15e0304 || resume == 0x15e0680;
+        if constexpr (Index == 3) from_height = is_shovel_height_parameter_resume(resume);
         if constexpr (Index == 4) from_height = resume == 0x15e0318 || resume == 0x15e0674 || resume == 0x15e0698;
         in_scope = from_height && is_shovel_height_call(ld<uint64_t>(cpu.x[29] + 8))
             && is_shovel_target_frame(ld<uint64_t>(cpu.x[29]));
@@ -2793,6 +2860,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
     if (use_cpp_shovel_grid_height || trace_shovel_grid_height)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE");
+    use_cpp_shovel_height_parameter_type = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_height_parameter_type = std::getenv("NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE_TRACE") != nullptr;
+    if (use_cpp_shovel_height_parameter_type || trace_shovel_height_parameter_type)
+        wrap_function(entries, 0x22688e4, shovel_height_parameter_type_adapter, original_shovel_height_parameter_type);
 
     trace_shovel_height = std::getenv("NX_ACNH_SHOVEL_HEIGHT_TRACE") != nullptr;
     constexpr std::array<Fn, 5> height_adapters{

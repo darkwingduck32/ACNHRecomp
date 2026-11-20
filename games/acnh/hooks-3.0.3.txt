@@ -84,3 +84,4 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 83a950 # Sample the overlay height and material
 # dispatch 241e98c # Resolve the height parameter object
 # dispatch 862700 # Sample the grid height at a world position
+# dispatch 22688e4 # Check the shovel height parameter type

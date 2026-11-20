@@ -1289,3 +1289,37 @@ $o = "$r/tree-shake-original-samplerterrain1"
 $c = "$r/tree-shake-default-samplerterrain2"
 & private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_fallbacks --sampler-live --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
 ```
+
+### Height parameter type check
+
+The parameter object's virtual type check `0x22688e4` now runs in
+handwritten C++ under the shovel height dispatcher. The typed query
+checks two guarded type descriptors and calls the generated base
+type matcher `0x6521f0` on a miss. The static initialization guard
+imports stay at the guest boundary. It stays selectable through
+`NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE=original`.
+
+The 180-case independent replay matched the original AArch64 result,
+ordered external calls, and writes for initialized and uninitialized
+descriptors, guard acquisition outcomes, and the base-type branch.
+The no-op candidate failed the first requested-type case. The
+original and opt-in heighttype1 runs and the default heighttype2 run
+each matched 20 focal calls from the accessor at `0x241e9e4`. Both
+dispatcher call sites requested the first initialized type and returned
+true. Gameplay used one muted instance at a time.
+
+All four neighborhoods, surveys, and final decisions matched the
+whole-original classdeep2 route. All 14 Release CTest checks and 14
+replay and profile tests passed. The discovery queue remains at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-heighttype1"
+$c = "$r/tree-shake-default-heighttype2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_height_parameter_type --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The default run did not take the generated base-type branch. The
+next generated entry reached by the target selector is the point
+classifier `0x15f3ed0`. Start with entry and exit request snapshots
+and the ordered child results from the observed shovel gameplay.

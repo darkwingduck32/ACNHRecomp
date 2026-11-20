@@ -201,6 +201,33 @@ uint64_t height_parameters(uint64_t base, uint32_t index, Memory& memory, Servic
     return fallback;
 }
 
+enum class HeightParameterType { primary, secondary };
+
+template<class Memory, class Services>
+uint32_t height_parameter_type_matches(uint64_t base, uint64_t requested, Memory& memory, Services& services) {
+    struct TypeSlot {
+        HeightParameterType kind;
+        uint64_t descriptor_slot;
+        uint64_t guard_slot;
+        uint64_t initializer_slot;
+    };
+    constexpr std::array types{
+        TypeSlot{HeightParameterType::primary, 0x4ac3108, 0x4ac3110, 0x4ab3608},
+        TypeSlot{HeightParameterType::secondary, 0x4ab35f0, 0x4ab35f8, 0x4ab3600},
+    };
+    for (const auto& type : types) {
+        const auto guard = memory.template read<uint64_t>(base + type.guard_slot);
+        if (!(services.guard_byte(guard) & 1) && services.acquire_guard(guard, type.kind)) {
+            const auto descriptor = memory.template read<uint64_t>(base + type.descriptor_slot);
+            const auto initializer = memory.template read<uint64_t>(base + type.initializer_slot);
+            memory.template write<uint64_t>(descriptor, initializer + 0x10);
+            services.release_guard(memory.template read<uint64_t>(base + type.guard_slot), type.kind);
+        }
+        if (requested == memory.template read<uint64_t>(base + type.descriptor_slot)) return 1;
+    }
+    return services.matches_base_type(requested);
+}
+
 constexpr uint64_t height_float_address(uint64_t reference) {
     return reference + 0x24;
 }

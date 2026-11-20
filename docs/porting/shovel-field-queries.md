@@ -223,7 +223,8 @@ samplers, parameter accessors, and shared grid-height query now run in
 handwritten C++ on the verified route. The typed grid query handles
 sector selection, interpolation, and material outputs. Both samplers
 also reuse the C++ world-position fallbacks and the field material
-predicate. Locking, stage-specific material overrides, and the parameter
-object's virtual type check still cross the guest boundary. The selector
-also calls the generated point classifier. See the
-[height sampling checks](ledger.md#terrain-fallbacks-under-the-height-samplers).
+predicate. The height parameter object's type check also runs in
+handwritten C++. Locking, stage-specific material overrides, and the
+base-type fallback stay at the guest boundary. The selector calls the
+generated point classifier. See the
+[height sampling checks](ledger.md#height-parameter-type-check).

@@ -28,3 +28,9 @@ The `port/acnh-engine` branch is checked out at
 Count a row after independent whole-function comparison, a matching gameplay run
 that hits the replacement, passing relevant regressions, and a replay through
 the promoted default. Keep the original selectable.
+
+## Next batch discovery
+
+There is no active batch. The [next-candidate queue](next-candidates.md)
+records ten new entries for a future kickoff. The discovery queue does
+not change the verified count for the batch above.

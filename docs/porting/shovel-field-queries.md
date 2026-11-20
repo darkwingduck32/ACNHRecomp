@@ -7,7 +7,7 @@ The action engine continues to own item removal, inventory, and hole creation.
 
 | Survey call site | Target | Field-query responsibility | State |
 | --- | --- | --- | --- |
-| `0x21f7568` to `0x21f75a4` | `0x3f04450`, `0x127c524`, `0x127c6ec` | Prepare the survey scratch data | `0x127c6ec` and `0x127c524` are verified C++ defaults. The generated item initializer remains. |
+| `0x21f7568` to `0x21f75a4` | `0x3f04450`, `0x127c524`, `0x127c6ec` | Prepare the survey scratch data | `0x127c6ec` and `0x127c524` are verified C++ defaults. The empty-item initialization path also defaults to C++. |
 | `0x21f7614` | `0x127cab0` | Gather the neighborhood records and occupancy flags | Verified C++ default at the shovel call site |
 | `0x21f76b0` | `0x267d6c4` | Resolve an item ID | Verified C++ default with original auxiliary fallback `0x1a03610` |
 | `0x21f7788` | `0x877130` | Test the selected terrain | Verified C++ dispatcher, rectangle height, quadrant materials and record reader |
@@ -65,15 +65,15 @@ shovel survey consumes these outputs at `0x21f7618`.
 | `0x127cb68` | `0x16baf44` stage predicate | Verified C++ default with both stage-key helpers |
 | `0x127cc84`, `0x127cf84`, `0x127cfd0`, `0x127cff8` | `0x195033c` field-cell lookup | Verified C++ default on these four call sites |
 | Five calls from `0x127ccb8` through `0x127ce50` | `0x267d6c4` item-ID resolution | Verified C++ default |
-| `0x127cd94`, `0x127cea0` | `0x19ee3b4`, `0x253fe7c` field predicates | Generated |
+| `0x127cd94`, `0x127cea0` | `0x19ee3b4` metadata, `0x253fe7c` extent | Metadata defaults to C++. The extent helper remains generated. |
 
 The field-cell lookup is the next common dependency. It checks layer
 and channel bounds through `0x194f798`, initializes an empty item through
 `0x267d4ac`, and invokes a provider through `0x11e4f58`. The provider uses
 virtual dispatch. The lookup returns the item into the caller's X8
 result buffer. Its X3 argument carries the resolved position. The typed bounds and cell queries are verified defaults on the shovel path.
-The runtime boundary maintains the original routes and calls the generated
-item initializer. The provider now has a typed C++ default. The original, opt-in and default trials matched
+The runtime boundary maintains the original routes. Both the provider
+and the guarded empty-item initializer have typed C++ defaults. The original, opt-in and default trials matched
 the result item and resolved position at all four gather call sites.
 
 ## Verified neighborhood path
@@ -86,11 +86,10 @@ Outside the shovel call site, its existing generated entry is used.
 The field provider `0x11e4f58` runs its occupancy filter and record
 selection in C++. It calls five verified handwritten methods for table
 lookup, readiness and indexing. The runtime boundary supplies generated
-context callbacks and continuation resolution and cleanup. The item
-initializer `0x267d4ac`, metadata predicate `0x19ee3b4`, extent helper
-`0x253fe7c`, terrain orchestration and item classification also remain
-generated. The runtime adapters keep these calls selectable and preserve
-the guest ABI. The shovel action engine continues after the survey.
+context callbacks. Continuation handling, the empty-item initializer
+and metadata classification now default to C++. The original extent
+helper `0x253fe7c` remains at the boundary. The shovel action engine
+continues after the survey.
 
 ## Field provider dependencies
 
@@ -105,7 +104,7 @@ All observed dispatch targets below came from the field-cell call at
 | `0x11e4fd8`, `0x11e50c4`, `0x11e519c` | `0x2611584`, height | Verified C++ default |
 | `0x11e5114`, `0x11e51cc` | `0x261158c`, record displacement | Verified C++ default |
 | `0x11e50f0`, tail `0x11e5284` | `0x260b860`, `0x260b934`, context callbacks | Generated |
-| `0x11e51b4`, `0x11e51fc` | `0x11e4578`, `0x2540184`, continuation resolve and cleanup | Generated |
+| `0x11e51b4`, `0x11e51fc` | `0x11e4578`, `0x2540184`, continuation resolve and cleanup | Verified C++ defaults with generated context callbacks |
 
 The typed provider read is verified in gameplay. Its independent replay
 covers bounds rejection, masking, ordinary and continuation records,
@@ -146,10 +145,11 @@ covered accepted results and the remaining descriptor branches.
 
 The neighborhood stage filter `0x16baf44` and both stage-key helpers
 `0x16f37d0` and `0x16f3a18` now default to C++. The virtual stage
-lookup still returns the runtime stage name. The continuation resolver
-`0x11e4578` and cleanup `0x2540184` are the next pair. A live provider
-query at (78, 138) resolved to (78, 137), which reaches both functions
-through the continuation branch.
+lookup still returns the runtime stage name. The continuation
+resolver and cleanup are also verified on the shovel path. The next
+group is the table resolver `0x1267360` and the context dispatch thunks
+`0x260b860` and `0x260b934`. The provider calls the resolver through
+the runtime-loaded target in `0x11ac1e8`.
 
 ## Composed gameplay verification
 

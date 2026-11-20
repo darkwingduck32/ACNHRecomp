@@ -4,9 +4,12 @@
 #include "../../../games/acnh/field_record.h"
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
+#include "../../../games/acnh/field_provider_anchor.h"
+#include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_terrain.h"
 #include "../../../games/acnh/shovel_terrain_helpers.h"
 #include "../../../games/acnh/shovel_item_queries.h"
+#include "../../../games/acnh/shovel_item_metadata.h"
 #include "../../../games/acnh/shovel_stage.h"
 #include "../../../games/acnh/record_category.h"
 #include "../../../games/acnh/tile_record_flag.h"
@@ -1377,6 +1380,241 @@ void shovel_stage_adapter(CPU& cpu) {
             key.hash, unsigned(cpu.x[0] & 1));
 }
 
+template<size_t Index>
+void provider_anchor_adapter(CPU& cpu);
+
+struct ProviderAnchorRoute {
+    uint64_t entry;
+    Fn adapter;
+    Fn original = nullptr;
+    std::atomic<unsigned> samples{0};
+};
+
+std::array<ProviderAnchorRoute, 2> provider_anchor_routes{{
+    {0x11e4578, provider_anchor_adapter<0>},
+    {0x2540184, provider_anchor_adapter<1>},
+}};
+bool use_cpp_provider_anchor = false;
+bool trace_provider_anchor = false;
+
+struct ProviderAnchorServices {
+    CPU cpu;
+
+    explicit ProviderAnchorServices(const CPU& source) : cpu(source) {
+        cpu.x[31] -= 0x40;
+        st<uint64_t>(cpu.x[31], source.x[29]);
+        st<uint64_t>(cpu.x[31] + 8, source.x[30]);
+        cpu.x[29] = cpu.x[31];
+    }
+
+    uint64_t invoke(uint64_t object, uint64_t slot, uint64_t resume) const {
+        CPU nested = cpu;
+        nested.x[0] = object;
+        nested.x[30] = main_base + resume;
+        nested.x[8] = ld<uint64_t>(ld<uint64_t>(object) + slot);
+        call(nested, nested.x[8]);
+        return nested.x[0];
+    }
+
+    acnh::ProviderTable table(acnh::ProviderReader reader) const {
+        return {invoke(reader.address, 0, 0x11e45a0)};
+    }
+
+    uint32_t width(acnh::ProviderTable table) const {
+        return static_cast<uint32_t>(invoke(table.address, 0x18, 0x11e45b0));
+    }
+
+    uint32_t height(acnh::ProviderTable table) const {
+        return static_cast<uint32_t>(invoke(table.address, 0x20, 0x11e45c4));
+    }
+
+    bool begin(acnh::ProviderContext context) const {
+        return (invoke(context.address, 0, 0x11e45f0) & 1) != 0;
+    }
+};
+
+template<size_t Index>
+void provider_anchor_adapter(CPU& cpu) {
+    auto& route = provider_anchor_routes[Index];
+    constexpr uint64_t resume = Index == 0 ? 0x11e51b8 : 0x11e5200;
+    const uint64_t frame = cpu.x[29];
+    if (cpu.x[30] != main_base + resume || ld<uint64_t>(frame + 8) != main_base + 0x1950414 ||
+        !shovel_cell_caller(ld<uint64_t>(ld<uint64_t>(frame) + 8) - main_base)) {
+        route.original(cpu);
+        return;
+    }
+
+    acnh::ProviderCell position{};
+    const acnh::ProviderAnchorLease lease{Index == 0 ? cpu.x[8] : cpu.x[0]};
+    if constexpr (Index == 0)
+        position = {ld<uint32_t>(cpu.x[1] + 8), ld<uint32_t>(cpu.x[1] + 12)};
+
+    const bool trace = trace_provider_anchor && route.samples.fetch_add(1, std::memory_order_relaxed) < 16;
+    if (use_cpp_provider_anchor) {
+        GuestMemory memory;
+        if constexpr (Index == 0) {
+            ProviderAnchorServices services{cpu};
+            acnh::acquire_provider_anchor(main_base, {cpu.x[0]}, position, lease, memory, services);
+        } else {
+            acnh::release_provider_anchor(main_base, lease, memory, [&](acnh::ProviderContext context) {
+                cpu.x[0] = context.address;
+                cpu.x[8] = ld<uint64_t>(context.address);
+                cpu.x[1] = ld<uint64_t>(cpu.x[8]);
+                call(cpu, cpu.x[1]);
+            });
+        }
+    } else {
+        route.original(cpu);
+    }
+
+    if (trace)
+        log("acnh shovel anchor %s entry=%llx state=pos=%x,%x type=%llx table=%u tags=%x,%x out=%x,%x",
+            use_cpp_provider_anchor ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+            position.x, position.z, static_cast<unsigned long long>(ld<uint64_t>(lease.address) - main_base),
+            unsigned(ld<uint64_t>(lease.address + 8) != 0), unsigned(ld<uint8_t>(lease.address + 0x10)),
+            unsigned(ld<uint8_t>(lease.address + 0x11)), ld<uint32_t>(lease.address + 0x14),
+            ld<uint32_t>(lease.address + 0x18));
+}
+
+unsigned shovel_item_init_scope(uint64_t caller, uint64_t frame) {
+    if (caller == 0x1950384)
+        return shovel_cell_caller(ld<uint64_t>(frame + 8) - main_base) ? 2 : 0;
+    if (caller == 0x21f7574) return 1;
+    constexpr uint64_t first = 0x127c540;
+    constexpr uint64_t last = first + 34 * 12;
+    if (caller >= first && caller <= last && (caller - first) % 12 == 0 &&
+        ld<uint64_t>(frame + 8) == main_base + 0x21f7574)
+        return 1;
+    return 0;
+}
+
+Fn original_empty_item_init = nullptr;
+Fn original_empty_item_finalize = nullptr;
+bool use_cpp_empty_item_init = false;
+bool trace_empty_item_init = false;
+std::array<std::atomic<unsigned>, 2> empty_item_init_counts{};
+std::array<std::atomic<unsigned>, 2> empty_item_finalize_counts{};
+
+void log_empty_item_init(bool native, uint64_t entry, uint64_t caller, uint64_t before, acnh::FieldItem item) {
+    log("acnh shovel item init %s entry=%llx caller=%llx before=%llx after=%llx",
+        native ? "cpp" : "original", static_cast<unsigned long long>(entry), static_cast<unsigned long long>(caller),
+        static_cast<unsigned long long>(before), ld<unsigned long long>(item.address));
+}
+
+void empty_item_init_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const unsigned scope = shovel_item_init_scope(caller, cpu.x[29]);
+    if (!scope) {
+        original_empty_item_init(cpu);
+        return;
+    }
+
+    const acnh::FieldItem item{cpu.x[0]};
+    const bool trace = trace_empty_item_init &&
+        empty_item_init_counts[scope - 1].fetch_add(1, std::memory_order_relaxed) < 40;
+    const uint64_t before = trace ? ld<uint64_t>(item.address) : 0;
+    GuestMemory memory;
+    const bool native = use_cpp_empty_item_init && acnh::initialize_empty_field_item(main_base, item, memory,
+        [&](acnh::FieldItem initialized) {
+            CPU nested = cpu;
+            nested.x[31] -= 0x60;
+            nested.x[29] = nested.x[31] + 0x20;
+            st<uint64_t>(nested.x[29], cpu.x[29]);
+            st<uint64_t>(nested.x[29] + 8, cpu.x[30]);
+            nested.x[0] = initialized.address;
+            nested.x[30] = main_base + 0x267d6ac;
+            call(nested, main_base + 0x267f248);
+        });
+    if (!native) original_empty_item_init(cpu);
+    if (trace) log_empty_item_init(native, 0x267d4ac, caller, before, item);
+}
+
+void empty_item_finalize_adapter(CPU& cpu) {
+    const uint64_t frame = cpu.x[29];
+    if (cpu.x[30] != main_base + 0x267d6ac) {
+        original_empty_item_finalize(cpu);
+        return;
+    }
+
+    const uint64_t parent = ld<uint64_t>(frame + 8) - main_base;
+    const unsigned scope = shovel_item_init_scope(parent, ld<uint64_t>(frame));
+    if (!scope) {
+        original_empty_item_finalize(cpu);
+        return;
+    }
+
+    const acnh::FieldItem item{cpu.x[0]};
+    const bool trace = trace_empty_item_init &&
+        empty_item_finalize_counts[scope - 1].fetch_add(1, std::memory_order_relaxed) < 40;
+    const uint64_t before = trace ? ld<uint64_t>(item.address) : 0;
+    const bool native = use_cpp_empty_item_init && acnh::empty_field_item_finalized(item, GuestMemory{});
+    if (!native) original_empty_item_finalize(cpu);
+    if (trace) log_empty_item_init(native, 0x267f248, parent, before, item);
+}
+
+Fn original_shovel_metadata = nullptr;
+bool use_cpp_shovel_metadata = false;
+bool trace_shovel_metadata = false;
+std::atomic<unsigned> shovel_metadata_samples{0};
+
+struct ShovelMetadataServices {
+    CPU cpu;
+
+    explicit ShovelMetadataServices(const CPU& caller) : cpu(caller) {
+        cpu.x[31] -= 0x30;
+        st<uint64_t>(cpu.x[31], caller.x[29]);
+        st<uint64_t>(cpu.x[31] + 8, caller.x[30]);
+        cpu.x[29] = cpu.x[31];
+    }
+
+    uint64_t invoke(uint64_t entry, uint64_t resume, uint64_t address) const {
+        CPU nested = cpu;
+        nested.x[0] = address;
+        nested.x[30] = main_base + resume;
+        call(nested, main_base + entry);
+        return nested.x[0];
+    }
+
+    uint32_t item_id(acnh::FieldItem item) const {
+        return static_cast<uint32_t>(invoke(0x267d6c4, 0x19ee3e4, item.address));
+    }
+
+    uint32_t alternate_kind(acnh::ItemDescriptor descriptor) const {
+        return static_cast<uint32_t>(invoke(0x19f93e8, 0x19ee428, descriptor.address));
+    }
+
+    bool metadata_enabled(acnh::ItemDescriptor descriptor, size_t path) const {
+        constexpr std::array resumes{0x19ee444, 0x19ee450, 0x19ee470};
+        return (invoke(0x19e59b0, resumes[path], descriptor.address) & 1) != 0;
+    }
+
+    acnh::CatalogEntry extended_row(acnh::ItemDescriptor descriptor) const {
+        return {invoke(0x19da7a0, 0x19ee71c, descriptor.address)};
+    }
+};
+
+void shovel_metadata_adapter(CPU& cpu) {
+    if (cpu.x[30] != main_base + 0x127cd98 || ld<uint64_t>(cpu.x[29] + 8) != main_base + 0x21f7618) {
+        original_shovel_metadata(cpu);
+        return;
+    }
+    const acnh::ItemDescriptor descriptor{cpu.x[0]};
+    const bool trace = trace_shovel_metadata && shovel_metadata_samples.fetch_add(1, std::memory_order_relaxed) < 16;
+    const uint64_t before = trace ? ld<uint64_t>(descriptor.address + 8) : 0;
+    const bool has_row = trace && ld<uint64_t>(descriptor.address + 0x10) != 0;
+    if (use_cpp_shovel_metadata) {
+        GuestMemory memory;
+        ShovelMetadataServices services{cpu};
+        cpu.x[0] = acnh::shovel_metadata_kind(main_base, descriptor, memory, services);
+    } else {
+        original_shovel_metadata(cpu);
+    }
+    if (trace)
+        log("acnh shovel metadata %s item=%llx row=%u out=%x",
+            use_cpp_shovel_metadata ? "cpp" : "original", static_cast<unsigned long long>(before),
+            unsigned(has_row), static_cast<unsigned>(cpu.x[0]));
+}
+
 void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (std::string_view(module.name) != "main" ||
         mod_package::build_id(plat::data_root()) != camera303::build_id) return;
@@ -1489,6 +1727,27 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_provider_cell = std::getenv("NX_ACNH_PROVIDER_CELL_TRACE") != nullptr;
     if (use_cpp_provider_cell || trace_provider_cell)
         wrap_function(entries, 0x11e4f58, provider_cell_adapter, original_provider_cell);
+
+    mode = std::getenv("NX_ACNH_PROVIDER_ANCHOR");
+    use_cpp_provider_anchor = !mode || std::string_view(mode) == "cpp";
+    trace_provider_anchor = std::getenv("NX_ACNH_PROVIDER_ANCHOR_TRACE") != nullptr;
+    if (use_cpp_provider_anchor || trace_provider_anchor)
+        for (auto& route : provider_anchor_routes)
+            wrap_function(entries, route.entry, route.adapter, route.original);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_EMPTY_ITEM_INIT");
+    use_cpp_empty_item_init = !mode || std::string_view(mode) == "cpp";
+    trace_empty_item_init = std::getenv("NX_ACNH_SHOVEL_EMPTY_ITEM_INIT_TRACE") != nullptr;
+    if (use_cpp_empty_item_init || trace_empty_item_init) {
+        wrap_function(entries, 0x267d4ac, empty_item_init_adapter, original_empty_item_init);
+        wrap_function(entries, 0x267f248, empty_item_finalize_adapter, original_empty_item_finalize);
+    }
+
+    mode = std::getenv("NX_ACNH_SHOVEL_METADATA");
+    use_cpp_shovel_metadata = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_metadata = std::getenv("NX_ACNH_SHOVEL_METADATA_TRACE") != nullptr;
+    if (use_cpp_shovel_metadata || trace_shovel_metadata)
+        wrap_function(entries, 0x19ee3b4, shovel_metadata_adapter, original_shovel_metadata);
 
     mode = std::getenv("NX_ACNH_PROVIDER_METHODS");
     use_cpp_provider_methods = !mode || std::string_view(mode) == "cpp";

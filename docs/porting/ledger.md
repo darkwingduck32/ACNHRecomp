@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 24.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 29.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -668,3 +668,38 @@ foreach ($fixture in 'whole', 'half') {
     }
 }
 ```
+
+### Neighborhood continuation, scratch items and metadata
+
+The five entries below now default to handwritten C++ on the shovel
+neighborhood path. Each counts only for the observed scope.
+
+| Entry | Responsibility | Independent replay cases | Captures per route |
+| --- | --- | ---: | ---: |
+| `0x11e4578` | Resolve a continuation anchor and acquire its context | 24 | 16 |
+| `0x2540184` | Clean up the continuation context | 24 | 16 |
+| `0x267d4ac` | Initialize an empty survey item | 48 | 80 |
+| `0x267f248` | Finalize a sentinel item | 128 | 80 |
+| `0x19ee3b4` | Classify item metadata for the gather | 720 | 1 |
+
+The original and opt-in runs were `neighborhoodsupp1`. The default was
+`neighborhoodsupp2`. All captured function data matched. The original
+and C++ runs for this group each matched the four focal decision codes,
+results, records and occupancy masks at (40, 69). The opt-in fixture
+also took one extra step to (40, 70), so the initial unfiltered
+comparison saw one extra decision. The earlier composed checkpoint
+covers (40, 70) across all three routes.
+
+The 16 fixture cases with a catalog entry for the empty sentinel stayed
+on the generated initializer route. The metadata trial used a populated
+row and returned zero. Replay also checked nonzero classifications and
+generated metadata callback order. The original routes remain available
+via `NX_ACNH_PROVIDER_ANCHOR=original`,
+`NX_ACNH_SHOVEL_EMPTY_ITEM_INIT=original` and
+`NX_ACNH_SHOVEL_METADATA=original`. All 13 Release CTest checks passed.
+
+The next set is the frequently invoked provider table resolver
+`0x1267360` and both context dispatch thunks `0x260b860` and
+`0x260b934`. All 12 inspected table resolutions used this same
+destination. Their real virtual callbacks remain selectable through the
+guest boundary.

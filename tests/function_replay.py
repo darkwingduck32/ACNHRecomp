@@ -20,6 +20,7 @@ class Result:
     registers: dict[int, int]
     memory: dict[int, bytes]
     written_bytes: frozenset[int]
+    writes: tuple[tuple[int, int, int | None], ...]
 
 
 def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
@@ -53,6 +54,7 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
 
     accessible = [(address, address + len(data)) for address, data in memory.items()]
     written = set()
+    writes = []
     failure = None
     last_instruction = None
 
@@ -71,7 +73,7 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
         if word & 0xfc000000 == 0x94000000 or word & 0xfffffc1f == 0xd63f0000:
             stop(machine, f"unexpected call at {address:#x}")
 
-    def check_memory(machine, access, address, size, _value, _):
+    def check_memory(machine, access, address, size, value, _):
         if STACK_BASE <= address and address + size <= STACK_END:
             return
         write = access == UC_MEM_WRITE
@@ -79,6 +81,8 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
             stop(machine, f"unexpected {'write' if write else 'read'} at {address:#x} ({size} bytes)")
         elif write:
             written.update(range(address, address + size))
+            # Unicorn's value argument is at most 64 bits.
+            writes.append((address, size, value & ((1 << (8 * size)) - 1) if size <= 8 else None))
 
     def check_unmapped(machine, access, address, size, _value, _):
         stop(machine, f"invalid memory access {access} at {address:#x} ({size} bytes)")
@@ -103,4 +107,5 @@ def run(entry, code, registers, outputs, memory, *, instruction_limit=10000):
         {reg: uc.reg_read(reg) for reg in outputs},
         {address: bytes(uc.mem_read(address, len(data))) for address, data in memory.items()},
         frozenset(written),
+        tuple(writes),
     )

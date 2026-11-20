@@ -18,6 +18,13 @@ class FunctionReplayTest(unittest.TestCase):
         self.assertEqual(first.memory, {0x20000: (42).to_bytes(4, "little")})
         self.assertEqual(first.written_bytes, frozenset(range(0x20000, 0x20004)))
 
+    def test_preserves_transient_write_order(self):
+        # mov w1, #1; str w1, [x0]; str wzr, [x0]; ret
+        code = bytes.fromhex("21008052010000b91f0000b9c0035fd6")
+        result = function_replay.run(0x10000, code, {UC_ARM64_REG_X0: 0x20000}, (), {0x20000: bytes(4)})
+        self.assertEqual(result.memory, {0x20000: bytes(4)})
+        self.assertEqual(result.writes, ((0x20000, 4, 1), (0x20000, 4, 0)))
+
     def test_rejects_read_beyond_fixture_in_mapped_page(self):
         # ldr w1, [x0, #4]; ret
         code = bytes.fromhex("010440b9c0035fd6")

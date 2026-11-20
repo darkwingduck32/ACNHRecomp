@@ -5,6 +5,7 @@
 #include "../../../games/acnh/field_value_cache.h"
 #include "../../../games/acnh/field_action_state.h"
 #include "../../../games/acnh/field_bookkeeping.h"
+#include "../../../games/acnh/catalog_field_queries.h"
 #include "../../../games/acnh/field_scan_queries.h"
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
@@ -273,7 +274,7 @@ struct FieldWritePreview {
         uint64_t value;
     };
 
-    std::array<Write, 10> writes{};
+    std::array<Write, 12> writes{};
     size_t count = 0;
 
     template<class T>
@@ -617,6 +618,106 @@ void field_bookkeeping_adapter(CPU& cpu) {
         use_cpp_field_bookkeeping ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
         static_cast<unsigned long long>(resume - 4), key, extra, writes.c_str(),
         match ? "match" : "mismatch", static_cast<unsigned long long>(output));
+}
+
+struct CatalogFieldRoute { uint64_t entry; std::array<uint64_t, 4> resumes; };
+constexpr std::array<CatalogFieldRoute, 5> catalog_field_routes{{
+    {0x19d778c, {0x24572c4}}, {0x19d78cc, {0x2225f5c, 0x2549834}},
+    {0x19e89e0, {0x659b70, 0x6661bc, 0x163a3b4}},
+    {0x19e8b58, {0x128966c, 0x142dea0, 0x1431340}},
+    {0x19d7ca0, {0x1602934, 0x160fb54, 0x160fd54, 0x1610db8}},
+}};
+std::array<Fn, catalog_field_routes.size()> original_catalog_field{};
+bool use_cpp_catalog_field = false;
+bool use_cpp_catalog_description = false;
+bool trace_catalog_field = false;
+
+template<size_t Index, class Memory>
+uint64_t catalog_field_query(uint64_t object, uint64_t output, Memory& memory) {
+    if constexpr (Index == 0) {
+        return acnh::catalog_category_attribute(main_base, uint32_t(object), memory);
+    } else if constexpr (Index == 1) {
+        return acnh::catalog_item_attribute(main_base, {object}, memory);
+    } else if constexpr (Index == 2) {
+        return acnh::catalog_matches_ground_categories(main_base, {object}, memory);
+    } else if constexpr (Index == 3) {
+        return acnh::catalog_matches_edge_categories(main_base, {object}, memory);
+    } else {
+        acnh::catalog_description(main_base, uint32_t(object), {output}, memory);
+        return object;
+    }
+}
+
+template<size_t Index>
+void catalog_field_adapter(CPU& cpu) {
+    constexpr auto route = catalog_field_routes[Index];
+    const auto original = original_catalog_field[Index];
+    const auto resume = cpu.x[30] - main_base;
+    const auto site = std::find(route.resumes.begin(), route.resumes.end(), resume);
+    const bool use_cpp = Index == 4 ? use_cpp_catalog_description : use_cpp_catalog_field;
+    if (!resume || site == route.resumes.end() || (!use_cpp && !trace_catalog_field)) {
+        original(cpu);
+        return;
+    }
+    const auto object = cpu.x[0], output = cpu.x[8];
+    bool trace = false;
+    if (trace_catalog_field) {
+        static std::array<std::atomic<uint64_t>, route.resumes.size()> calls{};
+        const auto count = calls[size_t(site - route.resumes.begin())].fetch_add(1, std::memory_order_relaxed) + 1;
+        trace = count <= 256 || std::has_single_bit(count);
+    }
+    GuestMemory memory;
+    FieldWritePreview preview;
+    uint64_t expected = trace ? catalog_field_query<Index>(object, output, preview) : 0;
+    if (use_cpp) {
+        if constexpr (Index != 4) {
+            if (trace) {
+                CPU reference = cpu;
+                original(reference);
+                expected = reference.x[0];
+            }
+        }
+        cpu.x[0] = catalog_field_query<Index>(object, output, memory);
+    } else {
+        original(cpu);
+    }
+    if (!trace) return;
+
+    bool match = Index == 4 || cpu.x[0] == expected;
+    std::string writes;
+    if constexpr (Index == 4) {
+        for (size_t i = 0; i < preview.count; ++i) {
+            const auto& write = preview.writes[i];
+            uint64_t actual, wanted;
+            switch (write.size) {
+            case 1: actual = ld<uint8_t>(write.address); wanted = preview.read<uint8_t>(write.address); break;
+            case 4: actual = ld<uint32_t>(write.address); wanted = preview.read<uint32_t>(write.address); break;
+            default: actual = ld<uint64_t>(write.address); wanted = preview.read<uint64_t>(write.address); break;
+            }
+            match &= actual == wanted;
+            uint64_t offset = write.address - output;
+            if (offset == 0) {
+                actual -= main_base;
+            } else if (offset == 8) {
+                const auto absent = ld<uint64_t>(main_base + 0x4ab2238);
+                const auto unresolved = ld<uint64_t>(main_base + 0x4abff10);
+                actual = absent && actual == ld<uint64_t>(absent + 8) ? 0
+                    : unresolved && actual == ld<uint64_t>(unresolved) ? 1 : 2;
+            } else {
+                const auto ready = ld<uint64_t>(main_base + 0x4abe218);
+                const auto slots = ld<uint64_t>(main_base + 0x4abe220);
+                offset = 0x100 + (write.address == ready ? 0x38 : write.address - slots);
+            }
+            char field[80];
+            std::snprintf(field, sizeof(field), "%llx:%zu:%llx,", static_cast<unsigned long long>(offset),
+                          write.size, static_cast<unsigned long long>(actual));
+            writes.append(field);
+        }
+    }
+    log("acnh catalog field %s entry=%llx call=%llx key=%x writes=%s same_input=%s out=%llx",
+        use_cpp ? "cpp" : "original", static_cast<unsigned long long>(route.entry),
+        static_cast<unsigned long long>(resume - 4), Index == 0 || Index == 4 ? uint32_t(object) : 0,
+        writes.c_str(), match ? "match" : "mismatch", static_cast<unsigned long long>(Index == 4 ? 0 : cpu.x[0]));
 }
 
 void field_column_adapter(CPU& cpu) {
@@ -6022,6 +6123,21 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         };
         for (size_t i = 0; i < adapters.size(); ++i)
             wrap_function(entries, field_bookkeeping_routes[i].entry, adapters[i], original_field_bookkeeping[i]);
+    }
+
+    mode = std::getenv("NX_ACNH_CATALOG_FIELD");
+    use_cpp_catalog_description = mode && std::string_view(mode) == "cpp";
+    use_cpp_catalog_field = !mode || use_cpp_catalog_description;
+    trace_catalog_field = std::getenv("NX_ACNH_CATALOG_FIELD_TRACE") != nullptr;
+    if (use_cpp_catalog_field || trace_catalog_field) {
+        constexpr std::array<Fn, catalog_field_routes.size()> adapters{
+            catalog_field_adapter<0>, catalog_field_adapter<1>, catalog_field_adapter<2>,
+            catalog_field_adapter<3>, catalog_field_adapter<4>,
+        };
+        for (size_t i = 0; i + 1 < adapters.size(); ++i)
+            wrap_function(entries, catalog_field_routes[i].entry, adapters[i], original_catalog_field[i]);
+        if (use_cpp_catalog_description || trace_catalog_field)
+            wrap_function(entries, catalog_field_routes.back().entry, adapters.back(), original_catalog_field.back());
     }
 
     mode = std::getenv("NX_ACNH_FIELD_SCAN");

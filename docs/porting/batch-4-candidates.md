@@ -4,7 +4,7 @@ This discovery queue tracks 100 entries on build
 `FF1D1C05670DB6021C85B624A710B963`. The [ledger](ledger.md#active-batch-4)
 tracks candidates selected for implementation.
 
-The scan followed direct calls up to seven levels from 114 gameplay caller
+The scan followed direct calls up to seven levels from 120 gameplay caller
 roots. Roots include call sites observed in the disposable shovel probe.
 The scanner checked unwind ranges, complete instruction decoding, a return,
 no nested calls and no branches outside the function. `Observed` records
@@ -33,8 +33,11 @@ verified 45 queued entries against original direct calls. Its SHA-256 is
 The field bookkeeping probe at `tree-shake-original-fieldbook1/console.log`
 verified 37 queued entries against original direct calls. Its SHA-256 is
 `9e1ef28765761c2ea86000d18fad0bc3667162744dba9c38b84fe8bfc2b0ab0c`.
-After moving five verified bookkeeping functions to the ledger and
-refilling, 33 queue entries have observed direct callers.
+The catalog probe at `tree-shake-original-catalogfield1/console.log`
+verified 32 queued entries against original direct calls. Its SHA-256 is
+`2eb15614228b311f719b2a48d3433c15e16f64b5877954405fea186971843817`.
+After moving four verified catalog queries to the ledger and refilling,
+29 queue entries have observed direct callers.
 
 ```powershell
 $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
@@ -44,7 +47,8 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
     --probe "$r/tree-shake-original-terrainmaterial1/console.log" 6b631676b92a5ba7dc8af696cee3c018d4ef8e8572ed9982ba500b627045dbc2 `
     --probe "$r/tree-shake-original-fieldscan1/console.log" a0dfaafd8ec81b92b7268122b31d07806e795b712decefd059506ee29fad1e4f `
     --probe "$r/tree-shake-original-fieldaction1/console.log" b19798d262b374cd9090eb9e972971f28fa1e5995db371b1cc1e8e057d83bdf7 `
-    --probe "$r/tree-shake-original-fieldbook1/console.log" 9e1ef28765761c2ea86000d18fad0bc3667162744dba9c38b84fe8bfc2b0ab0c
+    --probe "$r/tree-shake-original-fieldbook1/console.log" 9e1ef28765761c2ea86000d18fad0bc3667162744dba9c38b84fe8bfc2b0ab0c `
+    --probe "$r/tree-shake-original-catalogfield1/console.log" 2eb15614228b311f719b2a48d3433c15e16f64b5877954405fea186971843817
 ```
 
 | Main entry | Unwind size | Direct caller | Stage |
@@ -57,10 +61,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 | `0x1b65b60` | `0xf4` | `0x30938ac` | Observed |
 | `0x247a010` | `0x114` | `0x240c5ac` | Observed |
 | `0x1217b90` | `0x124` | `0x12d264c` | Observed |
-| `0x19d778c` | `0x140` | `0x24572c0` | Observed |
-| `0x19e89e0` | `0x178` | `0x659b6c` | Observed |
 | `0x19d7ca0` | `0x1c8` | `0x160fb50` | Observed |
-| `0x19d78cc` | `0x1d8` | `0x2225f58` | Observed |
 | `0x328b5cc` | `0x18` | `0x3091a68` | Observed |
 | `0x245a688` | `0x110` | `0x220ff10` | Observed |
 | `0x280cbcc` | `0x6c` | `0x1d28308` | Observed |
@@ -72,7 +73,6 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 | `0x120d468` | `0x168` | `0x1209f70` | Observed |
 | `0x7ea6d8` | `0x214` | `0x7eaa98` | Observed |
 | `0x1298524` | `0x104` | `0x129302c` | Observed |
-| `0x19e8b58` | `0x118` | `0x142de9c` | Observed |
 | `0x22e0f4` | `0x234` | `0x22e79c` | Observed |
 | `0x2603058` | `0xdc` | `0x2542d54` | Observed |
 | `0x32d4244` | `0x1a4` | `0x32d4214` | Observed |
@@ -149,3 +149,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 | `0x2776f34` | `0x22c` | `0x26823e8` | Discovery |
 | `0x277bae0` | `0x22c` | `0x2682a38` | Discovery |
 | `0x278c770` | `0x22c` | `0x26829a4` | Discovery |
+| `0x34a70c8` | `0xf0` | `0x20440ac` | Discovery |
+| `0x26c5694` | `0x54` | `0x26d3158` | Discovery |
+| `0x34a4230` | `0x124` | `0x127a258` | Discovery |
+| `0x26dc31c` | `0x140` | `0x20d7e18` | Discovery |

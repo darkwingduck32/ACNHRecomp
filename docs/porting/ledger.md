@@ -2984,6 +2984,13 @@ lower bound at 1,441,792 worker-grid calls routed through C++.
 The trace additionally ran the original for the 799 sampled
 same-input comparisons.
 
+The [paired coverage run](gameplay-coverage.md#paired-terrain-worker-measurement)
+used the same DLL for the worker original and default routes with
+validation traces off. Generated grid-body samples on worker threads
+changed from 2 to 1 for tree, 5 to 1 for movement, and 5 to 0 for
+shovel. The report preserves the game, worker and presentation
+denominators. These sparse samples measure where execution landed.
+
 The default gameplay library linked the two fresh worker callers
 unchanged from the generator, with all five grid edges dispatched.
 The original frame setup synchronizes X29 and SP before those calls.

@@ -41,6 +41,48 @@ was reached at `0x129302c` in tree shaking (4) and `0x12933a0` in shovel
 movement (5). Startup can consume the probe's budget. Use these
 records to establish caller reachability.
 
+## Paired terrain-worker measurement
+
+The pairs use runtime `09404c15337a1c7f5a03398a306d4d6ec9ce9398`,
+the same fresh worker-dispatch DLL on both routes, and the original
+fixture schedules and frame windows above. The only route toggle was
+`NX_ACNH_WORKER_GRID_HEIGHT=original` versus its default. The scratch
+player retained the same Vulkan cache seed on each launch by sharing
+it read-only. It suppressed cache persistence on both routes to keep
+all six saves and captures on disk. Worker, heading, survey and input
+validation traces were disabled. The DLL's bounded discovery probes
+were present on both routes.
+
+| Activity | Worker route | Game DLL / game thread | Worker DLL / worker threads | Generated grid samples game / workers |
+| --- | --- | ---: | ---: | ---: |
+| Tree shake | Original | 140 / 345 | 209 / 18,630 | 3 / 2 |
+| Tree shake | Default | 137 / 346 | 253 / 18,684 | 0 / 1 |
+| Movement | Original | 142 / 350 | 235 / 18,900 | 3 / 5 |
+| Movement | Default | 137 / 351 | 209 / 18,954 | 2 / 1 |
+| Shovel | Original | 129 / 343 | 226 / 18,522 | 1 / 5 |
+| Shovel | Default | 118 / 345 | 229 / 18,630 | 1 / 0 |
+
+Presentation had zero DLL samples on both routes. Its original/default
+denominators were 345/346 for tree, 350/351 for movement, and 343/345
+for shovel. Unresolved or ambiguous DLL samples on the game thread
+were 8/12, 11/11, and 14/7. The corresponding worker counts were
+10/16, 11/15, and 11/9. Original and default shovel runs also matched
+all four final field decisions.
+
+Counts are exclusive instruction-pointer samples at 47 Hz, with the
+DLL numerator and full thread-role denominator shown separately. The
+grid column counts exact samples of the generated `0x862700` body
+across all its callers. Its remaining generated routes can still
+contribute. Sample counts in these short windows do not establish a
+speedup. See the ledger for the separate C++ route count on the
+validated tree fixture.
+
+The DLL SHA-256 is
+`05159291c8595afa430d385a9adf9e0b7560b1c3bbade0f7e07f80f32d4069bd`.
+The local capture tags are `paired-{tree,movement,shovel}-{original,default}1`.
+The code-only summary command is
+`python -m private.heading.worker_grid_profile_pairs <run root> <DLL> <cache seed>`.
+
 ## Shared generated work to capture
 
 | Body | Thread | Tree | Movement | Shovel |

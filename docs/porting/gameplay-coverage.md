@@ -53,7 +53,33 @@ records to establish caller reachability.
 | `0x146a660` | Worker | 11 | 12 | 11 |
 | `0x11fcb00` | Worker | 6 | 6 | 3 |
 
-The first capture group is the shared field query chain. The original
+The next port group starts in render-state selection. The game-thread
+body at `0x38ea910` has the highest sample count in all three activities.
+It has 50 statically decoded direct callers. A repeat of the tree
+window with native stack sampling found 54 samples in that body. All
+54 unwound through the direct calls at `0x38ea18c` or `0x38facf8`,
+27 samples per caller.
+
+A bounded generated-route trace at those two callers completed 93
+calls, all with W0=1. The selected resource pointer matched the cache
+in 27 captures and changed in 66. The matching-resource path made
+8–12 callbacks. The changed-resource path made 9–29. The trace
+retained up to 24 ordered call sites and targets per invocation and
+checked those sites against the original instructions. The live fixture
+did not reach the empty-resource return. Twenty synthetic controls
+executed that return twice in AArch64 with W0=0 and no external writes
+or callbacks.
+
+A detailed capture at `0x38ea18c` produced a completed matching-resource
+invocation. The fixture reconstructs the memory the parent touched,
+including the caller's stack-backed state passed in X0. Two independent
+executions of the original parent matched W0=1, 24 ordered external
+stores and nine ordered callbacks. The replay supplied the captured
+callback returns. There were no read-visible byte changes to inject.
+The callback bodies and their graphics effects still need validation.
+The render selector remains on the generated route.
+
+The shared field query chain is the next worker-thread group. The original
 `0x11fc610` and `0x11fcb00` call `0x146a660` at five direct sites.
 `0x146a660` calls `0x146ab80` at `0x146aa88`. Both worker parents also
 call grid height `0x862700`, which already has a typed path at other
@@ -64,11 +90,8 @@ order, arguments, atomic state transitions, and output writes before
 selecting a typed boundary. `0x146b080` is a related game-thread
 capture candidate. Its four direct sites are in `0x1461a34`.
 
-`0x38ea910` has the highest game-thread count in each activity. It
-has 50 statically decoded direct callers and multiple virtual calls.
-Capture a dominant caller and its reached callbacks before selecting
-a port group for that body. The alternate shovel leg remains on the
-generated route pending a repeatable trigger.
+The alternate shovel leg remains on the generated route pending a
+repeatable trigger.
 
 Validate each chosen function independently against original AArch64.
 Then share one original, one opt-in C++, and one default run per
@@ -108,3 +131,9 @@ directories. The private scratch scripts are `activity_coverage`,
 The guest DLL SHA-256 is
 `44ad0a959a23e1c9eb56c7fa9edf5356bfbe273264e835d7db80263d22865d76`.
 Recorded inputs, saves, binary files and raw samples remain local.
+
+The render-only Windows reruns use `render-tree1` for stack samples,
+`render-state-original1` for caller and callback shapes, and
+`render-state-detail1` for the replay fixture in the private
+`coverage-runs` directory. The local replay command is
+`python -m private.heading.replay_render_selector_capture <console.log>`.

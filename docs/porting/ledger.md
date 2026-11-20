@@ -2935,3 +2935,14 @@ The default `batch4deep1` discovery run matched all four focal
 surveys, neighborhoods, and final decisions from `classdeep2`.
 The [queue](batch-4-candidates.md) still contains 100 unique entries,
 with 38 observed direct callers after this probe added nine.
+
+### Shared render-state selector capture
+
+`0x38ea910` was the most sampled generated body on the Windows
+game thread in all three measured activities. The tree repeat reached
+both original caller sites, `0x38ea18c` and `0x38facf8`. Two original
+AArch64 executions of the captured matching-resource parent agreed
+on its return, 24 ordered stores and nine ordered callbacks. The
+callback effects remain modeled, and the selector remains generated.
+Batch 4 stays at 24 verified. See [gameplay coverage](gameplay-coverage.md)
+for the live branch counts, replay boundary, and fixture recipes.

@@ -235,7 +235,7 @@ All gameplay tests use the same muted single-instance launcher.
 
 | Main entry | Unwind size | Provisional function | Observed caller | Stage |
 | --- | --- | --- | --- | --- |
-| `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x220fd80`, `0x2215230`, `0x221f0c4`, `0x225b344` | Reference replay |
+| `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x220fd80`, `0x2215230`, `0x221f0c4`, `0x225b344` | Live trial |
 | `0x1148db0` | `0xd4` | Resolve an eight-slot cached field | `0x114169c`, `0x114182c`, `0x1141850`, `0x1141874` | Queued |
 | `0x29cbe80` | `0x124` | Read cached row value, slot 12 | `0x29cd3d0` | Queued |
 | `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Queued |
@@ -256,3 +256,17 @@ bounds, then use the existing traced-memory convention to capture the
 shovel callers. For the shared-cache family, verify the hash and slot
 from each original body and independently replay every entry, including
 cold initialization and warm cache hits.
+
+The independent NSO check found that `main+0x240f090` and the verified
+`main+0x8807cc` have identical 0xa0-byte bodies. The indexed entry uses the
+existing C++ implementation. It independently matched all 336 fixtures
+twice against its own original entry. The Windows Release player passed
+all 13 CTest tests. The native route is opt-in via
+`NX_ACNH_INDEXED_RECORD=cpp`. The live trial uses the disposable shovel
+fixture and captures the known caller at `main+0x221f0c4` in
+`tree-shake-{original,cpp}-indexed1/nx.log`.
+
+```powershell
+& private/venv/Scripts/python -m private.heading.identify_batch3
+& private/venv/Scripts/python -m private.heading.compare_leaf field_record --indexed
+```

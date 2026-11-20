@@ -95,6 +95,33 @@ void field_record_adapter(CPU& cpu) {
     }
 }
 
+Fn original_indexed_record = nullptr;
+bool use_cpp_indexed_record = false;
+bool trace_indexed_record = false;
+std::atomic<unsigned> indexed_record_samples{0};
+
+void indexed_record_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const bool trace = trace_indexed_record && caller == 0x221f0c8 &&
+        indexed_record_samples.fetch_add(1, std::memory_order_relaxed) < 24;
+    if (!use_cpp_indexed_record && !trace) {
+        original_indexed_record(cpu);
+        return;
+    }
+
+    const uint64_t db = cpu.x[0];
+    const uint32_t index = static_cast<uint32_t>(cpu.x[1]);
+    std::string reads;
+    const uint64_t result = acnh::field_record(db, index, GuestMemory{trace ? &reads : nullptr});
+    if (use_cpp_indexed_record) cpu.x[0] = result;
+    else original_indexed_record(cpu);
+    if (trace)
+        log("acnh indexed record %s caller=%llx parent=0 db=%llx index=%x out=%llx reads=%s",
+            use_cpp_indexed_record ? "cpp" : "original", static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(db), index, static_cast<unsigned long long>(cpu.x[0]),
+            reads.c_str());
+}
+
 struct ColumnSnapshot {
     uint64_t base;
     ColumnCache cache;
@@ -376,6 +403,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_field_record = std::getenv("NX_ACNH_FIELD_RECORD_TRACE") != nullptr;
     if (use_cpp || trace_field_record)
         wrap_function(entries, row_entry, field_record_adapter, original_field_record);
+
+    mode = std::getenv("NX_ACNH_INDEXED_RECORD");
+    use_cpp_indexed_record = mode && std::string_view(mode) == "cpp";
+    trace_indexed_record = std::getenv("NX_ACNH_INDEXED_RECORD_TRACE") != nullptr;
+    if (use_cpp_indexed_record || trace_indexed_record)
+        wrap_function(entries, 0x240f090, indexed_record_adapter, original_indexed_record);
 
     mode = std::getenv("NX_ACNH_FIELD_COLUMN");
     use_cpp_column = !mode || std::string_view(mode) == "cpp";

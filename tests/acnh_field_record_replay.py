@@ -16,7 +16,7 @@ from tools.acnh_version import build_id
 
 BUILD = "FF1D1C05670DB6021C85B624A710B963"
 BASE = 0x4000000000
-ENTRY, SIZE = 0x8807CC, 0xA0
+ENTRY, INDEXED_ENTRY, SIZE = 0x8807CC, 0x240F090, 0xA0
 DB, REGISTRY, HEADER, FLAGS, PREPARED = (0x20000, 0x21000, 0x22000, 0x23000, 0x24000)
 
 
@@ -55,7 +55,7 @@ def inputs():
 
 
 TRACE = re.compile(
-    r"acnh field row (original|cpp) caller=([0-9a-f]+) parent=([0-9a-f]+) "
+    r"acnh (field row|indexed record) (original|cpp) caller=([0-9a-f]+) parent=([0-9a-f]+) "
     r"db=([0-9a-f]+) index=([0-9a-f]+) out=([0-9a-f]+) reads=([0-9a-f:,]+)"
 )
 
@@ -101,12 +101,14 @@ def shape(db, index, output, caller, parent, reads):
     return caller, parent, index, fields, result
 
 
-def live_cases(path, expected_route):
+def live_cases(path, expected_route, label="field row"):
     raw = path.read_bytes()
     signatures = set()
     captures = []
     for match in TRACE.finditer(raw.decode("utf-8", errors="replace")):
-        route, caller, parent, db, index, output, fields = match.groups()
+        kind, route, caller, parent, db, index, output, fields = match.groups()
+        if kind != label:
+            continue
         if route != expected_route:
             raise ValueError(f"{path}: expected {expected_route}, saw {route}")
         db, index, output = int(db, 16), int(index, 16), int(output, 16)
@@ -125,17 +127,20 @@ def main():
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--live", nargs=2, metavar=("ORIGINAL_LOG", "CPP_LOG"), type=Path)
+    parser.add_argument("--indexed", action="store_true", help="replay the second indexed record entry")
     args = parser.parse_args()
+    entry = INDEXED_ENTRY if args.indexed else ENTRY
+    label = "indexed record" if args.indexed else "field row"
     if build_id(args.module) != BUILD:
         parser.error(f"expected module build {BUILD}")
     module = nso.load(args.module)
-    if not any(f.start == ENTRY and f.size == SIZE for f in ehframe.parse(module)):
+    if not any(f.start == entry and f.size == SIZE for f in ehframe.parse(module)):
         parser.error("function boundary is absent from the module's unwind table")
-    code = bytes(module.image[ENTRY:ENTRY + SIZE])
+    code = bytes(module.image[entry:entry + SIZE])
     cases = [(*case, None) for case in inputs()]
     if args.live:
-        original_shapes, original = live_cases(args.live[0], "original")
-        replacement_shapes, replacement = live_cases(args.live[1], "cpp")
+        original_shapes, original = live_cases(args.live[0], "original", label)
+        replacement_shapes, replacement = live_cases(args.live[1], "cpp", label)
         if original_shapes != replacement_shapes:
             raise SystemExit("original and C++ traces have different normalized states or outcomes")
         cases.extend(original)
@@ -152,8 +157,8 @@ def main():
         raise SystemExit(f"candidate returned {len(actual)} results for {len(cases)} cases")
     for i, (db, index, memory, observed) in enumerate(cases):
         registers = {UC_ARM64_REG_X0: db, UC_ARM64_REG_X1: index}
-        original = run(BASE + ENTRY, code, registers, (UC_ARM64_REG_X0,), memory)
-        repeat = run(BASE + ENTRY, code, registers, (UC_ARM64_REG_X0,), memory)
+        original = run(BASE + entry, code, registers, (UC_ARM64_REG_X0,), memory)
+        repeat = run(BASE + entry, code, registers, (UC_ARM64_REG_X0,), memory)
         if original != repeat or original.memory != memory or original.written_bytes:
             raise SystemExit(f"unexpected reference effects in case {i}, index {index}")
         expected, got = original.registers[UC_ARM64_REG_X0], int(actual[i])

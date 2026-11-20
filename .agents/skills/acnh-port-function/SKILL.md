@@ -1,0 +1,31 @@
+---
+name: acnh-port-function
+description: Use when starting or resuming an unattended campaign to port ACNH engine functions to handwritten C++ and validate them against the original game logic in ACNHRecomp.
+---
+
+# Port ACNH functions
+
+An invocation authorizes the repeated local porting work in the user's objective. Use Superpowers test-driven development, systematic debugging on failures, and verification before completion. The user delegates selection, design, testing, local review, and advancement to the next function. Resolve those decisions from evidence without a per-function approval round.
+
+## Resume or bootstrap
+
+1. Locate the campaign worktree with `git worktree list`. Reuse the worktree for branch `port/acnh-engine`. On first run create that branch and a dedicated sibling worktree from the kickoff revision. Record its path in the session. Preserve unrelated changes in other checkouts. Run one writer per campaign.
+2. Read `docs/porting/ledger.md` in that worktree. Create it on first use. Reconcile the current row with the actual files, git status and test outputs after an interruption. Resume the first unfinished actionable step. Checkpoint changes to the ledger and completed code in local commits limited to campaign files. Leave external publishing to the user.
+3. Locate the prepared game folder in the original checkout (default `private/game`). Separate worktrees do not inherit ignored files. Pass the absolute game path to tools. Identify the actual build with `python tools/acnh_version.py <game-folder> --get build_id` and match it to `games/acnh/versions.txt`. Put raw captures, executable bytes, generated recompilation output, and save copies under ignored `private/`. Use a disposable copy of the save/profile for live tests.
+4. Start with a meaningful deterministic gameplay leaf with a known caller and few dependencies. Discover candidates from the build's disassembly, calls, and existing hook comments. Verify the function boundary in the binary. An instruction hook may point inside a function. Maintain a short ordered queue, replenishing it from callers, callees and adjacent gameplay logic whenever it runs low. Select a new function after each verified port until the kickoff objective is met.
+
+## Work one function
+
+* **Identify.** Key the row by module build ID and module-relative entry offset. Record the caller, calling convention, argument and result widths, aliasing, reachable memory, globals and external effects. Mark inferred names as provisional.
+* **Establish a reference.** Prefer real call-entry captures and their observed exits. Record capture provenance (original game or instrumented recomp), scenario and fixture hash. Run original AArch64 bytes from the pinned module under an independent executor such as Unicorn, or capture paired entry/exit observations on the original executable. For leaf routines, supplement real calls with reproducible boundary and seeded cases. Verify repeated reference runs agree. Keep time, RNG and external calls reproducible or defer that function.
+* **Bootstrap missing tooling.** Inspect `tests/difftest.py` for emulator and state comparison conventions, `recomp/nso.py` for module loading, and the selected build's hook profile for live observation points. The existing difftest samples individual instructions. On the pilot build the smallest reusable whole-function runner needed. Verify module identity and entry, provide guest memory and stack, bound execution, and require return to the expected sentinel. Treat unexpected reads, calls and termination as failed cases. Install missing Python packages into a local virtual environment as needed. Expose one replay command and record its working directory and inputs.
+* **Port and compare.** Give the original and C++ isolated copies of identical input state, preserving pointer relationships. Compare ABI-visible results, observable writes (including unexpected writes), and ordered external effects. Define justified floating-point comparison rules per output. Use Superpowers TDD to demonstrate an observable mismatch before completing the implementation. Preserve a minimal failing case for each discrepancy. Checkpoint-level traces are useful for locating the first divergence.
+* **Exercise the replacement.** Integrate at the real call path with build-ID-specific routing and a selectable original path. Ensure other builds retain their existing behavior. Run both paths on the same representative gameplay scenario and prove the new entry was actually hit. Use the repository's relevant build and regression commands. Record coverage gaps. Only count the function as verified after independent whole-function comparison, a passing real-path check, and passing relevant regressions. Record synthetic-only or replay-only progress at its actual stage.
+
+## Handoff and continuation
+
+Run a candidate behind the switch while gathering evidence. After all checks pass, make C++ the default on the validated build, rerun the real-path check through the default entry point, and keep the original selectable for diagnosis. If promotion fails, restore the working default and record the failing case before proceeding.
+
+Use one ledger row per function with identity, provisional name, stage, evidence path, and next action. Keep longer records under `docs/porting/` as needed. At each stage transition save enough for a fresh session to reproduce the result: source and fixture identifiers, reference backend, exact commands, expected versus observed results, local capture locations, integration switch, remaining gaps, and next concrete command. Keep shareable records free of original bytes and personal save data.
+
+Recover from ordinary failures autonomously. For a function-specific blocker, record the failure and condition for retry, retain the original route, and advance to the next eligible function. Revisit blocked rows when their prerequisite changes. An empty queue calls for more discovery. When every viable path depends on the same unavailable prerequisite, checkpoint the evidence and report exactly what would unblock the run. Honor the user's stop or batch limit. At the end report verified functions separately from partial and blocked ones, with the worktree and ledger paths.

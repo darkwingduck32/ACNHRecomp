@@ -223,7 +223,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 
 ## Active batch 3
 
-The previous batch is complete. This batch targets ten new verified ports on
+The previous batch is complete. This batch queues 100 new candidates for verification on
 main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 0.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
@@ -235,7 +235,7 @@ All gameplay tests use the same muted single-instance launcher.
 
 | Main entry | Unwind size | Provisional function | Observed caller | Stage |
 | --- | --- | --- | --- | --- |
-| `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x221f0c4` and three other sites | Reference replay |
+| `0x240f090` | `0xa0` | Resolve indexed record pointer | `0x220fd80`, `0x2215230`, `0x221f0c4`, `0x225b344` | Reference replay |
 | `0x1148db0` | `0xd4` | Resolve an eight-slot cached field | `0x114169c`, `0x114182c`, `0x1141850`, `0x1141874` | Queued |
 | `0x29cbe80` | `0x124` | Read cached row value, slot 12 | `0x29cd3d0` | Queued |
 | `0x29cbfb0` | `0x124` | Read cached row value, slot 13 | `0x29cd3e0` | Queued |
@@ -245,6 +245,9 @@ All gameplay tests use the same muted single-instance launcher.
 | `0x29cc470` | `0x124` | Read cached row value from slot 17 | `0x29cd420` | Queued |
 | `0x29cc5a0` | `0x124` | Read cached row value from slot 18 | `0x29cd430` | Queued |
 | `0x29cc6d0` | `0x124` | Read cached row value from slot 19 | `0x29cd440` | Queued |
+
+The [extended candidate queue](batch-3-candidates.md) records the other 90
+entries. In total, 36 of the 100 candidates have observed direct callers.
 
 The indexed lookup takes an owner in X0 and an index in W1 and returns a
 pointer or null in X0. It reads either a direct pointer array or a packed

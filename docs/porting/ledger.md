@@ -948,3 +948,59 @@ descriptor predicate `0x19e59b0` followed at `0x19ee440`,
 `0x19ee44c`, and `0x19ee46c`. These two candidates share the item
 metadata path. The terrain fallbacks `0x87a980` and `0x87aa70` were
 also observed later in the same run.
+
+### Host and deeper item classification checkpoint
+
+The `acnh_shovel_field_query` Release CTest drives the typed C++ path
+with in-memory field state. It compares the stage, all 36 records,
+the resolved continuation and selected item, metadata-driven
+occupancy, item suitability, and both the material and layer checks
+for shovel terrain. Generated dependencies receive fixture responses
+at the typed interface. All 14 Release CTest checks passed.
+
+The first gameplay attempt, `classdeep1`, put roses directly on the
+target. All three routes stopped at early rejection code 9 at
+(40, 68). No deeper classification was observed in those runs.
+
+The retry, `classdeep2`, retained the fossil on the target and put
+the roses in its neighborhood. It copied `whole` to
+`H:/ACNH/NHSE/Save.Game/interaction-20261119-232838/shovelclassdeep2/device_save`
+and changed four empty layer-0 records
+at main plaintext offsets `0x24e460`, `0x24e468`, `0x24ea60`, and
+`0x24ea68` to `0x0b77`, `0x1000b770000fffd`, `0x10b770000fffd`,
+and `0x1010b770000fffd` respectively. The saved checksums were
+recomputed and independently checked. The 11-file fixture digest is
+`b5e186e0edb4642de3b148bfa0cc440d57b6c77a9d985fbd3fa481d20bdbeafc`.
+
+The original, opt-in, and default routes matched all four neighborhoods,
+occupancy masks, selected records, and final decisions at (40, 69).
+The opt-in and default runs each recorded an additional survey and
+decision at (40, 70). The three-route comparison used (40, 69).
+
+The generated gather calls its own metadata body directly, so the
+whole original route bypasses the runtime metadata trace. The focused
+`classdeepmeta1` run selected the original metadata function with the
+default gather for a direct comparison. Each route matched five
+populated metadata results at (40, 69), four for the roses and one for
+the fossil. All 720 independent metadata cases matched two AArch64
+runs. The gameplay runs used one muted game instance at a time.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-classdeep2"
+$m = "$r/tree-shake-original-classdeepmeta1"
+foreach ($route in 'cpp', 'default') {
+    $c = "$r/tree-shake-$route-classdeep2"
+    & private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+    & private/venv/Scripts/python -m private.heading.compare_leaf shovel_item_metadata --live "$m/nx.log" "$c/nx.log" --survey-tile 40 69 --require-row-item 0x0b77
+}
+```
+
+The next group is the alternate descriptor kind query `0x19f93e8`
+and descriptor predicate `0x19e59b0`. The probe encountered the kind
+query first, then the predicate. Each focal C++ route reached the kind
+query five times and the predicate eleven times, from the same shovel
+metadata call sites. These remain generated. The kind query can call
+`0x19f4c7c` on its special-kind branch. The guest synchronization
+imports, deeper item category checks, and quadrant terrain fallbacks
+remain at the boundary. Discovery still contains 100 candidates.

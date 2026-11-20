@@ -191,10 +191,20 @@ gather, bounds checking, provider reads, catalog lookup, selected-item
 classification, and terrain queries. The in-memory fixture includes a
 continuation cell with an occupied anchor. It checks all 36 resolved
 records, the stage key, and the occupancy bit for both metadata
-outcomes. It also checks acceptance and rejection of the selected
-item and terrain. Generated callbacks are supplied by the host fixture
-at the same typed boundary.
+outcomes. It also checks selected-item suitability, material rejection,
+and blocking by a half-tile layer flag. Generated callbacks are
+supplied by the host fixture at the same typed boundary.
 
 ```powershell
 & private/venv/Scripts/ctest.exe --test-dir H:/ACNH/ACNHRecomp/private/port-acnh-engine/player -R '^acnh_shovel_field_query$' --output-on-failure
 ```
+
+## Gameplay fixture for item classification
+
+`shovelclassdeep2` starts from the disposable `whole` save. It
+keeps the buried fossil at survey tile (40, 69) and adds red roses
+(`0x0b77`) at (41, 70), a tile inside the surveyed neighborhood.
+The four added item records are at layer 0 save coordinates (82, 108)
+through (83, 109), including the three continuation records. The
+[ledger](ledger.md#host-and-deeper-item-classification-checkpoint)
+records the checks and next candidates.

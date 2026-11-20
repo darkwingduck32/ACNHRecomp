@@ -54,7 +54,9 @@ struct Services {
         require(memory.read<uint64_t>(item.address) == empty, "field cell was not initialized");
     }
 
-    ProviderTable table(ProviderReader, ProviderTableUse) { return {provider_data}; }
+    ProviderTable table(ProviderReader reader, ProviderTableUse) {
+        return provider_table(reader, memory, [](uint64_t target) { return ProviderTable{target}; });
+    }
     uint32_t width(ProviderTable, ProviderDimensionUse) { return provider_width(); }
     uint32_t height(ProviderTable, ProviderDimensionUse) { return provider_height(); }
     bool ready(ProviderReader) { return provider_ready(); }
@@ -136,7 +138,9 @@ struct Services {
     bool material_allows(TerrainTable table, uint32_t material, size_t) {
         return fields.terrain_has(table, material, TerrainProperty::diggable);
     }
-    bool layer_blocks(HalfTile) { return false; }
+    bool layer_blocks(HalfTile point) {
+        return fields.record_flag(fields.record_at(fields.grid_for({0}), point));
+    }
 };
 
 void check_neighborhood(uint16_t metadata_kind) {
@@ -156,6 +160,7 @@ void check_neighborhood(uint16_t metadata_kind) {
     memory.write<uint64_t>(0x24400 + 0xd0, provider);
     memory.write<uint32_t>(layer + 8, 0);
     memory.write<uint64_t>(provider + 0x10, 0);
+    memory.write<uint64_t>(provider + 0x30, provider_data);
     memory.write<uint64_t>(provider + 0x1b8, 0);
     memory.write<uint64_t>(provider_data + 8, records);
     memory.write<uint64_t>(provider_data + 0x10, 0);
@@ -225,6 +230,20 @@ void check_neighborhood(uint16_t metadata_kind) {
     memory.write<uint32_t>(terrain_grid + 0x3c, 12);
     memory.write<uint32_t>(terrain_grid + 0x68, 0);
     memory.write<uint64_t>(terrain_grid + 0x70, 0);
+    constexpr uint64_t layer_grid = 0x2d000, layer_records = 0x2e000;
+    memory.write<uint64_t>(base + 0x509d040, 0x24300);
+    memory.write<uint64_t>(0x24400 + 0xb0, layer_grid);
+    memory.write<uint64_t>(layer_grid + 0x18, 0x100000001);
+    memory.write<uint32_t>(layer_grid + 0x28, center_tile);
+    memory.write<uint32_t>(layer_grid + 0x2c, center_tile);
+    memory.write<uint32_t>(layer_grid + 0x30, 1);
+    memory.write<uint64_t>(layer_grid + 0x38, layer_records);
+    for (unsigned i = 0; i < 4; ++i) {
+        const uint64_t record = layer_records + 0x28 + 16 * i;
+        memory.write<uint8_t>(record + 8, 0);
+        memory.write<int16_t>(record + 12, 10 + (i & 1));
+        memory.write<int16_t>(record + 14, 10 + (i >> 1));
+    }
     memory.write<uint64_t>(base + 0x4ab46c8, 0x24900);
     memory.write<uint64_t>(0x24900, terrain_table);
     memory.write<int32_t>(terrain_table + 8 + 0x1c0, 1);
@@ -239,6 +258,9 @@ void check_neighborhood(uint16_t metadata_kind) {
     memory.write<uint8_t>(base + 0x4bfab80, 0);
     memory.write<uint8_t>(terrain_row + 4, 1);
     require(can_dig_terrain(base, {center_tile, center_tile}, memory, services), "diggable terrain was rejected");
+    memory.write<uint8_t>(layer_records + 0x28 + 16 * 3 + 8, 1);
+    require(!can_dig_terrain(base, {center_tile, center_tile}, memory, services), "layer-blocked terrain was accepted");
+    memory.write<uint8_t>(layer_records + 0x28 + 16 * 3 + 8, 0);
     memory.write<uint8_t>(terrain_row + 4, 0);
     require(!can_dig_terrain(base, {center_tile, center_tile}, memory, services), "blocked terrain was accepted");
 }

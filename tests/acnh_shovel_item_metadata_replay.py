@@ -68,17 +68,30 @@ def dependencies(mode):
     return {BASE + site: (BASE + target, body) for site, (target, body) in calls.items()}
 
 
-TRACE = re.compile(r"acnh shovel metadata (original|cpp) (item=[0-9a-f]+ row=[01] out=[0-9a-f]+)")
+TRACE = re.compile(r"acnh shovel metadata (original|cpp) item=([0-9a-f]+) row=([01]) out=([0-9a-f]+)")
+SURVEY = re.compile(r"acnh shovel survey x=(-?\d+) z=(-?\d+) ")
 
 
-def live_cases(path, expected_route):
+def live_cases(path, expected_route, required_item=None, tile=None):
     result = Counter()
-    for route, state in TRACE.findall(path.read_text(errors="replace")):
-        if route != expected_route:
-            raise ValueError(f"{path}: expected {expected_route}, found {route}")
-        result[state] += 1
+    pending = Counter()
+    for line in path.read_text(errors="replace").splitlines():
+        if match := TRACE.search(line):
+            route, item, row, outcome = match.groups()
+            if route != expected_route:
+                raise ValueError(f"{path}: expected {expected_route}, found {route}")
+            (pending if tile is not None else result)[int(item, 16), int(row), int(outcome, 16)] += 1
+        elif tile is not None and (match := SURVEY.search(line)):
+            # Classifications are logged by the gather before the completed survey.
+            if tuple(map(int, match.groups())) == tile:
+                result.update(pending)
+            pending.clear()
     if not result:
         raise ValueError(f"{path}: no {expected_route} metadata classifications")
+    if required_item is not None and not any(
+        (item & 0xffff) == required_item and row for item, row, _ in result
+    ):
+        raise ValueError(f"{path}: no populated metadata row for item {required_item:#x}")
     print(f"{path}: {result.total()} metadata classifications")
     return result
 
@@ -88,14 +101,26 @@ def main():
     parser.add_argument("module", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--live", nargs=2, type=Path, metavar=("ORIGINAL", "CPP"))
+    parser.add_argument("--require-row-item", type=lambda value: int(value, 0), metavar="ID",
+                        help="Require a live classification with a populated row for this item ID")
+    parser.add_argument("--survey-tile", nargs=2, type=int, metavar=("X", "Z"),
+                        help="Compare classifications whose completed gather targeted this tile")
     args = parser.parse_args()
     if build_id(args.module) != BUILD:
         parser.error(f"expected {BUILD}")
     module = nso.load(args.module)
     if not any(f.start == ENTRY and f.size == SIZE for f in ehframe.parse(module)):
         parser.error("unexpected shovel metadata bounds")
-    if args.live and live_cases(args.live[0], "original") != live_cases(args.live[1], "cpp"):
-        raise SystemExit("shovel metadata gameplay traces differ")
+    if args.require_row_item is not None and (not args.live or not 0 <= args.require_row_item <= 0xffff):
+        parser.error("--require-row-item needs --live and a 16-bit item ID")
+    if args.survey_tile and not args.live:
+        parser.error("--survey-tile needs --live")
+    if args.live:
+        tile = tuple(args.survey_tile) if args.survey_tile else None
+        original = live_cases(args.live[0], "original", args.require_row_item, tile)
+        native = live_cases(args.live[1], "cpp", args.require_row_item, tile)
+        if original != native:
+            raise SystemExit(f"shovel metadata gameplay traces differ: {original - native}, {native - original}")
     cases = [(mode, fixture(source, flags, mode, enum_type, direct, extra_code, extended))
              for (source, flags, mode), (enum_type, direct, extra_code, extended) in itertools.product(
                  itertools.product((0, 1, 2), (0, 4, 8, 12), (0, 1, 2, 4, 7, 8, 9, 11, 13, 29)),

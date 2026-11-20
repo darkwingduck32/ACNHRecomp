@@ -85,6 +85,8 @@ endif()
 # Unit tests of runtime pieces that build without the game (docs/nvn/WINDOWS-PLAN.md, "Test plan"): ctest.
 option(NX_TESTS "Build the standalone unit tests" OFF)
 if(NX_TESTS AND NOT ANDROID)
+    add_executable(acnh_shovel_field_query_test tests/acnh_shovel_field_query_test.cpp)
+    add_test(NAME acnh_shovel_field_query COMMAND acnh_shovel_field_query_test)
     if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_executable(thread_time_test tests/thread_time_test.cpp runtime/src/thread_time.cpp)
         target_include_directories(thread_time_test PRIVATE runtime/src)

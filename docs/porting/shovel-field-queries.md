@@ -182,3 +182,19 @@ the extent helper `0x253fe7c`, and the alternate terrain flow
 `0x8773f0` / `0x880a10`. The auxiliary item lookup `0x1a03610`
 remains original. The alternate terrain and auxiliary cases need a
 gameplay fixture that enters those branches.
+
+## Host integration test
+
+`acnh_shovel_field_query` runs without a guest image or save. It uses
+the production typed interfaces for scratch preparation, neighborhood
+gather, bounds checking, provider reads, catalog lookup, selected-item
+classification, and terrain queries. The in-memory fixture includes a
+continuation cell with an occupied anchor. It checks all 36 resolved
+records, the stage key, and the occupancy bit for both metadata
+outcomes. It also checks acceptance and rejection of the selected
+item and terrain. Generated callbacks are supplied by the host fixture
+at the same typed boundary.
+
+```powershell
+& private/venv/Scripts/ctest.exe --test-dir H:/ACNH/ACNHRecomp/private/port-acnh-engine/player -R '^acnh_shovel_field_query$' --output-on-failure
+```

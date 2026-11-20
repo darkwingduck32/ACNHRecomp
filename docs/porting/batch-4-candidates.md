@@ -4,7 +4,7 @@ This discovery queue tracks 100 entries on build
 `FF1D1C05670DB6021C85B624A710B963`. The [ledger](ledger.md#active-batch-4)
 tracks candidates selected for implementation.
 
-The scan followed direct calls up to seven levels from 120 gameplay caller
+The scan followed direct calls up to seven levels from 123 gameplay caller
 roots. Roots include call sites observed in the disposable shovel probe.
 The scanner checked unwind ranges, complete instruction decoding, a return,
 no nested calls and no branches outside the function. `Observed` records
@@ -37,7 +37,11 @@ The catalog probe at `tree-shake-original-catalogfield1/console.log`
 verified 32 queued entries against original direct calls. Its SHA-256 is
 `2eb15614228b311f719b2a48d3433c15e16f64b5877954405fea186971843817`.
 After moving four verified catalog queries to the ledger and refilling,
-29 queue entries have observed direct callers.
+29 queue entries had observed direct callers. The deeper shovel probe at
+`tree-shake-default-batch4deep1/console.log` verified 38 queued entries
+against original direct calls and added nine previously unobserved entries.
+The queue now has 38 observed entries. The probe SHA-256 is
+`ba43f647aae40d6d244b54c77b23e17e7c9bbd39d704f73fe0e42fefd4f0722d`.
 
 ```powershell
 $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
@@ -48,7 +52,8 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
     --probe "$r/tree-shake-original-fieldscan1/console.log" a0dfaafd8ec81b92b7268122b31d07806e795b712decefd059506ee29fad1e4f `
     --probe "$r/tree-shake-original-fieldaction1/console.log" b19798d262b374cd9090eb9e972971f28fa1e5995db371b1cc1e8e057d83bdf7 `
     --probe "$r/tree-shake-original-fieldbook1/console.log" 9e1ef28765761c2ea86000d18fad0bc3667162744dba9c38b84fe8bfc2b0ab0c `
-    --probe "$r/tree-shake-original-catalogfield1/console.log" 2eb15614228b311f719b2a48d3433c15e16f64b5877954405fea186971843817
+    --probe "$r/tree-shake-original-catalogfield1/console.log" 2eb15614228b311f719b2a48d3433c15e16f64b5877954405fea186971843817 `
+    --probe "$r/tree-shake-default-batch4deep1/console.log" ba43f647aae40d6d244b54c77b23e17e7c9bbd39d704f73fe0e42fefd4f0722d
 ```
 
 | Main entry | Unwind size | Direct caller | Stage |
@@ -82,6 +87,15 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 | `0x2a67620` | `0x194` | `0x2a59264` | Observed |
 | `0x2a72930` | `0x1ec` | `0x2a6b870` | Observed |
 | `0x6b3b6c` | `0x150` | `0x6b3da4` | Observed |
+| `0x271836c` | `0x28` | `0x2681878` | Observed |
+| `0x26ebb14` | `0x5c` | `0x2682f20` | Observed |
+| `0x3757320` | `0x88` | `0x1f3bfe0` | Observed |
+| `0x2817388` | `0x6c` | `0x2ded008` | Observed |
+| `0x170b220` | `0x80` | `0x1f1cca4` | Observed |
+| `0x170c6f0` | `0x98` | `0x1f1cc30` | Observed |
+| `0x1fe9ac0` | `0xcc` | `0x1d422ec` | Observed |
+| `0x24196e4` | `0xec` | `0x15cf5b8` | Observed |
+| `0x69e670` | `0xfc` | `0x1d42e68` | Observed |
 | `0x2375f8` | `0x24` | `0x226e64` | Discovery |
 | `0x23a8c8` | `0x24` | `0x226e70` | Discovery |
 | `0x3daf030` | `0x1a8` | `0x3dafc18` | Discovery |
@@ -120,21 +134,12 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 | `0x230ac0` | `0x1f0` | `0x23063c` | Discovery |
 | `0x9bfe70` | `0xfc` | `0x26a391c` | Discovery |
 | `0x16c0a30` | `0x120` | `0x16f90c4` | Discovery |
-| `0x271836c` | `0x28` | `0x2681878` | Discovery |
-| `0x26ebb14` | `0x5c` | `0x2682f20` | Discovery |
-| `0x3757320` | `0x88` | `0x1f1db9c` | Discovery |
 | `0x281731c` | `0x6c` | `0x1d43134` | Discovery |
-| `0x2817388` | `0x6c` | `0x2ded008` | Discovery |
 | `0x170bc10` | `0x70` | `0x1f1d47c` | Discovery |
 | `0x1cbd970` | `0x78` | `0x1f1c514` | Discovery |
-| `0x170b220` | `0x80` | `0x1f1cca4` | Discovery |
 | `0x1cbf44c` | `0x84` | `0x1d425c0` | Discovery |
-| `0x170c6f0` | `0x98` | `0x1f1cc30` | Discovery |
 | `0x1cbd8c4` | `0xac` | `0x1d425d8` | Discovery |
-| `0x1fe9ac0` | `0xcc` | `0x1d422ec` | Discovery |
-| `0x24196e4` | `0xec` | `0x15cf5b8` | Discovery |
 | `0x1fe9e8c` | `0xf8` | `0x1d44e4c` | Discovery |
-| `0x69e670` | `0xfc` | `0x1d42e68` | Discovery |
 | `0x69e910` | `0x10c` | `0x1d429f0` | Discovery |
 | `0x1d3e21c` | `0x10c` | `0x1d44fa4` | Discovery |
 | `0x225428c` | `0x14c` | `0x1d41778` | Discovery |

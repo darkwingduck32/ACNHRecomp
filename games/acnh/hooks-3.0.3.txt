@@ -20,6 +20,7 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 5f0400 # Heading calculation used in the tree-shake approach
 # dispatch 5f05f8 # Signed angular difference
 # dispatch 3db4b60 # Move a position toward its target
+# dispatch 8807cc # Resolve a field table row
 21f7618  # shovel 3x3 field survey complete, before classifying the selected tile
 23e0808  # tree shake preparation, after masking the selected trunk coordinates
 23e0f50  # tree shake, before dispatching the visual event rectangle

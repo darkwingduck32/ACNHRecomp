@@ -4,11 +4,13 @@
 #include "tool_durability/native.h"
 #include <nx/game.h>
 namespace nx::features {
+void register_acnh_field_record(Registry& registry);
 void register_acnh_math(Registry& registry);
 
 void register_builtins(Registry &registry) {
     if (std::string_view(game::kInfo.id) == "acnh") {
         register_acnh_math(registry);
+        register_acnh_field_record(registry);
         register_camera_feature(registry);
         register_tool_durability_feature(registry);
     }

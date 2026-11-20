@@ -229,7 +229,8 @@ base-type fallback stay at the guest boundary. The selector also uses the
 typed point classifier, which checks stage height and item metadata.
 The classifier uses the C++ surface height, obstruction and
 stage-specific height decisions. Stage selection and field-record
-resolution and step geometry also run in typed C++. Collision and
-traversal queries, the overlay sampler, record acceptance, and the
-underlying field provider lookup remain at the guest boundary. See
-the [step geometry checks](ledger.md#shovel-step-geometry).
+resolution and step geometry also run in typed C++. The provider
+record lookup and its bounds check resolve the record and its
+anchor half tile in C++. Collision and traversal queries and the
+overlay sampler remain at the guest boundary. See the
+[provider verification](ledger.md#stage-bounds-and-provider-record-leaf).

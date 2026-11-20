@@ -115,7 +115,7 @@ struct ShovelStageCellQuery {
 template<class Memory, class Services>
 FieldItem shovel_stage_cell(uint64_t base, ShovelStageCellQuery query, const Memory& memory, Services& services) {
     const FieldItem empty{base + 0x5486008};
-    if (!services.accept_stage(query.stage, query.layer)) return empty;
+    if (!services.accept_stage(query.stage, query.layer, query.point)) return empty;
 
     const auto slot = memory.template read<uint64_t>(base + 0x4ab27a8);
     const auto owner = memory.template read<uint64_t>(slot);

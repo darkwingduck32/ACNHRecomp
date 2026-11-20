@@ -101,7 +101,7 @@ def cell_fixture(capture_type, allowed, table, layer, provider_present, selected
     put(cap, GRID_OWNER + offset, GRID)
     put(cap, GRID + 0xd0 + 16 * (layer if layer < 8 else 0), PROVIDER if provider_present else 0)
     put(cap, PROVIDER + 0x198, selected, 4)
-    call(cap, 0x1951934, 0x194f798, CONTEXT, layer, result=3 if allowed else 0)
+    call(cap, 0x1951934, 0x194f798, CONTEXT, layer, POINT, result=3 if allowed else 0)
     result = cap.operands[3][1]
     if allowed and provider_present:
         result = struct.pack("<Qii", 0x45670, 81, 139)

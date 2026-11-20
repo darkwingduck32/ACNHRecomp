@@ -16,6 +16,7 @@
 #include "../../../games/acnh/shovel_stage_height.h"
 #include "../../../games/acnh/shovel_stage_context.h"
 #include "../../../games/acnh/shovel_step.h"
+#include "../../../games/acnh/shovel_provider_record.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1287,6 +1288,31 @@ bool is_shovel_stage_record_call(uint64_t resume, uint64_t frame) {
         && is_shovel_stage_height_frame(ld<uint64_t>(frame));
 }
 
+Fn original_shovel_provider_record = nullptr;
+bool use_cpp_shovel_provider_record = false;
+bool trace_shovel_record_leaves = false;
+
+void shovel_provider_record_adapter(CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    if (!is_shovel_stage_record_call(resume, cpu.x[29])) {
+        original_shovel_provider_record(cpu);
+        return;
+    }
+    const acnh::ShovelProviderView provider{cpu.x[0]};
+    const acnh::HalfTileRef point{cpu.x[1]}, root{cpu.x[2]};
+    if (use_cpp_shovel_provider_record) {
+        GuestMemory memory;
+        cpu.x[0] = acnh::shovel_provider_record(main_base, provider, point, root, memory).address;
+    } else {
+        original_shovel_provider_record(cpu);
+    }
+    if (trace_shovel_record_leaves)
+        log("acnh shovel record leaf %s entry=11eb21c call=19519ec from=%llx root=%d,%d out=%llx",
+            use_cpp_shovel_provider_record ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+            root.address ? ld<int32_t>(root.address + 8) : 0, root.address ? ld<int32_t>(root.address + 12) : 0,
+            cpu.x[0] ? ld<unsigned long long>(cpu.x[0]) : 0);
+}
+
 struct ShovelStageContextServices : HeightGuestFrame {
     const CPU& caller;
 
@@ -1335,8 +1361,8 @@ struct ShovelStageContextServices : HeightGuestFrame {
                              {descriptor, query.layer, query.point.address, query.root.address}).x[0]};
     }
 
-    bool accept_stage(uint64_t stage, uint32_t layer) const {
-        return invoke_child(main_base + 0x194f798, 0x1951938, {stage, layer}).x[0] & 1;
+    bool accept_stage(uint64_t stage, uint32_t layer, acnh::HalfTileRef point) const {
+        return invoke_child(main_base + 0x194f798, 0x1951938, {stage, layer, point.address}).x[0] & 1;
     }
 
     acnh::FieldItem cell_at(uint64_t provider, acnh::HalfTileRef point, acnh::HalfTileRef root) const {
@@ -2185,7 +2211,10 @@ void field_bounds_adapter(CPU& cpu) {
         ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
     const bool trace = shovel_cell_caller(parent) &&
         field_bounds_samples.fetch_add(1, std::memory_order_relaxed) < 32;
-    if (!use_cpp_field_bounds && !trace) {
+    const auto frame = cpu.x[29];
+    const bool record_trace = trace_shovel_record_leaves && caller == 0x1951938 && frame
+        && is_shovel_stage_record_call(ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame));
+    if (!use_cpp_field_bounds && !trace && !record_trace) {
         original_field_bounds(cpu);
         return;
     }
@@ -2201,6 +2230,10 @@ void field_bounds_adapter(CPU& cpu) {
     const bool inside = bounds && fields.contains(bounds, {position});
     if (use_cpp_field_bounds) cpu.x[0] = inside;
     else original_field_bounds(cpu);
+    if (record_trace)
+        log("acnh shovel record leaf %s entry=194f798 call=1951934 table=%x channel=%x pos=%d,%d out=%x",
+            use_cpp_field_bounds ? "cpp" : "original", layer.index, channel.index,
+            ld<int32_t>(position + 8), ld<int32_t>(position + 12), unsigned(cpu.x[0]));
     if (trace)
         log("acnh shovel bounds %s caller=%llx parent=%llx base=%llx layer=%llx channel=%x position=%llx out=%llx reads=%s",
             use_cpp_field_bounds ? "cpp" : "original", static_cast<unsigned long long>(caller),
@@ -3510,6 +3543,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     if (use_cpp_shovel_grid_height || trace_shovel_grid_height)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
 
+    mode = std::getenv("NX_ACNH_SHOVEL_STAGE_PROVIDER");
+    use_cpp_shovel_provider_record = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_record_leaves = std::getenv("NX_ACNH_SHOVEL_STAGE_PROVIDER_TRACE") != nullptr;
+    if (use_cpp_shovel_provider_record || trace_shovel_record_leaves)
+        wrap_function(entries, 0x11eb21c, shovel_provider_record_adapter, original_shovel_provider_record);
+
     mode = std::getenv("NX_ACNH_SHOVEL_STEP");
     use_cpp_shovel_step = !mode || std::string_view(mode) == "cpp";
     trace_shovel_step = std::getenv("NX_ACNH_SHOVEL_STEP_TRACE") != nullptr;
@@ -3620,7 +3659,7 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS");
     use_cpp_field_bounds = !mode || std::string_view(mode) == "cpp";
     trace_field_bounds = std::getenv("NX_ACNH_SHOVEL_FIELD_BOUNDS_TRACE") != nullptr;
-    if (use_cpp_field_bounds || trace_field_bounds)
+    if (use_cpp_field_bounds || trace_field_bounds || trace_shovel_record_leaves)
         wrap_function(entries, 0x194f798, field_bounds_adapter, original_field_bounds);
 
     mode = std::getenv("NX_ACNH_SHOVEL_FIELD_CELL");

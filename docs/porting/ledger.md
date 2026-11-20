@@ -1551,3 +1551,52 @@ retains generated collision `0x15ed290`, intermediate acceptance
 default run captured 52 intermediate acceptance calls and 104
 provider lookup calls to `0x11eb21c`. The next field group can
 remove the underlying provider lookup and stage acceptance.
+
+### Stage bounds and provider record leaf
+
+The provider record lookup `0x11eb21c` now defaults to C++ on the
+shovel stage-record path. It reads the selected provider view and
+resolves a continuation record to its anchor. The earlier C++
+bounds predicate `0x194f798` also passed verification at the stage
+record's new call site. Its typed call now explicitly passes the
+half-tile address to the ABI adapter.
+
+| Entry | Independent AArch64 cases | Focal calls per route |
+| --- | ---: | ---: |
+| `0x11eb21c` | 344 | 80 |
+| `0x194f798` | 464 | 80 |
+
+Both totals include 104 captured invocations. The portable fixtures
+exercise layer and channel fallback, inclusive bounds, missing
+records, continuation anchors and absent root output. The first
+provider candidate returned the fixed empty record for every bounds
+failure. Case 411 exposed the configured empty record returned by
+the original on Z-range and record-count rejections. The corrected
+candidate matched both the returned record and ordered root writes.
+
+The original generated bounds capture initially saw no calls because
+the existing adapter already selected C++. Selecting
+`NX_ACNH_SHOVEL_FIELD_BOUNDS=original` in recordleaf1 captured the
+original at `0x1951934`. The provider is a tail call from
+`0x19519ec`, reached from both `0x15e7bf0` and `0x15f462c`.
+Set `NX_ACNH_SHOVEL_STAGE_PROVIDER=original` for the original
+provider lookup.
+
+The original and opt-in recordleaf1 and default recordleaf2 runs
+matched each focal trace. All four neighborhoods, surveys, and final
+decisions matched the whole-original classdeep2 route. Gameplay
+used one muted instance at a time. All 14 Release CTest checks and
+14 replay and profile tests passed. The queue remains at 100.
+The bounds predicate retains its earlier verified ledger entry.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-recordleaf1"
+$c = "$r/tree-shake-default-recordleaf2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_record_leaves --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The portable fixtures run without the capture argument. The next
+observed step dependency is intermediate acceptance `0x15e9c80`.
+The separate collision query `0x15ed290` and overlay sampling in
+the newer classifier scopes remain at the guest boundary.

@@ -68,8 +68,8 @@ struct Services {
         invoke(0x15e7bd4, {stage.key.hash});
         return {invoke(0x15e7bf0, {stack, query.layer, query.point.address, query.root.address}).outcome};
     }
-    bool accept_stage(uint64_t stage, uint32_t layer) {
-        return invoke(0x1951934, {stage, layer}).outcome & 1;
+    bool accept_stage(uint64_t stage, uint32_t layer, HalfTileRef point) {
+        return invoke(0x1951934, {stage, layer, point.address}).outcome & 1;
     }
 
     FieldItem cell_at(uint64_t provider, HalfTileRef point, HalfTileRef root) {

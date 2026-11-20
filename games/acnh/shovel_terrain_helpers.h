@@ -9,6 +9,51 @@ namespace nx::acnh {
 enum class TerrainHeightMode { composed, base_only };
 struct TerrainQuadrants { std::array<uint64_t, 4> output; };
 struct TerrainWorldPoint { float x, z; };
+enum class TerrainFallback { primary, secondary };
+
+template<class Memory, class Services>
+uint32_t terrain_fallback_kind(uint64_t base, TerrainWorldPoint& point, TerrainFallback fallback,
+                              const Memory& memory, Services& services) {
+    const bool secondary = fallback == TerrainFallback::secondary;
+    uint32_t kind = 7;
+    if (secondary) {
+        const auto coordinate = [](float value) {
+            return std::isnan(value) ? 0 : terrain_half_tile(value);
+        };
+        if (services.has_field_material(HalfTile{coordinate(point.x), coordinate(point.z)}))
+            kind = 0x34;
+    }
+
+    if (!memory.template read<uint64_t>(base + 0x5192338)) return kind;
+    const auto context = memory.template read<uint64_t>(base + 0x59ed670);
+    if (!context || !memory.template read<uint64_t>(context + 0x330)) return kind;
+    const uint64_t name_slot = secondary ? base + 0x59ed668
+        : memory.template read<uint64_t>(base + 0x4ab2640);
+    const auto object = memory.template read<uint64_t>(name_slot);
+    const auto index = memory.template read<uint32_t>(context + 0x338);
+    if (services.stage_hash(object, index, fallback) != 0x758f7eaf) return kind;
+
+    const auto current_context = memory.template read<uint64_t>(base + 0x59ed670);
+    if (!current_context) return kind;
+    const auto stage = memory.template read<uint64_t>(current_context + 0x330);
+    if (!stage || !memory.template read<uint32_t>(stage + 0x244)) return kind;
+    const auto owner = memory.template read<uint64_t>(base + 0x4bfae30);
+    if (!owner || !memory.template read<uint64_t>(owner + 0xa8)
+        || memory.template read<uint8_t>(owner + 0x11c8)) return kind;
+    const uint32_t material = services.resolve_kind({owner}, point, fallback);
+    return material == 7 ? kind : material;
+}
+
+template<class Memory>
+bool terrain_has_field_material(uint64_t base, HalfTile point, Memory& memory) {
+    const FieldQueries fields{base, memory};
+    const auto grid = fields.grid_for({0});
+    if (!grid) return false;
+    const auto record = tile_record(base + 0x50a50f0, grid.address,
+                                    half_tile_coordinate(point.x), half_tile_coordinate(point.z), memory);
+    return !(memory.template read<uint8_t>(record + 0xe) & 0x20)
+        && memory.template read<uint8_t>(record + 0x1e) != 0xff;
+}
 
 template<class Memory, class Services>
 bool terrain_is_level(TerrainGrid grid, TerrainRect area, TerrainHeightMode mode,

@@ -224,7 +224,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 ## Active batch 3
 
 The previous batch is complete. The discovery queue holds 100 candidates for verification on
-main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 43.
+main build `FF1D1C05670DB6021C85B624A710B963`. Verified so far, 46.
 
 The discovery trace `tree-shake-original-more1/console.log` came from a
 disposable shovel scenario and has SHA-256
@@ -247,7 +247,7 @@ All gameplay tests use the same muted single-instance launcher.
 | `0x29cc6d0` | `0x124` | Read cached row value from slot 3 | `0x29cd440` | Reference replay passed |
 
 The [discovery queue](batch-3-candidates.md) holds 100 candidates beyond
-the implementation entries listed here. 22 queue entries have
+the implementation entries listed here. 21 queue entries have
 observed direct callers.
 
 Implementation priority is the [shovel field-query path](shovel-field-queries.md). The queue also holds observed candidates outside that path.
@@ -1051,3 +1051,61 @@ quadrant material helper. Both consult the same stage and terrain state.
 The second also reaches queued field-record predicate `0x1285040` at
 `0x87aae4`. Keep it with the terrain fallback group and use gameplay
 to determine whether their deeper material lookups are reached.
+
+### Quadrant terrain fallbacks
+
+Both world-position fallbacks and the secondary fallback's field
+material predicate default to handwritten C++ on the scoped shovel
+survey path. The virtual stage lookup and material overrides remain
+at the guest boundary. The predicate retains its generated route
+for calls outside the shovel scope.
+
+| Entry | Original route switch | Independent AArch64 cases | Calls per route at (40, 69) |
+| --- | --- | ---: | ---: |
+| `0x87a980` | `NX_ACNH_SHOVEL_TERRAIN_PRIMARY=original` | 80 | 16 |
+| `0x87aa70` | `NX_ACNH_SHOVEL_TERRAIN_SECONDARY=original` | 480 | 16 |
+| `0x1285040` | `NX_ACNH_SHOVEL_TERRAIN_FIELD_MATERIAL=original` | 42 | 16 |
+
+The replays compared return values, callback order and arguments, and
+caller-visible writes. They exercised absent and refreshed stage
+contexts, material overrides, world-to-half-tile conversion, and
+primary, secondary and fallback field records. The secondary fallback
+replay ran its original field predicate as part of the original route.
+
+The initial trace included predicate calls before gameplay. The trial
+was stopped, and the predicate adapter now verifies the quadrant
+helper and shovel survey frames. The `terrainfallbacks2` original and
+opt-in captures and the `terrainfallbacks3` default capture matched
+each function at (40, 69). In those calls both fallbacks returned 7,
+both retained their input positions, and the predicate returned false.
+The game did not enter the deeper stage material overrides in this
+fixture. All four focal surveys, neighborhoods and final outcomes
+matched, including the default against the whole original
+`classdeep2` route. All 14 Release CTest and 14 replay and profile tests
+passed. Gameplay used one muted instance at a time.
+
+The test overlay routes the generated BL at `0x87aae4` through the
+runtime dispatcher so the original run captures the child predicate
+on its actual call path. The overlay is
+`generated-dll/shovel_terrain_fallbacks_generated.dll` under the
+private campaign directory. Discovery replenished the verified
+`0x1285040` row with `0x2a673a0` and still holds 100 candidates.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-terrainfallbacks2"
+$c = "$r/tree-shake-default-terrainfallbacks3"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_terrain_fallbacks --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+$o = "$r/tree-shake-original-classdeep2"
+& private/venv/Scripts/python -m private.heading.compare_leaf field_primitives --live-final "$o/console.log" "$c/console.log" --live-neighborhood "$o/nx.log" "$c/nx.log" --live-survey "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The next direct dependencies came from the generated survey
+`0x21f6fe0`. The muted `tree-shake-default-surveycalls1/console.log`
+probe observed target selection `0x15f36e0` at `0x21f70d4` first,
+followed by pre-survey terrain setup `0x87b460` at `0x21f74fc`.
+Each ran once per survey, five times in total. The target selection
+body still calls `0x15e026c` and `0x15f3ed0`. Capture those call sites
+to identify which parts of target selection to port together. The
+same probe also observed `0x267e024` from the outer survey and later
+generated calls to `0x19fb044` and `0x2878a24`.

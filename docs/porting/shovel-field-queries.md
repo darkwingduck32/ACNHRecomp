@@ -176,9 +176,11 @@ predicate `0x19e59b0` default to C++ under the shovel neighborhood
 metadata classifier. The alternate query retains the generated
 special-kind callback `0x19f4c7c`.
 
-The generated boundary also retains the quadrant fallbacks
-`0x87a980` and `0x87aa70`, the next observed group, along with
-deeper item descriptor and category calls,
+The quadrant fallbacks `0x87a980` and `0x87aa70` now run in C++ on
+the shovel survey route, including the field material predicate
+`0x1285040`. The stage lookup and material overrides remain at the
+guest boundary. The boundary also retains deeper item descriptor and
+category calls,
 the extent helper `0x253fe7c`, and the alternate terrain flow
 `0x8773f0` / `0x880a10`. The auxiliary item lookup `0x1a03610`
 remains original. The alternate terrain and auxiliary cases need a

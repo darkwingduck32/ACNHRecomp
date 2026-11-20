@@ -39,7 +39,6 @@ Recreate the queue from the campaign worktree.
 | `0x29cca60` | `0x124` | `0x29cd470` | Observed |
 | `0x29ccb90` | `0x124` | `0x29cd490` | Observed |
 | `0x19d778c` | `0x140` | `0x24572c0` | Observed |
-| `0x1285040` | `0x14c` | `0x87aae4` | Observed |
 | `0x19e89e0` | `0x178` | `0x659b6c` | Observed |
 | `0x880630` | `0x19c` | `0x87c0bc` | Observed |
 | `0x881090` | `0x1b0` | `0x87c0ec` | Observed |
@@ -123,3 +122,4 @@ Recreate the queue from the campaign worktree.
 | `0x26c0ee4` | `0x44` | `0x27168e8` | Discovery |
 | `0x2a72fd0` | `0x108` | `0x2a8f2d8` | Discovery |
 | `0x16c0620` | `0x120` | `0x85a0f0` | Discovery |
+| `0x2a673a0` | `0x14c` | `0x2a590f8` | Discovery |

@@ -657,6 +657,97 @@ bool trace_terrain_helpers = false;
 std::atomic<unsigned> terrain_level_samples{0};
 std::atomic<unsigned> terrain_material_samples{0};
 
+Fn original_terrain_field_material = nullptr;
+bool use_cpp_terrain_primary = false;
+bool use_cpp_terrain_secondary = false;
+bool use_cpp_terrain_field_material = false;
+bool trace_terrain_fallbacks = false;
+
+constexpr std::array terrain_primary_resumes{0x848fe8u, 0x849044u, 0x84909cu, 0x8490f4u};
+constexpr std::array terrain_secondary_resumes{0x849004u, 0x849060u, 0x8490b8u, 0x849110u};
+
+void terrain_field_material_adapter(CPU& cpu) {
+    const auto parent = cpu.x[30] == main_base + 0x87aae8
+        ? ld<uint64_t>(cpu.x[29] + 8) - main_base : 0;
+    const bool from_quadrants = std::find(terrain_secondary_resumes.begin(),
+                                         terrain_secondary_resumes.end(), parent) != terrain_secondary_resumes.end();
+    const auto quadrant_frame = from_quadrants ? ld<uint64_t>(cpu.x[29]) : 0;
+    if (!quadrant_frame || ld<uint64_t>(quadrant_frame + 8) != main_base + 0x877330 ||
+        ld<uint64_t>(ld<uint64_t>(quadrant_frame) + 8) != main_base + shovel_terrain_caller) {
+        original_terrain_field_material(cpu);
+        return;
+    }
+    const acnh::HalfTile point{ld<int32_t>(cpu.x[0] + 8), ld<int32_t>(cpu.x[0] + 12)};
+    if (use_cpp_terrain_field_material) {
+        GuestMemory memory;
+        cpu.x[0] = acnh::terrain_has_field_material(main_base, point, memory);
+    } else {
+        trace_shovel_dependency(0x1285040, 0x87aae8);
+        original_terrain_field_material(cpu);
+    }
+    if (trace_terrain_fallbacks)
+        log("acnh shovel terrain fallback %s entry=1285040 call=87aae4 pos=%d,%d out=%x",
+            use_cpp_terrain_field_material ? "cpp" : "original", point.x, point.z,
+            static_cast<unsigned>(cpu.x[0]));
+}
+
+struct TerrainFallbackServices {
+    CPU cpu;
+    uint64_t vector;
+
+    TerrainFallbackServices(const CPU& caller, uint64_t address, bool secondary)
+        : cpu(caller), vector(address) {
+        cpu.x[31] -= secondary ? 0x40 : 0x30;
+        cpu.x[29] = cpu.x[31] + 0x10;
+        st<uint64_t>(cpu.x[29], caller.x[29]);
+        st<uint64_t>(cpu.x[29] + 8, caller.x[30]);
+    }
+
+    bool has_field_material(acnh::HalfTile point) const {
+        const auto query = cpu.x[31];
+        st<uint64_t>(query, ld<uint64_t>(main_base + 0x4ab2010) + 0x10);
+        st<int32_t>(query + 8, point.x);
+        st<int32_t>(query + 12, point.z);
+        CPU nested = cpu;
+        nested.x[0] = query;
+        nested.x[30] = main_base + 0x87aae8;
+        call(nested, main_base + 0x1285040);
+        return (nested.x[0] & 1) != 0;
+    }
+
+    uint32_t stage_hash(uint64_t object, uint32_t index, acnh::TerrainFallback fallback) const {
+        const bool secondary = fallback == acnh::TerrainFallback::secondary;
+        const auto target = ld<uint64_t>(ld<uint64_t>(object) + 0x18);
+        CPU nested = cpu;
+        nested.x[0] = object;
+        nested.x[1] = index;
+        const auto resume = secondary ? 0x87ab3c : 0x87a9d8;
+        nested.x[30] = main_base + resume;
+        trace_shovel_dependency(target - main_base, resume);
+        call(nested, target);
+        nested.x[0] = ld<uint64_t>(nested.x[0]);
+        nested.x[1] = 0;
+        nested.x[30] = main_base + (secondary ? 0x87ab48 : 0x87a9e4);
+        call(nested, main_base + 0x5bd550);
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+
+    uint32_t resolve_kind(acnh::TerrainOwner owner, acnh::TerrainWorldPoint& point,
+                          acnh::TerrainFallback fallback) const {
+        const bool secondary = fallback == acnh::TerrainFallback::secondary;
+        const uint64_t target = secondary ? 0x83b18c : 0x83b9a4;
+        const uint64_t resume = secondary ? 0x87abcc : 0x87aa68;
+        CPU nested = cpu;
+        nested.x[0] = owner.address + 0x28;
+        nested.x[1] = vector;
+        nested.x[30] = main_base + resume;
+        trace_shovel_dependency(target, resume);
+        call(nested, main_base + target);
+        point = {ld<float>(vector), ld<float>(vector + 8)};
+        return static_cast<uint32_t>(nested.x[0]);
+    }
+};
+
 struct TerrainHelperServices {
     CPU cpu;
     uint64_t stack;
@@ -700,20 +791,36 @@ struct TerrainHelperServices {
         CPU nested = cpu;
         nested.x[0] = vector;
         nested.x[30] = main_base + resume;
-        trace_shovel_dependency(target, resume);
-        call(nested, main_base + target);
-        point = {ld<float>(vector), ld<float>(vector + 8)};
-        return static_cast<uint32_t>(nested.x[0]);
+        const bool secondary = target == 0x87aa70;
+        const bool native = secondary ? use_cpp_terrain_secondary : use_cpp_terrain_primary;
+        const auto before = point;
+        uint32_t kind;
+        if (native) {
+            GuestMemory memory;
+            TerrainFallbackServices services{nested, vector, secondary};
+            kind = acnh::terrain_fallback_kind(main_base, point,
+                secondary ? acnh::TerrainFallback::secondary : acnh::TerrainFallback::primary, memory, services);
+        } else {
+            trace_shovel_dependency(target, resume);
+            call(nested, main_base + target);
+            point = {ld<float>(vector), ld<float>(vector + 8)};
+            kind = static_cast<uint32_t>(nested.x[0]);
+        }
+        if (trace_terrain_fallbacks)
+            log("acnh shovel terrain fallback %s entry=%llx call=%llx point=%x,%x after=%x,%x out=%x",
+                native ? "cpp" : "original", static_cast<unsigned long long>(target),
+                static_cast<unsigned long long>(resume - 4),
+                std::bit_cast<uint32_t>(before.x), std::bit_cast<uint32_t>(before.z),
+                std::bit_cast<uint32_t>(point.x), std::bit_cast<uint32_t>(point.z), kind);
+        return kind;
     }
 
     uint32_t primary_kind(acnh::TerrainWorldPoint& point, size_t corner) const {
-        constexpr std::array resumes{0x848fe8, 0x849044, 0x84909c, 0x8490f4};
-        return adjusted_kind(point, 0x87a980, resumes[corner]);
+        return adjusted_kind(point, 0x87a980, terrain_primary_resumes[corner]);
     }
 
     uint32_t secondary_kind(acnh::TerrainWorldPoint& point, size_t corner) const {
-        constexpr std::array resumes{0x849004, 0x849060, 0x8490b8, 0x849110};
-        return adjusted_kind(point, 0x87aa70, resumes[corner]);
+        return adjusted_kind(point, 0x87aa70, terrain_secondary_resumes[corner]);
     }
 };
 
@@ -2185,6 +2292,16 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_terrain_level = !mode || std::string_view(mode) == "cpp";
     if (use_cpp_terrain_level || trace_terrain_helpers)
         wrap_function(entries, 0x871f80, terrain_level_adapter, original_terrain_level);
+    mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_PRIMARY");
+    use_cpp_terrain_primary = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_SECONDARY");
+    use_cpp_terrain_secondary = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_FIELD_MATERIAL");
+    use_cpp_terrain_field_material = !mode || std::string_view(mode) == "cpp";
+    trace_terrain_fallbacks = std::getenv("NX_ACNH_SHOVEL_TERRAIN_FALLBACK_TRACE") != nullptr;
+    if (use_cpp_terrain_field_material || trace_terrain_fallbacks)
+        wrap_function(entries, 0x1285040, terrain_field_material_adapter, original_terrain_field_material);
+
     mode = std::getenv("NX_ACNH_SHOVEL_TERRAIN_MATERIALS");
     use_cpp_terrain_materials = !mode || std::string_view(mode) == "cpp";
     if (use_cpp_terrain_materials || trace_terrain_helpers)

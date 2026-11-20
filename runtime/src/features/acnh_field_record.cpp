@@ -11,6 +11,7 @@
 #include "../../../games/acnh/field_provider_context_handle.h"
 #include "../../../games/acnh/field_item_init.h"
 #include "../../../games/acnh/shovel_target.h"
+#include "../../../games/acnh/shovel_point_classifier.h"
 #include "../../../games/acnh/shovel_height.h"
 #include "../../../games/acnh/shovel_grid_height.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1175,6 +1176,204 @@ void shovel_height_adapter(CPU& cpu) {
     }
 }
 
+constexpr std::array shovel_approach_resumes{0x15f39c8u, 0x15f3a24u, 0x15f3a78u};
+constexpr std::array shovel_nearby_resumes{0x15f3b84u, 0x15f3bd8u, 0x15f3c2cu, 0x15f3c80u, 0x15f3cd4u,
+                                          0x15f3d28u, 0x15f3d88u, 0x15f3ddcu, 0x15f3e3cu};
+constexpr uint64_t shovel_radius_resume = 0x15f3b40;
+
+Fn original_shovel_point_classifier = nullptr;
+bool use_cpp_shovel_point_classifier = false;
+bool trace_shovel_point_classifier = false;
+
+struct ShovelPointServices : HeightGuestFrame {
+    explicit ShovelPointServices(const CPU& caller) : HeightGuestFrame(caller, 0xf0, 0xb8) {}
+
+    uint64_t stack(size_t offset) const { return cpu.x[31] + offset; }
+
+    CPU invoke_child(uint64_t entry, uint64_t resume, std::initializer_list<uint64_t> args, float input = 0.f) const {
+        CPU nested = cpu;
+        std::copy(args.begin(), args.end(), nested.x);
+        nested.v[0].f32[0] = input;
+        invoke(nested, entry, resume);
+        return nested;
+    }
+
+    void put_point(uint64_t address, acnh::ShovelTargetPoint point) const {
+        st<float>(address, point.x);
+        st<float>(address + 4, point.y);
+        st<float>(address + 8, point.z);
+    }
+
+    void put_tile(uint64_t address, acnh::HalfTile tile) const {
+        st<uint64_t>(address, ld<uint64_t>(main_base + 0x4ab2010) + 0x10);
+        st<int32_t>(address + 8, tile.x);
+        st<int32_t>(address + 12, tile.z);
+    }
+
+    uint32_t stage_hash(uint64_t owner, uint32_t index, acnh::ShovelPointStage phase) const {
+        constexpr std::array resumes{0x15f3f4cu, 0x15f410cu, 0x15f429cu};
+        const auto resume = resumes[static_cast<size_t>(phase)];
+        const auto getter = ld<uint64_t>(ld<uint64_t>(owner) + 0x18);
+        const auto name = invoke_child(getter, resume, {owner, index}).x[0];
+        return uint32_t(invoke_child(main_base + 0x5bd550, resume + 0xc, {ld<uint64_t>(name), 0}).x[0]);
+    }
+
+    float terrain_height(uint64_t point, uint16_t stage_index) const {
+        st<uint16_t>(stack(8), stage_index);
+        st<uint16_t>(stack(0xa), 0);
+        st<uint8_t>(stack(0xc), 1);
+        return invoke_child(main_base + 0x15e06d0, 0x15f3ffc, {point, 0, 1, stack(8), 0}, ld<float>(point + 8)).v[0].f32[0];
+    }
+
+    float surface_height(uint64_t point) const {
+        return invoke_child(main_base + 0x15e026c, 0x15f4014, {point, 0, 0}).v[0].f32[0];
+    }
+
+    bool point_blocked(uint64_t point) const {
+        return invoke_child(main_base + 0x15ea82c, 0x15f4028, {point}).x[0] & 1;
+    }
+
+    bool can_step(acnh::ShovelTargetPoint origin, acnh::ShovelTargetPoint point,
+                  acnh::ShovelTargetPoint& output) const {
+        put_point(stack(0x50), origin);
+        put_point(stack(0x5c), point);
+        st<uint32_t>(stack(0x68), 0x01010001);
+        st<uint16_t>(stack(0x6c), 1);
+        st<uint8_t>(stack(0x6e), 0);
+        if (invoke_child(main_base + 0x15f0c64, 0x15f4190, {stack(0x50), stack(0x70)}).x[0] & 1) return true;
+        output = {ld<float>(stack(0x70)), ld<float>(stack(0x74)), ld<float>(stack(0x78))};
+        return false;
+    }
+
+    uint32_t try_alternate(acnh::ShovelTargetPoint origin, acnh::ShovelTargetPoint alternate, float limit) const {
+        put_point(stack(8), origin);
+        put_point(stack(0x14), alternate);
+        st<uint64_t>(stack(0x20), 0);
+        st<uint32_t>(stack(0x28), 0);
+        st<float>(stack(0x2c), limit);
+        st<uint8_t>(stack(0x30), 0);
+        st<uint64_t>(stack(0x34), 0);
+        st<uint64_t>(stack(0x3c), 0);
+        st<uint32_t>(stack(0x44), 0);
+        st<uint8_t>(stack(0x48), 0);
+        return uint32_t(invoke_child(main_base + 0x15f36e0, 0x15f41e0, {stack(8)}).x[0]);
+    }
+
+    acnh::FieldItem field_record(acnh::HalfTile tile, uint32_t stage, acnh::ShovelPointStage phase) const {
+        const bool raised = phase == acnh::ShovelPointStage::raised;
+        const auto primary = stack(raised ? 0x50 : 0x90);
+        const auto fallback = stack(raised ? 0x90 : 0x80);
+        put_tile(primary, tile);
+        put_tile(fallback, {});
+        if (raised) put_tile(stack(0x80), {});
+        st<uint64_t>(stack(8), ld<uint64_t>(main_base + 0x4abfe68) + 0x10);
+        st<uint32_t>(stack(0x10), 0);
+        st<uint32_t>(stack(0x14), stage);
+        const auto allowed = invoke_child(main_base + 0x16baf44, raised ? 0x15f42d8 : 0x15f4614, {stage}).x[0] & 1;
+        st<uint8_t>(stack(0x18), uint8_t(allowed));
+        return {invoke_child(main_base + 0x195190c, raised ? 0x15f42f4 : 0x15f4630,
+                             {stack(8), 0, primary, fallback}).x[0]};
+    }
+
+    bool terrain_excluded(acnh::TerrainOwner owner) const {
+        st<uint64_t>(stack(0x88), ld<uint64_t>(stack(0x98)));
+        st<uint64_t>(stack(8), 1u << 8);
+        st<uint32_t>(stack(0x10), 0);
+        return invoke_child(main_base + 0x849ac8, 0x15f4370, {owner.address + 0x28, stack(0x80), stack(8)}).x[0] & 1;
+    }
+
+    bool blocked_step(acnh::ShovelTargetPoint point) const {
+        put_point(stack(8), point);
+        st<uint64_t>(stack(0x14), 0x3f80000000000000ull);
+        st<uint32_t>(stack(0x1c), 2);
+        return uint32_t(invoke_child(main_base + 0x15ed290, 0x15f43c0, {stack(8), 0, 0, 0}).x[0]) != 0;
+    }
+
+    int32_t adjust_step(acnh::ShovelPointQuery query) const {
+        return int32_t(invoke_child(main_base + 0x15f33f0, 0x15f43d4, {query.request.address, query.point}).x[0]);
+    }
+
+    bool terrain_barrier(acnh::HalfTile tile) const {
+        put_tile(stack(8), tile);
+        return invoke_child(main_base + 0x876320, 0x15f47e8, {stack(8)}).x[0] & 1;
+    }
+
+    uint32_t item_id(acnh::FieldItem item, acnh::ShovelPointItemId use) const {
+        constexpr std::array resumes{0x15f4444u, 0x15f44bcu, 0x15f4508u, 0x15f4598u, 0x15f45c4u,
+                                     0x15f467cu, 0x15f46a8u, 0x15f46c8u, 0x15f4740u, 0x15f478cu};
+        return uint32_t(invoke_child(main_base + 0x267d6c4, resumes[static_cast<size_t>(use)], {item.address}).x[0]);
+    }
+
+    acnh::ItemDescriptor copy_item(acnh::FieldItem item) const {
+        st<uint64_t>(stack(8), ld<uint64_t>(main_base + 0x4ac0510) + 0x10);
+        st<uint64_t>(stack(0x10), ld<uint64_t>(item.address));
+        st<uint64_t>(stack(0x18), 0);
+        return {stack(8)};
+    }
+
+    acnh::ItemDescriptor describe_item(acnh::FieldItem item, acnh::ShovelPointStage phase) const {
+        invoke_child(main_base + 0x114c030, phase == acnh::ShovelPointStage::raised ? 0x15f45e0 : 0x15f4840,
+                     {stack(8), item.address});
+        return {stack(8)};
+    }
+
+    bool item_supported(acnh::FieldItem item, acnh::ShovelPointStage phase) const {
+        return invoke_child(main_base + 0x267e294, phase == acnh::ShovelPointStage::raised ? 0x15f4538 : 0x15f4810,
+                            {item.address}).x[0] & 1;
+    }
+
+    bool metadata_enabled(acnh::ItemDescriptor descriptor) const {
+        return invoke_child(main_base + 0x19e59b0, 0x15f47bc, {descriptor.address}).x[0] & 1;
+    }
+
+    bool alternate_enabled(acnh::ItemDescriptor descriptor, acnh::ShovelPointStage phase) const {
+        return invoke_child(main_base + 0x19e6020, phase == acnh::ShovelPointStage::raised ? 0x15f4544 : 0x15f481c,
+                            {descriptor.address}).x[0] & 1;
+    }
+
+    uint32_t category(acnh::FieldItem item, acnh::CatalogEntry metadata, acnh::ShovelPointCategory use) const {
+        constexpr std::array resumes{0x15f45f0u, 0x15f48d8u, 0x15f48f8u, 0x15f4850u, 0x15f4870u, 0x15f48a8u};
+        return uint32_t(invoke_child(main_base + 0x113db50, resumes[static_cast<size_t>(use)],
+                                     {item.address, metadata.address}).x[0]);
+    }
+
+    bool category_override(acnh::ItemDescriptor descriptor) const {
+        return invoke_child(main_base + 0x114dc64, 0x15f4890, {descriptor.address, 0}).x[0] & 1;
+    }
+};
+
+void shovel_point_classifier_adapter(CPU& cpu) {
+    const auto resume = cpu.x[30] - main_base;
+    const auto contains = [resume](const auto& resumes) {
+        return std::find(resumes.begin(), resumes.end(), resume) != resumes.end();
+    };
+    if ((!contains(shovel_approach_resumes) && !contains(shovel_nearby_resumes) && resume != shovel_radius_resume)
+        || !is_shovel_target_frame(cpu.x[29])) {
+        original_shovel_point_classifier(cpu);
+        return;
+    }
+
+    const acnh::ShovelPointQuery query{cpu.x[0], {cpu.x[1]}};
+    const auto result_address = query.request.address + 0x38;
+    const auto before = trace_shovel_point_classifier ? ld<uint32_t>(result_address) : 0;
+    if (use_cpp_shovel_point_classifier) {
+        GuestMemory memory;
+        ShovelPointServices services{cpu};
+        cpu.x[0] = acnh::ShovelPointClassifier{main_base, memory, services}.classify(query);
+    } else {
+        original_shovel_point_classifier(cpu);
+    }
+    if (trace_shovel_point_classifier) {
+        const auto selected = query.request.address + 0x2c;
+        const bool kept = ld<uint64_t>(selected) == ld<uint64_t>(query.point)
+                       && ld<uint32_t>(selected + 8) == ld<uint32_t>(query.point + 8);
+        log("acnh shovel point %s entry=15f3ed0 call=%llx kept=%u before=%x after=%x out=%x",
+            use_cpp_shovel_point_classifier ? "cpp" : "original", static_cast<unsigned long long>(resume - 4),
+            unsigned(kept), before, ld<uint32_t>(result_address), unsigned(cpu.x[0]));
+    }
+}
+
+
 struct ShovelTargetServices {
     CPU cpu;
 
@@ -1208,11 +1407,8 @@ struct ShovelTargetServices {
 
     uint32_t probe(acnh::ShovelTargetPoint point, acnh::ShovelTargetRequest request,
                    acnh::ShovelTargetProbe method, size_t index) const {
-        constexpr std::array approach{0x15f39c8u, 0x15f3a24u, 0x15f3a78u};
-        constexpr std::array nearby{0x15f3b84u, 0x15f3bd8u, 0x15f3c2cu, 0x15f3c80u, 0x15f3cd4u,
-                                    0x15f3d28u, 0x15f3d88u, 0x15f3ddcu, 0x15f3e3cu};
-        const auto resume = method == acnh::ShovelTargetProbe::approach ? approach[index]
-            : method == acnh::ShovelTargetProbe::radius ? 0x15f3b40u : nearby[index];
+        const auto resume = method == acnh::ShovelTargetProbe::approach ? shovel_approach_resumes[index]
+            : method == acnh::ShovelTargetProbe::radius ? shovel_radius_resume : shovel_nearby_resumes[index];
         CPU nested = cpu;
         const auto vector = cpu.x[31] + 4;
         st<float>(vector, point.x);
@@ -1221,7 +1417,7 @@ struct ShovelTargetServices {
         nested.x[0] = vector;
         nested.x[1] = request.address;
         nested.x[30] = main_base + resume;
-        trace_shovel_dependency(0x15f3ed0, resume);
+        if (!use_cpp_shovel_point_classifier) trace_shovel_dependency(0x15f3ed0, resume);
         call(nested, main_base + 0x15f3ed0);
         return static_cast<uint32_t>(nested.x[0]);
     }
@@ -2860,6 +3056,12 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_shovel_grid_height = std::getenv("NX_ACNH_SHOVEL_GRID_HEIGHT_TRACE") != nullptr;
     if (use_cpp_shovel_grid_height || trace_shovel_grid_height)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
+
+    mode = std::getenv("NX_ACNH_SHOVEL_POINT_CLASSIFIER");
+    use_cpp_shovel_point_classifier = !mode || std::string_view(mode) == "cpp";
+    trace_shovel_point_classifier = std::getenv("NX_ACNH_SHOVEL_POINT_CLASSIFIER_TRACE") != nullptr;
+    if (use_cpp_shovel_point_classifier || trace_shovel_point_classifier)
+        wrap_function(entries, 0x15f3ed0, shovel_point_classifier_adapter, original_shovel_point_classifier);
 
     mode = std::getenv("NX_ACNH_SHOVEL_HEIGHT_PARAMETER_TYPE");
     use_cpp_shovel_height_parameter_type = !mode || std::string_view(mode) == "cpp";

@@ -225,6 +225,8 @@ sector selection, interpolation, and material outputs. Both samplers
 also reuse the C++ world-position fallbacks and the field material
 predicate. The height parameter object's type check also runs in
 handwritten C++. Locking, stage-specific material overrides, and the
-base-type fallback stay at the guest boundary. The selector calls the
-generated point classifier. See the
-[height sampling checks](ledger.md#height-parameter-type-check).
+base-type fallback stay at the guest boundary. The selector also uses the
+typed point classifier, which checks stage height and item metadata.
+Its boundary still calls the stage-specific height query, obstruction
+and step geometry, and field-record lookup. See the
+[point-classifier verification](ledger.md#shovel-point-classifier).

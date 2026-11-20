@@ -1323,3 +1323,53 @@ The default run did not take the generated base-type branch. The
 next generated entry reached by the target selector is the point
 classifier `0x15f3ed0`. Start with entry and exit request snapshots
 and the ordered child results from the observed shovel gameplay.
+
+### Shovel point classifier
+
+Point classification `0x15f3ed0` now runs in typed C++ for the
+shovel target selector. It chooses a height and stage, classifies
+the selected record against the appropriate item catalog, and
+updates the request. The ABI adapter retains the generated child
+calls and their guest scratch layouts. Set
+`NX_ACNH_SHOVEL_POINT_CLASSIFIER=original` for the generated route.
+
+The fixture captured 104 original invocations on build
+`FF1D1C05670DB6021C85B624A710B963`. Each was run twice using
+the original AArch64 body, captured memory and deterministic
+callees. The classifier matched return values, final request
+bytes, ordered external writes, and child calls. The no-op
+candidate failed capture 1 on its child calls and output bytes.
+Twenty-nine portable synthetic cases also passed. They cover
+raised terrain, category gates, and paths that leave the previous
+request result intact. The actual gameplay fixture produced
+results 0 and 10.
+
+The original and opt-in pointclass1 runs and the default pointclass2
+run matched 40 focal calls each, at 12 observed selector sites.
+The `0x15f3b40` radius probe was outside this fixture. All four
+neighborhoods, surveys, and final decisions matched, including
+the default against the whole-original classdeep2 route. Gameplay
+used one muted instance at a time. All 14 Release CTest checks
+and 14 replay and profile tests passed. The discovery queue
+remains at 100.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
+$o = "$r/tree-shake-original-pointclass1"
+$c = "$r/tree-shake-default-pointclass2"
+& private/venv/Scripts/python -m private.heading.compare_leaf shovel_point_classifier --capture "$o/console.log" --live "$o/nx.log" "$c/nx.log" --survey-tile 40 69
+```
+
+The synthetic cases run with the same replay command and no capture
+argument. The original gameplay capture used the private overlay
+`generated-dll/shovel_point_capture_generated.dll`. The NSO, overlay
+and captures stay local.
+
+The first new generated height dependency is `0x15e06d0`.
+The same classifier route reaches `0x15e026c` outside its verified
+target-selector scope, then `0x15ea82c` for obstruction and
+`0x15f0c64` for step geometry. The classifier also calls generated
+stage lookups and filters, field-record lookup `0x195190c`, and
+descriptor metadata on some paths. Classifier-origin verification
+of the height group would remove the main dependency before the
+record lookup and deeper classification.

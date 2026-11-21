@@ -417,3 +417,7 @@ The private run labels are
 `draw-selector-paired-{tree,movement,shovel}-{original,default}1`.
 The verifier is `private.heading.draw_selector_profile_pairs`. The DLL
 SHA-256 is `b494e9a113deeb7f5bea50ec9951d7a4aed992239a7b0d92f0b4e936c1e03d63`.
+
+The default tree gate then moved 534,264 ordinary entry preparations
+within the draw child to C++. The rare fourth link, empty branch
+and list traversal still run generated. See [the draw entry checkpoint](ledger.md#terrain-draw-entry-preparation).

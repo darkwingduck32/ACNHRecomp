@@ -3746,3 +3746,55 @@ $c = 'private/heading/acnh_render_selector_submit_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_selector_submit_gates original cpp default
 ```
+
+### Terrain draw entry preparation
+
+The draw child at `0x146b080` now prepares its descriptor, selected
+pass row and first link in C++ between `0x146b0a0` and `0x146b0e8`.
+The adapter checks the draw frame, its parent frame and the
+three ordinary wrapper return sites. It retains the original
+list head, frame-local binding cell and descriptor identity.
+The first-link read happens once in the original order. The
+generated empty branch and all later list traversal, binding
+and drawing still run through their original paths. The
+fourth link and other frames stay generated. Set
+`NX_ACNH_TERRAIN_DRAW_ENTRY=original` for generated preparation.
+
+The original movement and shovel windows recorded 1,067,348
+entry calls and supplied 194 completed samples. They included
+empty and nonempty heads for each of the three ordinary links
+and each observed pass (0, 2, 9 and 12), plus the two fourth-link
+calls in shovel. Two original AArch64 runs per sample matched
+the ordered memory operations and continuation registers.
+The 336-case portable matrix also matched two originals each,
+including 168 controls in which the early stack write overlapped
+the context count read. The typed implementation preserves that
+write before the count read.
+
+| Muted tree gate | Ordinary entries | Empty ordinary entries | C++ preparations | Replayed samples | Fourth-link stock calls |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Original | 533,082 | 135,234 | 0 | 98 | 2 |
+| Opt-in | 534,264 | 136,178 | 534,264 | 96 | 2 |
+| Default | 534,264 | 134,711 | 534,264 | 96 | 2 |
+
+The typed samples matched their own original AArch64 inputs
+through the stock branch, including the seven ordered reads,
+four frame writes, the X8–X13 outputs and NZCV. Both C++ routes
+also replayed their two fourth-link fallbacks. The default
+window replaced 9,616,752 generated instructions at 18 per
+accepted entry. The draw body remains partial. Batch 4 stays at
+30 verified functions and 100 discovery candidates. All 14
+Release CTests, 15 profile and replay checks and the 280-case
+draw-wrapper regression passed.
+
+The next selector group has original witnesses on both sides
+of its two stock virtual calls. It will focus on the preparation
+and the common post-call continuation. List traversal remains
+queued pending a producer-to-consumer ownership witness.
+
+```powershell
+$c = 'private/heading/acnh_terrain_draw_entry_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_terrain_draw_entry_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_terrain_draw_entry_gates original cpp default
+```

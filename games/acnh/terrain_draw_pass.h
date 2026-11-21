@@ -72,4 +72,49 @@ void draw_terrain_lists(const TerrainDrawPass& pass, Draw draw) {
         draw(TerrainDrawList{pass.context + offsets[lane], lane});
 }
 
+struct TerrainDrawEntry {
+    TerrainDrawManager manager;
+    TerrainDrawDescriptor descriptor;
+    uint64_t head;
+    uint64_t context;
+    uint64_t binding_cell;
+};
+
+struct TerrainDrawEntryScratch {
+    uint64_t binding;
+    uint64_t pass;
+    uint64_t manager;
+    uint64_t table;
+};
+
+struct TerrainDrawEntryPlan {
+    uint64_t first;
+    uint64_t rows;
+    uint32_t index;
+    uint64_t table;
+    uint64_t table_end;
+    uint8_t pass;
+};
+
+template<class Memory>
+TerrainDrawEntryPlan prepare_terrain_draw_entry(TerrainDrawEntry input, TerrainDrawEntryScratch scratch,
+                                                Memory& memory) {
+    const auto pass_info = memory.template read<uint64_t>(input.descriptor.address);
+    const auto index_info = memory.template read<uint64_t>(input.descriptor.address + 8);
+    memory.template write<uint64_t>(scratch.binding, input.binding_cell);
+    const auto count = memory.template read<uint32_t>(input.context + 0x498);
+    const auto index = memory.template read<uint16_t>(index_info + 0x16);
+    const auto rows = memory.template read<uint64_t>(input.context + 0x4a0);
+    const auto pass = memory.template read<uint8_t>(pass_info + 0x21);
+    const auto first = memory.template read<uint64_t>(input.head + 8);
+    memory.template write<uint64_t>(scratch.pass, pass);
+    memory.template write<uint64_t>(scratch.manager, input.manager.address);
+    const uint32_t selected = index < count ? index : 0;
+    const auto row = rows + selected * 0x108ull + 8;
+    const auto table_end = row + pass * 16ull;
+    const auto table = pass < 16 ? table_end : row;
+    memory.template write<uint64_t>(scratch.table, table);
+    return {first, rows, selected, table, table_end, pass};
+}
+
 } // namespace nx::acnh

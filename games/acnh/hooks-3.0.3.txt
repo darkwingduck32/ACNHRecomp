@@ -166,5 +166,6 @@ include features/camera/hooks-3.0.3.txt
 # resume 38eac68 38ead40 # Disjoint render descriptor transfer
 # resume 38ead64 38eadf4 # Empty render binding cache
 # resume 38eadf4 38eaec4 # Selector indirect render submit preparation
+# resume 146b0a0 146b0e8 # Terrain draw entry before the original list branch
 # resume 38fae10 38fb078 # Indirect render submit arguments
 # dispatch 29e460 # Render pass format width

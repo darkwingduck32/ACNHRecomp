@@ -177,11 +177,11 @@ of the typed path. See the [verification ledger](ledger.md#terrain-clearance-and
 The shared worker culler now has a repeatable generated-route capture
 at five links. The tree action window reached both warm visibility
 outcomes after the volume miss, including ten-plane checks and the
-second predicate when all planes passed. The warm loop at one worker
-link now uses C++ after the first plane. The default tree trace supports
-a lower bound of 5,242,880 typed tail row tests. The selector, first
+second predicate when all planes passed. The warm loop at three worker
+links now uses C++ after the first plane. The default tree trace supports
+a lower bound of 8,470,528 typed tail row tests. The selector, first
 plane, byte stores, and enqueue still run generated. See the
-[worker plane-loop checkpoint](ledger.md#warm-terrain-worker-plane-loop).
+[worker expansion checkpoint](ledger.md#warm-plane-loop-at-two-additional-worker-calls).
 
 Terrain draw at `0x146b080` repeats its masked instance rejection
 across all three activities. The three common callers each contribute

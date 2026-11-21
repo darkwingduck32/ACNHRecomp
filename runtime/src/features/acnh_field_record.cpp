@@ -1829,29 +1829,48 @@ void terrain_clearance_adapter(CPU& cpu) {
     }
 }
 
+struct WorkerVisibilitySite {
+    uint64_t resume;
+    uint64_t worker_frame_offset;
+    uint64_t payload_offset;
+};
+constexpr std::array<WorkerVisibilitySite, 3> worker_visibility_sites{{
+    {0x11fd40c, 0xb0, 0x28},
+    {0x11fc710, 0x60, 8},
+    {0x11fc944, 0x60, 8},
+}};
 bool use_cpp_worker_visibility = false;
 bool trace_worker_visibility = false;
-thread_local uint64_t warm_worker_visibility_stack = 0;
+struct WarmWorkerVisibility {
+    uint64_t stack;
+    const WorkerVisibilitySite* site;
+};
+thread_local WarmWorkerVisibility warm_worker_visibility{};
 
 void worker_visibility_acquire(CPU& cpu) {
     if (!use_cpp_worker_visibility && !trace_worker_visibility) return;
-    warm_worker_visibility_stack = 0;
+    warm_worker_visibility = {};
     const auto sp = cpu.x[31], fp = cpu.x[29];
     if (!(cpu.x[8] & 1u) || !sp || (sp & 15) || fp != sp + 0x60
-        || uint32_t(cpu.x[27]) != UINT32_MAX || cpu.x[22] != sp + 0xe8 || cpu.x[19]
-        || ld<uint64_t>(fp) != sp + 0x170 || ld<uint64_t>(fp + 8) != main_base + 0x11fd40c)
+        || uint32_t(cpu.x[27]) != UINT32_MAX || cpu.x[19]) return;
+    const auto resume = ld<uint64_t>(fp + 8) - main_base;
+    const auto site = std::find_if(worker_visibility_sites.begin(), worker_visibility_sites.end(),
+                                   [resume](const auto& candidate) { return candidate.resume == resume; });
+    if (site == worker_visibility_sites.end()) return;
+    const auto worker_sp = sp + 0xc0;
+    if (cpu.x[22] != worker_sp + site->payload_offset || ld<uint64_t>(fp) != worker_sp + site->worker_frame_offset)
         return;
-    warm_worker_visibility_stack = sp;
+    warm_worker_visibility = {sp, &*site};
 }
 
 void worker_visibility_planes(CPU& cpu) {
     if (!use_cpp_worker_visibility && !trace_worker_visibility) return;
+    const auto warm = warm_worker_visibility;
+    warm_worker_visibility = {};
     const auto sp = cpu.x[31];
-    const bool warm = sp && warm_worker_visibility_stack == sp;
-    warm_worker_visibility_stack = 0;
-    if (!warm || cpu.x[29] != sp + 0x60 || uint32_t(cpu.x[27]) != UINT32_MAX
+    if (!warm.site || warm.stack != sp || cpu.x[29] != sp + 0x60 || uint32_t(cpu.x[27]) != UINT32_MAX
         || uint32_t(cpu.x[8]) != 10 || !cpu.x[11]
-        || ld<uint64_t>(cpu.x[29] + 8) != main_base + 0x11fd40c) return;
+        || ld<uint64_t>(cpu.x[29] + 8) != main_base + warm.site->resume) return;
     const acnh::terrain_cull_detail::Vec3 point{cpu.v[9].f32[0], cpu.v[10].f32[0], cpu.v[11].f32[0]};
     const float margin = cpu.v[8].f32[0], first = cpu.v[0].f32[0];
     if (margin <= 0.f || !std::isfinite(margin) || !std::isfinite(first)
@@ -1861,13 +1880,14 @@ void worker_visibility_planes(CPU& cpu) {
     const auto result = acnh::terrain_worker_remaining_planes({cpu.x[11] + 0x43c, 10}, point, margin, first, memory);
     if (!std::isfinite(result.scalar)) return;
     if (trace_worker_visibility) {
-        static std::atomic<uint64_t> samples[3]{};
-        const auto count = samples[result.passes ? 2 : (result.tested ? 1 : 0)]
+        const auto scope = warm.site - worker_visibility_sites.data();
+        static std::atomic<uint64_t> samples[worker_visibility_sites.size()][3]{};
+        const auto count = samples[scope][result.passes ? 2 : (result.tested ? 1 : 0)]
             .fetch_add(1, std::memory_order_relaxed) + 1;
         if (count <= 8 || std::has_single_bit(count))
-            log("acnh worker visibility %s call=11fd408 planes=10 tested=%u pass=%u s0=%x",
-                use_cpp_worker_visibility ? "cpp" : "original", result.tested, unsigned(result.passes),
-                std::bit_cast<uint32_t>(result.scalar));
+            log("acnh worker visibility %s call=%llx planes=10 tested=%u pass=%u s0=%x",
+                use_cpp_worker_visibility ? "cpp" : "original", static_cast<unsigned long long>(warm.site->resume - 4),
+                result.tested, unsigned(result.passes), std::bit_cast<uint32_t>(result.scalar));
     }
     if (!use_cpp_worker_visibility) return;
 

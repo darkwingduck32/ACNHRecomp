@@ -3278,3 +3278,40 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
     "$r/tree-shake-default-terrain-draw-movement1/console.log" `
     "$r/tree-shake-default-terrain-draw-shovel1/console.log"
 ```
+
+### Warm plane loop at two additional worker calls
+
+The calls at `0x11fc70c` and `0x11fc940` under `0x11fc610` now
+use the verified C++ tail loop on the same ten-plane warm volume
+miss. Their saved parent FP is worker SP+0x60 and their payload is
+worker SP+8. The call at `0x11fd408` retains its own frame and
+payload checks. The acquire hook records the matching call and
+frame together. The plane hook consumes it once and checks the
+saved return again. `NX_ACNH_WORKER_VISIBILITY=original` selects
+the generated loop at all three calls.
+
+The original, opt-in and default tree runs used the same input
+schedule and guest DLL. Each run captured nine actual handoffs
+for the two new calls, with first-row and late rejects and
+nine-row action passes at both. The actual handoff bytes,
+endpoint and S0/NZCV matched two original AArch64 executions
+per capture. Each run also logged 125 scoped route predictions.
+The C++ cases entered the same stock continuation and skipped
+the generated tail reads.
+
+The default lower bound adds 606,208 and 2,621,440 typed row
+tests at the two calls, for at least 8,470,528 across the three
+scopes in the complete fixture. The selector, first row, visibility
+stores, fallback margin call and enqueue remain generated at this
+boundary. The warm body remains partial and Batch 4 stays at 27
+verified bodies with 100 discovery entries. All 233 portable plane
+controls, 14 Release CTests and 14 profile and replay checks passed.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
+& private/venv/Scripts/python -B -m private.heading.compare_worker_visibility_cut --expand `
+    private/heading/acnh_terrain_worker_visibility_candidate.exe `
+    "$r/tree-shake-default-worker-visibility-expand-original1" `
+    "$r/tree-shake-default-worker-visibility-expand-cpp1" `
+    "$r/tree-shake-default-worker-visibility-expand-default2"
+```

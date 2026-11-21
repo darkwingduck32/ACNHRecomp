@@ -377,3 +377,43 @@ The two selector callers reached the same indirect submit preparation
 gate counted 576,657 C++ preparations. The generated target lookup and
 indirect call still use the existing NVN submit implementation.
 See [the selector submit checkpoint](ledger.md#render-selector-indirect-submit-preparation).
+
+### Incremental draw wrapper and selector submit measurement
+
+At `db1e0924cbfb4c85bf4edc1683a37d2fef569b27`, three activity pairs
+used the same muted player, DLL, pipeline cache and fixed inputs. The
+original member of each pair selected the generated draw wrapper and
+selector submit preparation. The other five render switches and all
+worker routing used their defaults in both members. The 47 Hz sampler
+reported zero ring drops, and validation traces were off.
+
+| Activity | Game DLL leaves, original → default | Uniquely resolved DLL leaves | Draw child `0x146b080` | Selector `0x38ea910` | Draw wrapper `0x1461a34` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tree shake | 140/346 → 114/345 | 130 → 101 | 7 → 9 | 13 → 3 | 0 → 0 |
+| Movement | 114/350 → 114/350 | 106 → 98 | 7 → 8 | 4 → 2 | 0 → 0 |
+| Shovel | 136/345 → 105/345 | 124 → 98 | 5 → 6 | 11 → 5 | 1 → 0 |
+
+| Activity | Guest-worker DLL leaves, original → default | Uniquely resolved worker DLL leaves |
+| --- | ---: | ---: |
+| Tree shake | 190/19,030 → 222/18,975 | 176 → 214 |
+| Movement | 224/19,250 → 210/19,250 | 208 → 194 |
+| Shovel | 217/18,975 → 201/18,975 | 208 → 188 |
+
+The draw child now ranks first by activity breadth and mean exclusive
+game-thread leaf share. The selector ranks second. The third shared
+body, `0x05faa20`, executes a phase dispatcher with virtual calls
+and atomic lifecycle flags. The sampling resolves only a subset of
+generated leaves. These single pairs give neither a typed-code CPU
+total nor a speed estimate.
+
+Next capture the draw child's entry preparation through `0x146b0e8`.
+It reads one first link in the original order and leaves the empty
+branch and all list traversal generated. Ownership of the list still
+needs a matching scheduler completion and reset witness. Also measure
+the selector's first-virtual preparation and the continuation after
+both virtual calls to choose the next shared render group.
+
+The private run labels are
+`draw-selector-paired-{tree,movement,shovel}-{original,default}1`.
+The verifier is `private.heading.draw_selector_profile_pairs`. The DLL
+SHA-256 is `b494e9a113deeb7f5bea50ec9951d7a4aed992239a7b0d92f0b4e936c1e03d63`.

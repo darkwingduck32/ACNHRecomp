@@ -476,3 +476,51 @@ The private runs use
 and `private.heading.draw_selector_profile_pairs --suite draw-virtual`.
 The DLL SHA-256 is
 `97c457660ddd5a213846cb6d5b07699b8b4f1fcb45c2eb9cb6bac8705dde103b`.
+
+### Incremental node mask, animation and placement measurement
+
+At `8cfb1c08ac093a4cdc8b60103057818a6822dae6`, six muted
+Windows runs reused one player, DLL, pipeline cache, and the
+three fixed activity schedules. The original members selected
+generated node masks, animation sidecar slices and placement
+initialization. Both members used the same defaults for earlier
+render and worker routes. The sampler ran at 47 Hz with validation
+traces disabled and zero ring drops.
+
+| Activity | Game DLL leaves, original → default | Resolved game DLL leaves | Selector `0x38ea910` | Draw child `0x146b080` | Animation `0x374f3b0` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tree shake | 139/346 → 118/345 | 132 → 106 | 6 → 6 | 11 → 6 | 0 → 2 |
+| Movement | 108/350 → 130/350 | 94 → 116 | 3 → 8 | 5 → 4 | 2 → 0 |
+| Shovel | 107/346 → 124/345 | 96 → 109 | 0 → 10 | 6 → 8 | 2 → 0 |
+
+| Activity | Guest-worker DLL leaves, original → default | Resolved guest-worker DLL leaves |
+| --- | ---: | ---: |
+| Tree shake | 319/18,971 → 221/18,975 | 310 → 210 |
+| Movement | 212/19,250 → 229/19,250 | 198 → 215 |
+| Shovel | 248/19,030 → 203/18,975 | 234 → 194 |
+
+The combined game-thread samples were 354/1,042 original
+and 372/1,040 default. The residual selector ranks first with
+6, 8 and 10 default leaves. The draw child ranks second with
+6, 4 and 8. The phase dispatcher `0x05faa20` accounts for 1,
+4 and 3 and includes effectful virtual calls and lifecycle
+state. Grid height `0x862700` accounts for 4, 2 and 1, so the
+next terrain inventory will identify which original callers
+still reach it. These sparse leaves locate generated work.
+Instruction counts, total C++ execution, and elapsed rendering
+time need separate measurements.
+
+The [node-mask checkpoint](ledger.md#terrain-draw-node-mask)
+counted 6,096,374 C++ decisions in the default tree window.
+The [animation and placement checkpoint](ledger.md#animation-sidecars-and-placement-record-initialization)
+counted 401,389 C++ decisions in each sidecar slice and five
+complete C++ placements across tree and shovel. The packed
+animation lookup, virtual callbacks, and draw-list traversal
+remain generated. The next animation capture separates the two
+fallback paths from a successful packed resource lookup.
+
+The private paired run labels are
+`anim-place-paired-{tree,movement,shovel}-{original,default}1`.
+The verifier is `private.heading.draw_selector_profile_pairs --suite animation-placement`.
+The DLL SHA-256 is
+`bc3864d23b92e7d6e1d575f556b279dacdf3c9aa27b90b3adb2e658ae05b8edd`.

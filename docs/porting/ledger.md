@@ -3917,3 +3917,60 @@ $c = 'private/heading/acnh_terrain_draw_nonempty_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_terrain_draw_nonempty_gates original cpp default
 ```
+
+### Terrain draw node mask
+
+The ordinary draw continuation at `0x146b19c` tests the current
+node's flags against the pass mask in C++ and joins the generated
+conditional branch at `0x146b1c8`. The guard uses the saved draw and
+selector frames and admits observed passes 0, 2 and 9 with the
+established mask index and nonzero gate. It reads the mask and
+node flags in original order, writes X8/X9 and NZCV, and makes no
+guest-memory stores. Other passes, the fourth-link caller, every
+link read, and the remainder of the draw body run generated.
+`NX_ACNH_TERRAIN_DRAW_MASK=original` selects all generated tests.
+
+The 360 portable cases ran twice against the original AArch64.
+They include 72 exact joins, with positive, zero and sign-bit
+tests, and 288 unsupported or bypass cases. The muted fixed
+tree gates use the same DLL, pipeline cache and saved inputs.
+
+| Route | Stock samples | C++ samples | C++ decisions |
+| --- | ---: | ---: | ---: |
+| Original | 92 | 0 | 0 |
+| Opt-in | 20 | 72 | 6,096,404 |
+| Default | 20 | 72 | 6,096,374 |
+
+Each sample matched two fresh original executions on its own
+inputs. The default window replaced 67,060,114 guest instructions
+in this 11-instruction cut. The draw function remains partial.
+Batch 4 stays at 30 verified functions and 100 discovery candidates.
+All 14 Release CTests and 15 profile and replay checks passed.
+
+Two trace-off timing rounds used the same fixed tree window
+and player. They measured CPU time for the named Windows
+game thread over 440 or 441 frame indices. The second round ran
+the configurations in reverse order.
+
+| Configuration | Round 1 CPU ms/frame | Round 2 CPU ms/frame |
+| --- | ---: | ---: |
+| Previous DLL without the node hook | 12.61 | 10.87 |
+| Same new DLL with original mode | 12.83 | 11.76 |
+| Same new DLL with C++ mode | 12.11 | 11.68 |
+
+The C++ mode used less CPU time than original mode on the
+same DLL in both rounds. Its comparison to the previous DLL
+changed direction. The six runs support the branch-specific
+coverage measurement and leave any overall timing effect
+unresolved.
+
+The next draw diagnostic follows wait and signal callers with
+individual quotas. List iteration stays generated pending a
+common writer-completion and reset witness. Shared animation
+and placement are the next independent capture targets.
+
+```powershell
+$c = 'private/heading/acnh_terrain_draw_mask_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_terrain_draw_mask_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+```

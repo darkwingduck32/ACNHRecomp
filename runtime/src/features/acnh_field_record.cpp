@@ -1923,6 +1923,7 @@ bool use_cpp_render_selector_submit = false;
 bool use_cpp_render_virtual = false;
 bool use_cpp_terrain_draw_entry = false;
 bool use_cpp_terrain_draw_nonempty = false;
+bool use_cpp_terrain_draw_mask = false;
 Fn original_render_pass_float = nullptr;
 Fn original_render_format = nullptr;
 Fn original_terrain_draw_pass = nullptr;
@@ -2224,14 +2225,21 @@ void terrain_draw_pass_adapter(CPU& cpu) {
     cpu.x[31] = sp;
 }
 
-uint64_t terrain_draw_list_caller(const CPU& cpu) {
+uint64_t terrain_draw_list_frame(const CPU& cpu) {
     const uint64_t sp = cpu.x[31], fp = cpu.x[29];
     if (!sp || (sp & 15) || fp != sp + 0x70) return 0;
     const uint64_t parent = sp + 0xd0;
-    if (ld<uint64_t>(fp) != parent || cpu.x[4] != parent + 0x18 ||
-        cpu.x[1] != parent + 0x50 || !cpu.x[0] || !cpu.x[3] ||
+    if (ld<uint64_t>(fp) != parent ||
         ld<uint64_t>(parent + 8) != main_base + 0x38ea1e8) return 0;
     const uint64_t resume = ld<uint64_t>(fp + 8) - main_base;
+    return resume == 0x1461b08 || resume == 0x1461b20 || resume == 0x1461b38 ? resume : 0;
+}
+
+uint64_t terrain_draw_list_caller(const CPU& cpu) {
+    const uint64_t parent = cpu.x[31] + 0xd0;
+    if (cpu.x[4] != parent + 0x18 || cpu.x[1] != parent + 0x50 ||
+        !cpu.x[0] || !cpu.x[3]) return 0;
+    const uint64_t resume = terrain_draw_list_frame(cpu);
     uint64_t offset;
     switch (resume) {
     case 0x1461b08: offset = 0x20; break;
@@ -2295,6 +2303,20 @@ bool terrain_draw_nonempty_prepare(CPU& cpu) {
 }
 
 const ResumeHookRegistrar terrain_draw_nonempty_resume{0x146b0ec, terrain_draw_nonempty_prepare};
+
+bool terrain_draw_mask_prepare(CPU& cpu) {
+    if (!use_cpp_terrain_draw_mask || !terrain_draw_list_frame(cpu)) return false;
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
+    const auto test = acnh::test_terrain_draw_node(
+        {fp - 0x18, sp + 0x24, sp + 8}, main_base + 0x4075b7c, cpu.x[19], GuestMemory{});
+    if (!test) return false;
+    cpu.x[8] = test->mask;
+    cpu.x[9] = test->flags;
+    logic32(cpu, test->mask & test->flags);
+    return true;
+}
+
+const ResumeHookRegistrar terrain_draw_mask_resume{0x146b19c, terrain_draw_mask_prepare};
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6502,6 +6524,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_terrain_draw_entry = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_TERRAIN_DRAW_NONEMPTY");
     use_cpp_terrain_draw_nonempty = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_TERRAIN_DRAW_MASK");
+    use_cpp_terrain_draw_mask = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

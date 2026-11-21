@@ -3,6 +3,7 @@
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <optional>
 
 namespace nx::acnh {
 
@@ -157,6 +158,30 @@ TerrainDrawNonemptyPlan prepare_terrain_draw_nonempty(TerrainDrawNonempty input,
     return {input.first_link - static_cast<uint64_t>(displacement),
             input.head - static_cast<uint64_t>(displacement), row, row + 4, manager + 0x560,
             binding, signed_pass, pass, displacement, gated};
+}
+
+struct TerrainDrawNodeFields {
+    uint64_t pass;
+    uint64_t gate;
+    uint64_t index;
+};
+
+struct TerrainDrawNodeTest {
+    uint32_t mask;
+    uint32_t flags;
+};
+
+template<class Memory>
+std::optional<TerrainDrawNodeTest> test_terrain_draw_node(
+        TerrainDrawNodeFields fields, uint64_t table, uint64_t node, const Memory& memory) {
+    const auto pass = static_cast<uint32_t>(memory.template read<uint64_t>(fields.pass));
+    if (pass != 0 && pass != 2 && pass != 9) return std::nullopt;
+    if (!memory.template read<uint32_t>(fields.gate)) return std::nullopt;
+    const auto index = memory.template read<uint64_t>(fields.index);
+    if (index != pass || !node) return std::nullopt;
+    const auto mask = memory.template read<uint32_t>(table + index * 4);
+    const auto flags = memory.template read<uint32_t>(node + 0x18);
+    return TerrainDrawNodeTest{mask, flags};
 }
 
 } // namespace nx::acnh

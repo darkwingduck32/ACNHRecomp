@@ -183,6 +183,14 @@ a lower bound of 5,242,880 typed tail row tests. The selector, first
 plane, byte stores, and enqueue still run generated. See the
 [worker plane-loop checkpoint](ledger.md#warm-terrain-worker-plane-loop).
 
+Terrain draw at `0x146b080` repeats its masked instance rejection
+across all three activities. The three common callers each contribute
+roughly one-third of the draw invocations. Passes 0 and 2 dominate
+the rejections. The pre-effect branch is now replayed, and the next
+capture targets consecutive rejects while leaving binding and draw
+commands on their generated routes. See the
+[terrain draw inventory](ledger.md#terrain-draw-pre-effect-visibility-capture).
+
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.
 

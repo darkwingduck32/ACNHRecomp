@@ -3227,3 +3227,54 @@ $c = 'private/heading/acnh_terrain_worker_visibility_candidate.exe'
     "$r/tree-shake-default-worker-visibility-gate-cpp1" `
     "$r/tree-shake-default-worker-visibility-gate-default1"
 ```
+
+### Terrain draw pre-effect visibility capture
+
+The original draw body `0x146b080` completed three serial muted
+Windows fixtures using one instrumented DLL. The capture separated
+field loading from the action window and closed the counters at
+the end marker. The tracer checked the marker at every sixteenth
+scoped call. The table counts invocations and instance outcomes
+in that instrumented interval.
+
+| Activity | Draw calls | Empty calls | Bypass instances | Mask accepts | Mask rejects | Rejections after the first in a run, lower bound |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tree shake | 533,760 | 134,924 | 1,290,456 | 1,858,343 | 4,245,850 | 2,203,402 |
+| Movement | 533,952 | 134,334 | 1,290,909 | 1,905,636 | 4,240,666 | 2,149,450 |
+| Shovel | 515,360 | 129,502 | 1,244,784 | 1,795,510 | 4,099,426 | 2,129,390 |
+
+The three recurring calls under `0x1461a34` are `0x1461b04`,
+`0x1461b1c`, and `0x1461b34`. Each accounted for about one-third
+of the calls. `0x1461b80` ran twice during tree, zero times during
+movement, and twice during shovel. Passes 0, 2 and 9 produced all
+action-window mask rejections. Passes 0 and 2 together produced
+more than 85 percent of them in each run. For each caller and pass,
+the maximum run count is its masked accepts plus its nonempty
+invocations. Subtracting this from rejections, floored at zero,
+gives the repeated-rejection lower bound. These are execution
+counts from the trace.
+
+The 72 detailed records matched two independent original AArch64
+executions each. The replay checked the selected row and ordered
+external reads before the first instance outcome or empty exit.
+It stopped at `0x146b1cc` for acceptance, `0x146b180` for rejection,
+or the empty epilogue at `0x146b408`. No external writes or calls
+occurred before those endpoints. Detailed action samples cover
+empty lists, pass 12 bypass, pass 2 mask accept, and both pass 9
+mask outcomes. The portable controls also cover a pass 0 reject
+and accept. Bindings, list advancement after the cut, and draw
+command effects still run generated.
+
+The tracked body count remains 27 verified. The discovery queue
+has 100 entries. For the next draw group, capture consecutive
+rejections up to an accepted instance or list sentinel, starting
+with passes 0 and 2 at the three common callers. These counts
+identify a shared pre-effect loop across all three activities.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
+& private/venv/Scripts/python -B -m private.heading.replay_terrain_draw_capture `
+    "$r/tree-shake-default-terrain-draw-tree1/console.log" `
+    "$r/tree-shake-default-terrain-draw-movement1/console.log" `
+    "$r/tree-shake-default-terrain-draw-shovel1/console.log"
+```

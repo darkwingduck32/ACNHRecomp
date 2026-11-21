@@ -3798,3 +3798,64 @@ $c = 'private/heading/acnh_terrain_draw_entry_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_terrain_draw_entry_gates original cpp default
 ```
+
+### Render selector virtual preparation and continuation
+
+Two more parts of `0x38ea910` run in C++ at the verified selector
+frames. The first prepares the application record and frame
+between `0x38eb068` and `0x38eb0b4`. It handles the observed flag-7
+slot-zero route, including the sentinel record selection. It
+writes the command sink to its frame slot before the subsequent
+record and application reads, and writes the selected record
+address after them. This preserves the original behavior when
+the frame write and a later read overlap.
+
+Both virtual lookups and calls stay generated. Their observed
+target was `0x380e150`. After the calls return, the second typed
+segment uses their separate W0 results and rereads the record,
+object and sink in the original order. It prepares the common
+continuation from `0x38eb0d4` to `0x38eb4bc`. The low-byte-`ff`
+and sentinel continuations stay generated, as do the later
+binding and submission effects. Set `NX_ACNH_RENDER_VIRTUAL=original`
+to use the generated preparation and continuation.
+
+| Original activity | First preparation calls | Common post-call entries | Low-byte-ff and sentinel post-call entries |
+| --- | ---: | ---: | ---: |
+| Tree shake | 595,276 | 591,793 | 3,483 |
+| Movement | 593,462 | 589,974 | 3,488 |
+| Shovel | 595,912 | 592,432 | 3,480 |
+
+The activity captures supplied 72 first preparations and 96
+post-call inputs, each matched by two original AArch64 runs.
+The 408-case portable matrix independently tested 48 ordered
+first preparations and 216 common post-call joins, plus 144
+stock continuation controls. The synthetic cases covered both
+early-write overlap locations, different virtual return values,
+sentinel selection, full scratch registers and NZCV. The
+captured gameplay inputs exercised the actual generated calls.
+
+| Muted tree gate | C++ first preparations | C++ post-call preparations | First preparation samples | Common post-call samples | Generated rare post-call entries |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Original | 0 | 0 | 24 | 16 | 3,486 |
+| Opt-in | 593,759 | 590,284 | 24 | 16 | 3,475 |
+| Default | 598,116 | 594,630 | 24 | 16 | 3,486 |
+
+All three routes also replayed 16 samples from the two generated
+post-call fallback classes and witnessed both virtual returns
+under each selector caller. The default run replaced 19 guest
+instructions per first preparation and 15 per accepted post-call
+preparation, or 20,283,654 instructions in the marked window.
+The full selector remains partial. Batch 4 stays at 30 verified
+functions and 100 discovery candidates. The prior selector
+submit replay and the Release, profile and replay suites passed.
+
+The next draw capture measures the nonempty setup before its
+first node test. This boundary can use the already-read first
+link and retain the original mask test and traversal.
+
+```powershell
+$c = 'private/heading/acnh_render_virtual_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_render_virtual_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_render_virtual_gates original cpp default
+```

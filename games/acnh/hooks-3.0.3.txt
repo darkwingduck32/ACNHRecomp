@@ -169,3 +169,5 @@ include features/camera/hooks-3.0.3.txt
 # resume 146b0a0 146b0e8 # Terrain draw entry before the original list branch
 # resume 38fae10 38fb078 # Indirect render submit arguments
 # dispatch 29e460 # Render pass format width
+# resume 38eb068 38eb0b4 # Render selector virtual-call preparation
+# resume 38eb0d4 38eb4bc # Render selector ordinary post-virtual preparation

@@ -421,3 +421,8 @@ SHA-256 is `b494e9a113deeb7f5bea50ec9951d7a4aed992239a7b0d92f0b4e936c1e03d63`.
 The default tree gate then moved 534,264 ordinary entry preparations
 within the draw child to C++. The rare fourth link, empty branch
 and list traversal still run generated. See [the draw entry checkpoint](ledger.md#terrain-draw-entry-preparation).
+
+The selector virtual group then moved 598,116 first preparations
+and 594,630 common post-call preparations into C++ in the default
+tree gate. Both virtual calls and rare post-call continuations
+remain generated. See [the selector virtual checkpoint](ledger.md#render-selector-virtual-preparation-and-continuation).

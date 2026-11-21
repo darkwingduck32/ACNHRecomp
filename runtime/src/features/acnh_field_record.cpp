@@ -41,6 +41,7 @@
 #include "../../../games/acnh/render_descriptor.h"
 #include "../../../games/acnh/render_binding_cache.h"
 #include "../../../games/acnh/render_submit.h"
+#include "../../../games/acnh/render_virtual.h"
 #include "../../../games/acnh/render_pass.h"
 #include "../../../games/acnh/terrain_draw_pass.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
@@ -1919,6 +1920,7 @@ bool use_cpp_render_descriptor = false;
 bool use_cpp_render_binding_cache = false;
 bool use_cpp_render_submit = false;
 bool use_cpp_render_selector_submit = false;
+bool use_cpp_render_virtual = false;
 bool use_cpp_terrain_draw_entry = false;
 Fn original_render_pass_float = nullptr;
 Fn original_render_format = nullptr;
@@ -2034,6 +2036,54 @@ bool render_selector_submit_arguments(CPU& cpu) {
 }
 
 const ResumeHookRegistrar render_selector_submit_resume{0x38eadf4, render_selector_submit_arguments};
+
+bool render_virtual_prepare(CPU& cpu) {
+    if (!use_cpp_render_virtual || !render_selector_caller(cpu) || cpu.x[8] != 7 || cpu.x[21] != 0 ||
+        !cpu.x[19] || !cpu.x[20]) return false;
+    const uint64_t sp = cpu.x[31];
+    GuestMemory memory;
+    const auto plan = acnh::prepare_render_virtual({cpu.x[19]}, {cpu.x[20]}, {sp + 0x18, sp + 0x20}, memory);
+    if (!plan.prepared) return false;
+
+    cpu.x[0] = plan.object;
+    cpu.x[8] = plan.selected_field;
+    cpu.x[9] = plan.index_field;
+    cpu.x[10] = 0xbc;
+    cpu.x[11] = 0xdc;
+    cpu.x[21] = plan.object;
+    cpu.x[23] = plan.record_base;
+    cpu.x[24] = plan.record_offset;
+    cpu.x[25] = plan.record;
+    cpu.x[26] = plan.scale;
+    cpu.x[27] = plan.stride;
+    cpu.x[28] = plan.count;
+    adds32(cpu, plan.index_word, 1, 0);
+    return true;
+}
+
+bool render_virtual_continue(CPU& cpu) {
+    if (!use_cpp_render_virtual || !render_selector_caller(cpu) || cpu.x[24] != 0xbc ||
+        !cpu.x[21] || !cpu.x[25]) return false;
+    const auto plan = acnh::prepare_render_virtual_commands({
+        cpu.x[21], cpu.x[25] + cpu.x[24], cpu.x[23], cpu.x[31] + 0x18,
+        static_cast<uint32_t>(cpu.x[26]), static_cast<uint32_t>(cpu.x[27]), static_cast<uint32_t>(cpu.x[28])},
+        {static_cast<uint32_t>(cpu.x[22]), static_cast<uint32_t>(cpu.x[0])}, GuestMemory{});
+    if (!plan.prepared) return false;
+
+    cpu.x[8] = plan.index_word;
+    cpu.x[9] = plan.sink;
+    cpu.x[10] = plan.ordinal;
+    cpu.x[11] = plan.mask;
+    cpu.x[22] = plan.row;
+    cpu.x[23] = plan.object_word;
+    cpu.x[24] = plan.commands;
+    cpu.x[26] = 0xff;
+    set_nzcv(cpu, 0);
+    return true;
+}
+
+const ResumeHookRegistrar render_virtual_prepare_resume{0x38eb068, render_virtual_prepare};
+const ResumeHookRegistrar render_virtual_continue_resume{0x38eb0d4, render_virtual_continue};
 
 bool render_submit_arguments(CPU& cpu) {
     if (!use_cpp_render_submit || cpu.x[20] != 0 || cpu.x[24] != 1 || cpu.x[9] != 0) return false;
@@ -6398,6 +6448,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_render_submit = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_RENDER_SELECTOR_SUBMIT");
     use_cpp_render_selector_submit = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_RENDER_VIRTUAL");
+    use_cpp_render_virtual = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_RENDER_PASS");
     if (!mode || std::string_view(mode) == "cpp") {
         wrap_function(entries, 0x38d6688, render_pass_float_adapter, original_render_pass_float);

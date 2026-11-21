@@ -3349,3 +3349,59 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
 & private/venv/Scripts/python -B -m private.heading.replay_terrain_draw_chains `
     "$r/tree-shake-default-terrain-draw-chains-tree1/console.log"
 ```
+
+### Matching packed render resource selection
+
+At the observed calls `0x38ea18c` and `0x38facf8`, the
+`0x38ea910` selector now uses C++ for the matching descriptor
+with a derived lane of zero. It selects the slot, loads the
+resource and binding, then resumes the generated function at
+`0x38eac1c` with the original stack spill, registers and flags.
+The boundary checks the saved caller, frame and spill overlap.
+The generated route handles null resources, changed descriptors,
+explicit lanes and other callers. Set `NX_ACNH_RENDER_PREFIX=original`
+to select the generated prefix at both scoped calls.
+
+The original, opt-in and default muted tree runs used the same
+guest library and input schedule. The generated continuation
+checked its actual slot, resource, binding, register and stack
+state on every qualifying sampled join.
+
+| Route | Join samples at `0x38ea18c` | Join samples at `0x38facf8` | Stock fallback samples | Distinct replay snapshots |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 56 | 88 | 306 | 114 |
+| Opt-in C++ | 56 | 80 | 290 | 114 |
+| Default | 56 | 80 | 290 | 113 |
+
+The 285 portable controls and all 341 reconstructed gameplay
+snapshots matched two original AArch64 runs each. They check
+ordered reads and the complete matching join state. At the
+shared logged inputs, the opt-in run matched 7 and 9 complete
+ordered callback sequences across the two callers. The default
+matched 7 and 10. The original and opt-in runs captured two
+and one additional classes respectively. The default's 17
+classes all appeared in the original run, which captured one
+additional class.
+
+Each qualifying join replaces 27 generated guest instructions.
+Context reset, descriptor transfer, bindings and draw commands
+still run generated. The body remains partial, so Batch 4 has
+27 verified functions and 100 discovery candidates. The next
+render boundary to capture is the descriptor transfer ending
+at `0x38ead40`. A prior full tree capture at `0x38ea18c` already
+replays its kind-2 transfer with 21 ordered stores and no calls,
+followed by the stock callback at `0x38eb008`.
+
+The continuation profile uses a separate hook result. The Windows
+binding test passed both old and new tables, false and true
+returns, and a short trailing slot. The ELF check loaded a new
+test library on a player without the optional symbol and took
+the stock route. All 14 Release CTests and 15 profile and replay
+checks passed.
+
+```powershell
+$c = 'private/heading/acnh_render_resource_prefix_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_render_resource_prefix_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_render_prefix_final
+```

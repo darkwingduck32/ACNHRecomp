@@ -4,6 +4,7 @@
 #include <nx/cpu.h>
 #ifdef _WIN32
 #include <nx/runtime.h>
+#include "resume_hook.h"
 #endif
 
 #ifdef _WIN32
@@ -36,11 +37,14 @@ struct Api {
     void (*unimpl)(nx::CPU&, uint64_t, const char*);
     void (*hook)(nx::CPU&, uint64_t);
     void (*trace_sp)(nx::CPU&, uint64_t);
+    void (*resume)(nx::CPU&, uint64_t, bool&);
 } g_api;
 }  // namespace
 
 extern "C" NX_GAME_EXPORT void nx_game_bind(const void* api, size_t size) {
-    std::memcpy(&g_api, api, size < sizeof g_api ? size : sizeof g_api);
+    g_api = {};
+    const size_t copied = size >= sizeof g_api ? sizeof g_api : offsetof(Api, resume);
+    std::memcpy(&g_api, api, size < copied ? size : copied);
 }
 
 namespace nx {
@@ -55,6 +59,10 @@ void msr(CPU& c, uint32_t sysreg, uint64_t value) { g_api.msr(c, sysreg, value);
 void trace_sp(CPU& c, uint64_t pc) { g_api.trace_sp(c, pc); }
 }  // namespace nx
 void nx_hook(nx::CPU& c, uint64_t pc) { g_api.hook(c, pc); }
+void nx_hook_resume(nx::CPU& c, uint64_t pc, bool& resume) {
+    resume = false;
+    if (g_api.resume) g_api.resume(c, pc, resume);
+}
 
 // The native 60 FPS variant (recomp --variant): its words and switch live here, the DLL's own; the player reads the
 // words (nx_game_variant) before it maps the modules and sets the switch after it decides (nx_game_set_variant).

@@ -13,6 +13,7 @@
 #include <nx/runtime.h>
 
 #include "platform.h"
+#include "resume_hook.h"
 
 #ifdef _WIN32
 void nx_hook(nx::CPU& c, uint64_t pc);  // loader.cpp
@@ -85,7 +86,8 @@ std::string load_game(const std::string& folder) {
         void (*unimpl)(nx::CPU&, uint64_t, const char*);
         void (*hook)(nx::CPU&, uint64_t);
         void (*trace_sp)(nx::CPU&, uint64_t);
-    } api = {&nx::call, &nx::svc, &nx::mrs, &nx::msr, &nx::unimpl, &nx_hook, &nx::trace_sp};
+        void (*resume)(nx::CPU&, uint64_t, bool&);
+    } api = {&nx::call, &nx::svc, &nx::mrs, &nx::msr, &nx::unimpl, &nx_hook, &nx::trace_sp, &nx_hook_resume};
     auto bind = reinterpret_cast<void (*)(const void*, size_t)>(sym("nx_game_bind"));
     if (!bind) return "not a game library (no nx_game_bind): " + lib;
     bind(&api, sizeof api);

@@ -76,17 +76,20 @@ def main():
     print(f"analysis: {len(an.functions)} functions, {len(an.jump_tables)} jump tables ({time.time() - t:.1f}s)")
 
     os.makedirs(args.out, exist_ok=True)
-    from .hooks import read_dispatch, read_hooks
+    from .hooks import read_dispatch, read_hooks, read_resumes
     dispatch = read_dispatch(args.hooks) if args.hooks else set()
-    e = emit.Emitter(an, prefix=name, dispatch=dispatch)
+    resumes = read_resumes(args.hooks) if args.hooks else {}
+    e = emit.Emitter(an, prefix=name, dispatch=dispatch, resumes=resumes)
     if args.hooks:
-        e.hooks = read_hooks(args.hooks)
-        print(f"  {len(e.hooks)} hooks and {len(dispatch)} dispatch targets from {args.hooks}")
+        e.hooks.update(read_hooks(args.hooks))
+        if e.hooks & resumes.keys():
+            ap.error("ordinary and continuation hooks cannot share an address")
+        print(f"  {len(e.hooks)} hooks, {len(resumes)} continuations and {len(dispatch)} dispatch targets from {args.hooks}")
     funcs = an.functions
     global _variant
     _variant = None
     if args.variant:
-        _variant = build_variant(m, an, read_pchtxt(args.variant), name, e.hooks, dispatch)
+        _variant = build_variant(m, an, read_pchtxt(args.variant), name, e.hooks, dispatch, resumes)
     if args.only:
         want = {int(x, 16) for x in args.only}
         funcs = [f for f in funcs if f.start in want]
@@ -191,15 +194,15 @@ def read_pchtxt(path):
     return words
 
 
-def build_variant(m, an, words, name, hooks, dispatch):
+def build_variant(m, an, words, name, hooks, dispatch, resumes):
     """The patched module analyzed, and which of its functions differ from the module's."""
     t = time.time()
     m2 = dataclasses.replace(m, image=bytearray(m.image))
     for off, w in words:
         m2.image[off:off + 4] = w.to_bytes(4, "little")
     an2 = analysis.analyze(m2, patched=[off for off, _ in words if m.in_text(off)])
-    e2 = emit.Emitter(an2, prefix=name, dispatch=dispatch)
-    e2.hooks = hooks
+    e2 = emit.Emitter(an2, prefix=name, dispatch=dispatch, resumes=resumes)
+    e2.hooks.update(hooks)
     text = sorted(off for off, _ in words if m.in_text(off))
     def touched(f):
         k = bisect.bisect_left(text, f.start)

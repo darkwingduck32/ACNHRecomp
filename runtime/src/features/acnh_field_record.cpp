@@ -37,6 +37,7 @@
 #include "../../../games/acnh/terrain_clearance.h"
 #include "../../../games/acnh/terrain_cull_predicates.h"
 #include "../../../games/acnh/terrain_worker_visibility.h"
+#include "../../../games/acnh/render_resource_prefix.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -54,6 +55,7 @@
 #include "features/registry.h"
 #include "mod_package.h"
 #include "platform.h"
+#include "resume_hook.h"
 
 #include <array>
 #include <atomic>
@@ -1905,6 +1907,55 @@ void worker_visibility_planes(CPU& cpu) {
 
 NX_HOOK(0x146a9c0, worker_visibility_acquire);
 NX_HOOK(0x146aa50, worker_visibility_planes);
+
+bool use_cpp_render_prefix = false;
+bool trace_render_prefix = false;
+
+bool render_resource_prefix(CPU& cpu) {
+    if (!use_cpp_render_prefix && !trace_render_prefix) return false;
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
+    if (!sp || (sp & 15) || fp != sp + 0x30) return false;
+    const uint64_t lr = ld<uint64_t>(fp + 8) - main_base;
+    const uint64_t caller_fp = lr == 0x38ea190 ? sp + 0xb0 : lr == 0x38facfc ? sp + 0xc0 : 0;
+    if (!caller_fp || ld<uint64_t>(fp) != caller_fp) return false;
+
+    const uint64_t state = cpu.x[0], slots = cpu.x[1], spill = sp + 0x28;
+    if (!state || !slots) return false;
+    const auto overlaps_spill = [spill](uint64_t address, uint64_t width) {
+        return address < spill + 8 && spill < address + width;
+    };
+    if (overlaps_spill(state + 0x1c0, 16) || overlaps_spill(slots + 0x20, 8) ||
+        overlaps_spill(state + 0x36, 2)) return false;
+    const int8_t request = ld<int8_t>(state + 0x38);
+    if (request != -1) return false;
+    const auto prefix = acnh::select_render_resource_prefix({state}, {slots}, request, GuestMemory{});
+    if (prefix.route != acnh::RenderResourceRoute::matching || prefix.lane != 0) return false;
+
+    if (trace_render_prefix) {
+        static std::atomic<unsigned> samples[2]{};
+        if (samples[lr == 0x38facfc].fetch_add(1, std::memory_order_relaxed) < 24)
+            log("acnh render prefix %s lr=%llx lane=%d packed=%08x shifted=%08x",
+                use_cpp_render_prefix ? "cpp" : "original", static_cast<unsigned long long>(lr),
+                prefix.lane, prefix.packed, prefix.shifted);
+    }
+    if (!use_cpp_render_prefix) return false;
+
+    st<uint64_t>(spill, prefix.resource);
+    cpu.x[8] = prefix.previous_binding;
+    cpu.x[9] = prefix.shifted;
+    cpu.x[10] = prefix.packed;
+    cpu.x[19] = state;
+    cpu.x[20] = slots;
+    cpu.x[21] = static_cast<uint32_t>(prefix.lane);
+    cpu.x[22] = prefix.binding;
+    cpu.x[25] = prefix.resource;
+    cpu.x[26] = prefix.key;
+    cpu.x[28] = prefix.record;
+    set_nzcv(cpu, 6);
+    return true;
+}
+
+const ResumeHookRegistrar render_resource_resume{0x38ea930, render_resource_prefix};
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6087,6 +6138,9 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_WORKER_VISIBILITY");
     use_cpp_worker_visibility = !mode || std::string_view(mode) == "cpp";
     trace_worker_visibility = std::getenv("NX_ACNH_WORKER_VISIBILITY_TRACE") != nullptr;
+    mode = std::getenv("NX_ACNH_RENDER_PREFIX");
+    use_cpp_render_prefix = !mode || std::string_view(mode) == "cpp";
+    trace_render_prefix = std::getenv("NX_ACNH_RENDER_PREFIX_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

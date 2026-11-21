@@ -19,6 +19,7 @@
 
 #include "platform.h"
 #include "features/runtime.h"
+#include "resume_hook.h"
 
 namespace nx {
 
@@ -236,11 +237,22 @@ std::unordered_map<uint64_t, std::vector<HleFn>>& hooks() {
     static std::unordered_map<uint64_t, std::vector<HleFn>> h;
     return h;
 }
+auto& resume_hooks() {
+    static std::unordered_map<uint64_t, bool (*)(CPU&)> registry;
+    return registry;
+}
 }  // namespace
 
 HookRegistrar::HookRegistrar(uint64_t offset, HleFn fn) {
     auto& chain=hooks()[offset];
     if(std::find(chain.begin(),chain.end(),fn)==chain.end())chain.push_back(fn);
+}
+
+ResumeHookRegistrar::ResumeHookRegistrar(uint64_t offset, bool (*hook)(CPU&)) {
+    if (!resume_hooks().emplace(offset, hook).second) {
+        std::fprintf(stderr, "Multiple continuation hooks at %#llx\n", static_cast<unsigned long long>(offset));
+        std::abort();
+    }
 }
 
 }  // namespace nx
@@ -254,6 +266,12 @@ NX_GAME_API void nx_hook(nx::CPU& c, uint64_t pc) {
         static std::atomic<int> logged{0};
         if (logged++ < 8) nx::log("hook at %s compiled in, nothing registered for it", nx::describe(pc).c_str());
     }
+}
+
+NX_GAME_API void nx_hook_resume(nx::CPU& c, uint64_t pc, bool& resume) {
+    const auto& hooks = nx::resume_hooks();
+    const auto found = hooks.find(pc - nx::kModuleBase);
+    resume = found != hooks.end() && found->second(c);
 }
 
 namespace nx {

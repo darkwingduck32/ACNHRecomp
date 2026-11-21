@@ -238,3 +238,10 @@ The render-only Windows reruns use `render-tree1` for stack samples,
 `render-state-detail1` for the replay fixture in the private
 `coverage-runs` directory. The local replay command is
 `python -m private.heading.replay_render_selector_capture <console.log>`.
+
+The matching packed resource prefix now runs in C++ at the two
+witnessed render call sites. The muted default tree gate captured
+136 such continuations, each skipping 27 generated guest
+instructions. This is a bounded trace count. The generated selector
+still owns fallback, context reset, descriptor transfer and the
+draw path. See [the render selector checkpoint](ledger.md#matching-packed-render-resource-selection).

@@ -123,7 +123,7 @@ from .emit_neon_wide import NeonWideOps  # noqa: E402
 
 
 class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
-    def __init__(self, an, prefix="sub", *, dispatch=()):
+    def __init__(self, an, prefix="sub", *, dispatch=(), resumes=()):
         self.an = an
         self.m = an.module
         self.cs = capstone.Cs(capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)
@@ -137,6 +137,7 @@ class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
         # Instruction addresses where the runtime gets a call first (--hooks): nx_hook(c, pc) runs with the guest
         # registers up to date in the context and may change them (a game's NX_HOOK, runtime.h). Declared in the
         # functions that have one, so adding hooks does not touch cpu.h (which every generated file includes).
+        self.resumes = dict(resumes)
         self.hooks = set()
         self.unhandled = collections.Counter()
         self.handled = 0
@@ -253,6 +254,11 @@ class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
         for a in range(f.start, f.end, 4):
             got = list(self.cs.disasm(code[a - f.start:a - f.start + 4], a))
             insns[a] = got[0] if got else None
+        for source, target in self.resumes.items():
+            if f.start <= source < f.end:
+                if source >= target or insns.get(source) is None or insns.get(target) is None:
+                    raise ValueError(f"Resume at {source:#x} must target a later instruction in the same function")
+                self.labels.add(target)
         jt = self.an.jump_tables
         last_term = False
         for a in range(f.start, f.end, 4):
@@ -269,15 +275,32 @@ class Emitter(Sdk20Ops, ExtOps, VecLdSt, IntOps, FpOps, NeonOps, NeonWideOps):
                 self.unhandled[i.mnemonic] += 1
                 txt = f"{i.mnemonic} {i.op_str}".replace('"', "'")
                 stmt = f"nx::unimpl(c, {B} + {a:#x}ull, \"{txt}\"); // {e}"
-            if a in self.hooks:
-                stmt = f"nx_hook(c, {B} + {a:#x}ull); {stmt}"
             if f.start in self.trace_sp and ("sp" in i.op_str.split(",")[0] or "[sp" in i.op_str and i.writeback):
                 stmt += f" nx::trace_sp(c, {B} + {a:#x}ull);"
-            body.append((a, f"{stmt} // {i.mnemonic} {i.op_str}"))
+            if a in self.resumes:
+                target = self.resumes[a]
+                body.append((a, "{ bool resume = false;"))
+                body.append((None, "#if defined(__APPLE__) || defined(__ELF__)"))
+                body.append((None, "  const bool have_resume = nx_hook_resume != nullptr;"))
+                body.append((None, "#else"))
+                body.append((None, "  constexpr bool have_resume = true;"))
+                body.append((None, "#endif"))
+                body.append((None, f"  if (have_resume) {{ nx_hook_resume(c, {B} + {a:#x}ull, resume); }}"))
+                body.append((None, f"  if (resume) goto L_{target:X}; }}"))
+                body.append((None, f"{stmt} // {i.mnemonic} {i.op_str}"))
+            else:
+                if a in self.hooks:
+                    stmt = f"nx_hook(c, {B} + {a:#x}ull); {stmt}"
+                body.append((a, f"{stmt} // {i.mnemonic} {i.op_str}"))
             last_term = i.mnemonic in ("b", "br", "ret", "udf", "brk") or stmt.endswith("return; }")
         out = [f"void {self.fn(f.start)}(nx::CPU& NX_RESTRICT c) {{"]
         if any(f.start <= a < f.end for a in self.hooks):
             out.append("    void nx_hook(nx::CPU&, uint64_t);")
+        if any(f.start <= a < f.end for a in self.resumes):
+            signature = "    extern void nx_hook_resume(nx::CPU&, uint64_t, bool&)"
+            out.extend(("#if defined(__APPLE__)", signature + " __attribute__((weak_import));",
+                        "#elif defined(__ELF__)", signature + " __attribute__((weak));",
+                        "#else", signature + ";", "#endif"))
         sj = self.setjmp_sites
         if sj:
             # Functions that call setjmp run inside a try: a longjmp on one of their buffers resumes after the call.

@@ -162,3 +162,4 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 867668 # Test terrain flatness for triangle one
 # dispatch 8677a4 # Test terrain flatness for triangle two
 # dispatch 8678e0 # Test terrain flatness for triangle three
+# resume 38ea930 38eac1c # Matching packed render resource prefix

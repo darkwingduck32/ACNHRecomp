@@ -171,3 +171,4 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 29e460 # Render pass format width
 # resume 38eb068 38eb0b4 # Render selector virtual-call preparation
 # resume 38eb0d4 38eb4bc # Render selector ordinary post-virtual preparation
+# resume 146b0ec 146b19c # Terrain draw nonempty setup before the original node test

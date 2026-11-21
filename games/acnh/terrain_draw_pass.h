@@ -117,4 +117,46 @@ TerrainDrawEntryPlan prepare_terrain_draw_entry(TerrainDrawEntry input, TerrainD
     return {first, rows, selected, table, table_end, pass};
 }
 
+struct TerrainDrawNonempty {
+    uint64_t head;
+    uint64_t first_link;
+    uint64_t rows;
+    uint32_t ordinal;
+};
+
+struct TerrainDrawEntryFields {
+    uint64_t pass;
+    uint64_t manager;
+    uint64_t header;
+};
+
+struct TerrainDrawNonemptyPlan {
+    uint64_t first_node;
+    uint64_t end_node;
+    uint64_t row;
+    uint64_t row_flags;
+    uint64_t manager_data;
+    uint64_t binding;
+    int64_t signed_pass;
+    uint64_t pass;
+    int64_t displacement;
+    uint32_t gated;
+};
+
+template<class Memory>
+TerrainDrawNonemptyPlan prepare_terrain_draw_nonempty(TerrainDrawNonempty input, TerrainDrawEntryFields fields,
+                                                      const Memory& memory) {
+    const auto pass = memory.template read<uint64_t>(fields.pass);
+    const auto manager = memory.template read<uint64_t>(fields.manager);
+    const auto header = memory.template read<uint64_t>(fields.header);
+    const int64_t displacement = memory.template read<int32_t>(input.head + 0x14);
+    const auto binding = memory.template read<uint64_t>(header + 8);
+    const auto row = input.rows + input.ordinal * 0x108ull;
+    const auto signed_pass = std::bit_cast<int8_t>(static_cast<uint8_t>(pass));
+    const uint32_t gated = (0x207u >> (pass & 31)) & 1;
+    return {input.first_link - static_cast<uint64_t>(displacement),
+            input.head - static_cast<uint64_t>(displacement), row, row + 4, manager + 0x560,
+            binding, signed_pass, pass, displacement, gated};
+}
+
 } // namespace nx::acnh

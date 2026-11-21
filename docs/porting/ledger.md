@@ -3859,3 +3859,61 @@ $c = 'private/heading/acnh_render_virtual_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_render_virtual_gates original cpp default
 ```
+
+### Terrain draw nonempty setup
+
+The three ordinary calls to `0x146b080` now prepare a nonempty
+list in C++ from `0x146b0ec` to `0x146b19c`. The typed path
+uses the first link already loaded by the entry, reads the
+signed link displacement, and computes the first node, end
+node and selected row. It preserves the original frame
+values and inherited NZCV. The original empty branch, node
+test, subsequent links and rendering effects stay generated.
+The fourth-link path stays generated. Set
+`NX_ACNH_TERRAIN_DRAW_NONEMPTY=original` to route setup through
+generated code.
+
+| Original activity | Nonempty ordinary calls | Fourth-link calls | Replayed samples |
+| --- | ---: | ---: | ---: |
+| Tree shake | 398,376 | 2 | 74 |
+| Movement | 400,070 | 0 | 72 |
+| Shovel | 398,575 | 2 | 74 |
+
+All 220 captured cases matched two original AArch64 runs
+through the setup. They observed link displacement +8.
+The 300-case portable matrix also covered positive and
+negative signed extremes, row address wraparound, and a
+frame alias read before the frame is written. It matched
+two original runs per case, including five ordered reads,
+eight frame values and the continuation's scratch state.
+
+| Muted tree gate | Ordinary nonempty calls | C++ preparations | Replayed samples | Generated fourth links |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 397,527 | 0 | 74 | 2 |
+| Opt-in | 397,854 | 397,854 | 72 | 2 |
+| Default | 398,400 | 398,400 | 72 | 2 |
+
+The typed records matched original AArch64 on their own
+inputs, including ordered reads and stores, X8–X15, X19–X21
+and NZCV. Each typed game also replayed the two fourth-link
+calls through generated setup. The 26-instruction slice
+accounts for 10,358,400 replaced guest instructions in the
+default window. The draw body remains partial. Batch 4
+stays at 30 verified functions and 100 discovery candidates.
+All 14 Release CTests, the 15 profile and replay checks and
+the 336-case draw-entry matrix passed.
+
+The tree topology capture observed outer render return sites
+`0x38f37b4`, `0x38f4cb4` and `0x38f5bd4`. It also saw the reset
+callback return to `0x3e442c4` inside the scheduler wrapper,
+with upstream returns `0x3e43d68` and `0x3e44ac8`. The matching
+wait, producer set and allocation generation remain open.
+The next diagnostic follows those scheduler events and
+records the single-node mask test without batching link reads.
+
+```powershell
+$c = 'private/heading/acnh_terrain_draw_nonempty_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_terrain_draw_nonempty_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_terrain_draw_nonempty_gates original cpp default
+```

@@ -426,3 +426,7 @@ The selector virtual group then moved 598,116 first preparations
 and 594,630 common post-call preparations into C++ in the default
 tree gate. Both virtual calls and rare post-call continuations
 remain generated. See [the selector virtual checkpoint](ledger.md#render-selector-virtual-preparation-and-continuation).
+
+The draw child's next checkpoint moved 398,400 ordinary nonempty
+setups into C++ in the default tree gate. The stock node test and
+link traversal resume using the prepared state. See [the nonempty setup checkpoint](ledger.md#terrain-draw-nonempty-setup).

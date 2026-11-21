@@ -1922,6 +1922,7 @@ bool use_cpp_render_submit = false;
 bool use_cpp_render_selector_submit = false;
 bool use_cpp_render_virtual = false;
 bool use_cpp_terrain_draw_entry = false;
+bool use_cpp_terrain_draw_nonempty = false;
 Fn original_render_pass_float = nullptr;
 Fn original_render_format = nullptr;
 Fn original_terrain_draw_pass = nullptr;
@@ -2223,23 +2224,29 @@ void terrain_draw_pass_adapter(CPU& cpu) {
     cpu.x[31] = sp;
 }
 
-bool terrain_draw_entry_prepare(CPU& cpu) {
+uint64_t terrain_draw_list_caller(const CPU& cpu) {
     const uint64_t sp = cpu.x[31], fp = cpu.x[29];
-    if (!use_cpp_terrain_draw_entry || !sp || (sp & 15) || fp != sp + 0x70) return false;
+    if (!sp || (sp & 15) || fp != sp + 0x70) return 0;
     const uint64_t parent = sp + 0xd0;
     if (ld<uint64_t>(fp) != parent || cpu.x[4] != parent + 0x18 ||
         cpu.x[1] != parent + 0x50 || !cpu.x[0] || !cpu.x[3] ||
-        ld<uint64_t>(parent + 8) != main_base + 0x38ea1e8) return false;
+        ld<uint64_t>(parent + 8) != main_base + 0x38ea1e8) return 0;
     const uint64_t resume = ld<uint64_t>(fp + 8) - main_base;
     uint64_t offset;
     switch (resume) {
     case 0x1461b08: offset = 0x20; break;
     case 0x1461b20: offset = 0x38; break;
     case 0x1461b38: offset = 0x50; break;
-    default: return false;
+    default: return 0;
     }
-    if (cpu.x[2] != cpu.x[3] + offset) return false;
+    return cpu.x[2] == cpu.x[3] + offset ? resume : 0;
+}
 
+bool terrain_draw_entry_prepare(CPU& cpu) {
+    if (!use_cpp_terrain_draw_entry) return false;
+    const uint64_t resume = terrain_draw_list_caller(cpu);
+    if (!resume) return false;
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
     GuestMemory memory;
     const auto plan = acnh::prepare_terrain_draw_entry(
         {{cpu.x[0]}, {cpu.x[1]}, cpu.x[2], cpu.x[3], cpu.x[4]},
@@ -2255,6 +2262,39 @@ bool terrain_draw_entry_prepare(CPU& cpu) {
 }
 
 const ResumeHookRegistrar terrain_draw_entry_resume{0x146b0a0, terrain_draw_entry_prepare};
+
+bool terrain_draw_nonempty_prepare(CPU& cpu) {
+    if (!use_cpp_terrain_draw_nonempty || cpu.x[8] == cpu.x[2]) return false;
+    const uint64_t resume = terrain_draw_list_caller(cpu);
+    if (!resume) return false;
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
+    const auto plan = acnh::prepare_terrain_draw_nonempty(
+        {cpu.x[2], cpu.x[8], cpu.x[9], static_cast<uint32_t>(cpu.x[10])},
+        {fp - 0x18, fp - 0x10, sp}, GuestMemory{});
+    st<uint64_t>(sp + 8, static_cast<uint64_t>(plan.signed_pass));
+    st<uint64_t>(fp - 8, plan.manager_data);
+    st<uint64_t>(fp - 0x30, plan.end_node);
+    st<uint64_t>(sp + 0x10, plan.binding);
+    st<uint32_t>(sp + 0x24, plan.gated);
+    st<uint64_t>(fp - 0x28, static_cast<uint64_t>(-plan.displacement));
+    st<uint64_t>(fp - 0x20, static_cast<uint64_t>(plan.displacement));
+    st<uint64_t>(sp + 0x28, plan.row_flags);
+
+    cpu.x[8] = plan.row_flags;
+    cpu.x[9] = plan.row;
+    cpu.x[10] = static_cast<uint64_t>(-plan.displacement);
+    cpu.x[11] = 0x108;
+    cpu.x[12] = plan.gated;
+    cpu.x[13] = plan.pass;
+    cpu.x[14] = plan.binding;
+    cpu.x[15] = static_cast<uint64_t>(plan.displacement);
+    cpu.x[19] = plan.first_node;
+    cpu.x[20] = cpu.x[1];
+    cpu.x[21] = 0xffffffffu;
+    return true;
+}
+
+const ResumeHookRegistrar terrain_draw_nonempty_resume{0x146b0ec, terrain_draw_nonempty_prepare};
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6460,6 +6500,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x1461a34, terrain_draw_pass_adapter, original_terrain_draw_pass);
     mode = std::getenv("NX_ACNH_TERRAIN_DRAW_ENTRY");
     use_cpp_terrain_draw_entry = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_TERRAIN_DRAW_NONEMPTY");
+    use_cpp_terrain_draw_nonempty = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

@@ -250,3 +250,49 @@ counts. The generated selector still owns unsupported shapes,
 context reset, descriptor choice, binding and draw effects.
 See [the render selector checkpoint](ledger.md#matching-packed-render-resource-selection)
 and [the descriptor transfer checkpoint](ledger.md#render-descriptor-transfer).
+
+## Paired render coverage at `aecbe8f`
+
+Six muted runs used one Windows player, guest DLL and immutable
+pipeline cache. Each activity pair used the same fixture, input
+schedule and frame window. The original run set both render
+route switches to `original`. The default run used both scoped
+C++ paths. Validation traces were disabled. Game-thread samples
+were collected at 47 Hz with zero ring drops.
+
+| Activity | Original DLL leaves | Default DLL leaves | Original → default selector leaves | Original → default terrain draw leaves |
+| --- | ---: | ---: | ---: | ---: |
+| Tree shake | 132/347 | 136/345 | 7 → 9 | 5 → 6 |
+| Movement | 141/350 | 123/350 | 14 → 7 | 5 → 6 |
+| Shovel | 112/345 | 118/345 | 8 → 14 | 4 → 3 |
+
+Of the DLL leaves, 112 and 121 in tree, 131 and 112 in
+movement, and 99 and 105 in shovel resolved uniquely to
+generated guest functions on the original and default routes
+respectively. The other DLL samples are unresolved or
+ambiguous. Host leaves include runtime and C++ work and do
+not have a reliable typed-code total.
+
+The selector at `0x38ea910` remains first in both rankings
+by activity breadth and mean exclusive leaf share. Terrain
+draw `0x146b080` remains second. The default selector caller
+`0x38facb0` follows at 2, 2 and 4 leaves across the three
+activities. The sample counts vary across these single
+pairs and provide no speed estimate. The traced instruction
+counts above show exactly which work moved into C++.
+
+The next bounded render group is the binding-cache decision
+at `0x38ead64`. One original detailed tree capture read
+both IDs as `0xffffffff` and reached `0x38eadf4` without
+a binding refresh. Independent AArch64 controls also reach
+the first and second refresh boundaries. Next capture which
+cases occur at the two verified callers in the fixed activity
+windows. The calls to `0x380d290` and their state effects
+stay generated. Draw list traversal also stays generated
+while its ownership is unresolved.
+
+The private paired run labels are
+`render-paired-{tree,movement,shovel}-{original,default}1`.
+The private verifier is `private.heading.render_profile_pairs`.
+The shared DLL SHA-256 is
+`df38820aa8d2eb06cf1ebf20fe4f4400f9aa4222000679c3a4478f5e25371147`.

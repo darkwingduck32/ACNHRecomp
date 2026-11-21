@@ -310,3 +310,11 @@ The default tree gate counted 366,736 C++ preparations for
 that path. The generated load and indirect call still
 resolve the existing host NVN command submit implementation.
 See [the submit preparation checkpoint](ledger.md#indirect-render-submit-preparation).
+
+The render-pass float reader and its format calculation also
+run in C++ at the observed format-15 sites. The original
+tree, movement and shovel windows recorded 661,257 reads
+across the three activities. The default tree gate recorded
+221,864 C++ reads and 23 additional C++ format calls from the
+generated setter. The setter remains generated.
+See [the read and format checkpoint](ledger.md#render-pass-float-read-and-format-width).

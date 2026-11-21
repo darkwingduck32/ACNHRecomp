@@ -3564,3 +3564,64 @@ $c = 'private/heading/acnh_render_submit_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_render_submit_gates original cpp default
 ```
+
+### Render pass float read and format width
+
+The virtual render-pass reader at `0x38d6688` now runs in C++
+at observed return `0x39db2b0` when its selected descriptor
+uses format 15. It resolves a signed pass and requested index
+to a raw float sample and preserves the original returned
+format width, scratch state and vector bits. It keeps the
+original caller route for the sentinel selection, other formats
+and reads that would overlap the getter's guest stack frame.
+
+C++ also implements the format width leaf at `0x29e460` for
+observed format 15 at both verified parent frames. The typed
+reader calls the typed width calculation directly. The generated
+setter at `0x38d671c` still calls through its normal guest ABI,
+where the typed helper returned the same width and flags as
+the original. Set `NX_ACNH_RENDER_PASS=original` to retain both
+original functions.
+
+| Original activity | Render pass reads | Setter invocations | Format calls counted |
+| --- | ---: | ---: | ---: |
+| Tree shake | 212,754 | 21 | 212,775 |
+| Movement | 223,236 | 83 | 222,807 |
+| Shovel | 225,267 | 28 | 225,295 |
+
+The three serialized muted original captures reached the reader,
+the setter and the format leaf. Their separate marker observers
+poll every 10 ms, which can shift the count window for each
+body. The sampled setter invoked the format calculation and
+made no external writes in those windows. Its mutation path
+has independent original controls and remains generated pending
+live evidence.
+
+The 33 format cases and 450 reader cases matched two original
+AArch64 executions each. The reader references executed the
+real original format child. They checked ordered reads,
+signed pass and index selection, sentinel return, raw Q0 and
+no external stores. The 48 original gameplay records matched
+their replay, including actual caller and ordered setter
+effects. The Windows ABI smoke confirmed that an overlapping
+guest frame selects original, that the supported getter preserves
+the float bits and scratch state, and that the helper checks
+the saved caller.
+
+The original, opt-in and default muted tree gates captured
+4 reader calls each. They independently matched 8, 4 and 4
+format invocations, respectively. The opt-in and default reader
+records each included the inlined format input and width as part
+of the original-equivalent read. The opt-in run observed
+219,936 C++ reads and 22 standalone C++ format calls from the
+generated setter. The default observed 221,864 reads and 23
+standalone format calls. The two functions advance Batch 4 to
+29 verified functions with 100 discovery candidates. The setter
+and any unsupported reader shapes still use generated code.
+
+```powershell
+$c = 'private/heading/acnh_render_pass_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_render_pass_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_render_pass_gates original cpp default
+```

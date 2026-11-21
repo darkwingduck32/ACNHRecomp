@@ -6,6 +6,7 @@
 #include "../../../games/acnh/field_action_state.h"
 #include "../../../games/acnh/field_bookkeeping.h"
 #include "../../../games/acnh/catalog_field_queries.h"
+#include "../../../games/acnh/animation_resource.h"
 #include "../../../games/acnh/animation_sidecar.h"
 #include "../../../games/acnh/placement_record.h"
 #include "../../../games/acnh/field_scan_queries.h"
@@ -2321,12 +2322,17 @@ bool terrain_draw_mask_prepare(CPU& cpu) {
 const ResumeHookRegistrar terrain_draw_mask_resume{0x146b19c, terrain_draw_mask_prepare};
 
 bool use_cpp_animation_sidecar = false;
+bool use_cpp_animation_resource = false;
+
+uint64_t animation_update_caller(const CPU& cpu) {
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
+    if (!sp || (sp & 15) || fp != sp + 0x140 || !cpu.x[19]) return 0;
+    return ld<uint64_t>(fp + 8) - main_base;
+}
 
 bool animation_sidecar_caller(const CPU& cpu) {
-    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
-    if (!sp || (sp & 15) || fp != sp + 0x140 || !cpu.x[19] ||
-        cpu.x[27] != acnh::animation_sidecar_stride) return false;
-    const uint64_t caller = ld<uint64_t>(fp + 8) - main_base;
+    if (cpu.x[27] != acnh::animation_sidecar_stride) return false;
+    const auto caller = animation_update_caller(cpu);
     return caller == 0x63ac4c || caller == 0x115ba58;
 }
 
@@ -2361,6 +2367,46 @@ bool animation_name_prepare(CPU& cpu) {
 
 const ResumeHookRegistrar animation_scalar_resume{0x374f524, animation_scalar_prepare};
 const ResumeHookRegistrar animation_name_resume{0x374f658, animation_name_prepare};
+
+bool animation_resource_prepare(CPU& cpu) {
+    if (!use_cpp_animation_resource || cpu.x[8] > 0x7fff ||
+        cpu.x[25] != acnh::animation_resource_packed_stride ||
+        cpu.x[26] != acnh::animation_resource_packed_limit ||
+        cpu.x[27] != acnh::animation_resource_reserved_index ||
+        cpu.x[28] != acnh::animation_resource_bucket_stride ||
+        animation_update_caller(cpu) != 0x63ac4c) return false;
+    const auto lookup = acnh::resolve_animation_resource(
+        cpu.x[19], static_cast<uint16_t>(cpu.x[8]), GuestMemory{});
+    cpu.x[8] = lookup.value;
+    cpu.x[11] = lookup.packed_rows;
+    if (lookup.uses_sentinel()) {
+        cpu.x[9] = lookup.packed;
+        cpu.x[10] = lookup.packed & 0xffff;
+        if (lookup.packed > acnh::animation_resource_packed_limit) set_nzcv(cpu, 4);
+        else subs32(cpu, static_cast<uint32_t>(cpu.x[10]), acnh::animation_resource_reserved_index);
+    } else {
+        cpu.x[9] = lookup.bucket_displacement;
+        cpu.x[10] = lookup.bucket_count;
+        subs32(cpu, lookup.bucket_count, lookup.bucket_index);
+    }
+    return true;
+}
+
+bool animation_resource_links_prepare(CPU& cpu) {
+    if (!use_cpp_animation_resource || !cpu.x[8] ||
+        cpu.x[24] != acnh::animation_sidecar_stride || cpu.x[23] > UINT32_MAX ||
+        animation_update_caller(cpu) != 0x63ac4c) return false;
+    GuestMemory memory;
+    const auto links = acnh::update_animation_resource_links(
+        {cpu.x[19], static_cast<uint32_t>(cpu.x[23])}, cpu.x[8], memory);
+    cpu.x[9] = links.row;
+    cpu.x[10] = links.base;
+    subs64(cpu, cpu.x[23], links.count);
+    return true;
+}
+
+const ResumeHookRegistrar animation_resource_resume{0x374f7d8, animation_resource_prepare};
+const ResumeHookRegistrar animation_resource_links_resume{0x374f84c, animation_resource_links_prepare};
 
 Fn original_placement_record = nullptr;
 
@@ -6592,6 +6638,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_terrain_draw_mask = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_ANIMATION_SIDECAR");
     use_cpp_animation_sidecar = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_ANIMATION_RESOURCE");
+    use_cpp_animation_resource = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_PLACEMENT_RECORD");
     if (!mode || std::string_view(mode) == "cpp")
         wrap_function(entries, 0x1298524, placement_record_adapter, original_placement_record);

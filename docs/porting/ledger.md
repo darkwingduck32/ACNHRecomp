@@ -4034,3 +4034,47 @@ wait at the candidate sites. The writer generation and consumed
 wait remain unresolved, so draw list traversal stays generated.
 The next animation capture will measure the packed resource
 lookup and its success and fallback paths in the second pass.
+
+### Animation resource lookup and link updates
+
+At observed animation return `0x63ac4c`, C++ resolves the packed
+resource row from `0x374f7d8` through `0x374f84c`. The original
+signed-index test comes before this scope. The typed lookup
+preserves row selection, sentinel values, bucket order, the
+resource result and the continuation registers and NZCV.
+A nonzero result uses a second typed scope through
+`0x374f880`. It writes the `+0xd8` link, reloads the sidecar
+count and base, and writes the `+0xe0` link in original order.
+
+The negative-index arm enters its generated callback path
+without a typed write. A zero result uses the generated
+`+0xd8` store and fallback after lookup. Other callers, including
+`0x115ba58` and `0x15db938`, retain both generated scopes.
+Set `NX_ACNH_ANIMATION_RESOURCE=original` for the original
+lookup and links while retaining independent sidecar routing.
+
+Original tree and shovel witnesses matched 64 captured scopes
+twice. The successful `0x63ac4c` path appeared 34,964 times
+in the tree window and 39,104 times in the shovel window.
+The separate portable replays covered 240 lookup and 38 link
+cases, including zero results and writes that alias the next
+count or base read. Both replay runs matched ordered accesses
+and continuation state.
+
+| Muted tree gate | Stock samples | C++ samples | C++ resource lookups | C++ link updates |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 24 | 0 | 0 | 0 |
+| Opt-in | 16 | 16 | 36,018 | 36,018 |
+| Default | 16 | 16 | 36,616 | 36,616 |
+
+Every gameplay sample matched two original executions on its
+input. The default window recorded 166,092 generated negative
+exits and all its typed lookup results were nonzero. Zero-result
+coverage comes from the portable replay and host fallback check.
+These are two more scoped parts of the existing animation body.
+The verified function count remains 31 and the queue remains 100.
+All 14 Release CTests and 15 profile and replay checks passed.
+
+The next stock inventory samples actual game-thread entry to
+grid height `0x862700`. It will determine which caller family
+still reaches the generated body under default routing.

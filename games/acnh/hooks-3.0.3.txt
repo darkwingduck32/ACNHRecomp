@@ -176,3 +176,5 @@ include features/camera/hooks-3.0.3.txt
 # resume 374f524 374f5b8 # Animation sidecar scalar and counter update
 # resume 374f658 374f6cc # Animation sidecar links after the name callbacks
 # dispatch 1298524 # Initialize the shared placement record
+# resume 374f7d8 374f84c # Resolve the animation resource before either stock row update
+# resume 374f84c 374f880 # Update nonnull animation links before the stock back edge

@@ -3452,3 +3452,52 @@ $c = 'private/heading/acnh_render_descriptor_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_render_descriptor_gates original cpp default
 ```
+
+### Empty render binding cache
+
+At the same two callers of `0x38ea910`, C++ reads the
+binding enable byte and the two binding IDs when lane zero is
+selected. An enabled cache with both IDs at `0xffffffff`
+resumes at `0x38eadf4` with the original scratch registers
+and NZCV. It preserves X0 and does no writes or callbacks.
+Disabled contexts and all other ID shapes execute generated
+code. `NX_ACNH_RENDER_BINDING_CACHE=original` selects the
+generated decision without changing the prefix or descriptor
+switches.
+
+All three original Windows action windows witnessed only that
+shape at these two lane-zero callers. Each run preserved eight
+completed sampled joins per caller. All 48 cases matched two
+original AArch64 runs with exact continuation registers and flags.
+
+| Original activity | At `0x38ea18c` | At `0x38facf8` |
+| --- | ---: | ---: |
+| Tree shake | 225,358 | 368,125 |
+| Movement | 225,045 | 368,434 |
+| Shovel | 226,960 | 374,070 |
+
+The 192 portable cases matched two originals and included
+32 exact empty continuations, disabled and unchanged controls,
+and both refresh boundaries. The original, opt-in and default
+muted tree gates each logged 16 exact joins and the same two
+ordered stock callback and W0 outcome classes. The opt-in run
+counted 601,106 C++ continuations and default counted 575,921.
+At 11 generated guest instructions per continuation, the
+default window replaced 6,335,131 generated instructions
+on this route. The action marker is polled, and the counts
+vary with the captured window.
+
+The binding refreshes at `0x38eadb0` and `0x38eadf0`, their
+stores, and the submit wrapper remain generated. This scope
+leaves 27 verified functions and 100 discovery candidates.
+All 14 Release CTests, 15 profile and replay checks, 120
+descriptor cases and 285 selection cases passed. The next
+capture will classify the generated `0x38facb0` submit
+routes, including its conditional loops and dispatches.
+
+```powershell
+$c = 'private/heading/acnh_render_binding_cache_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_render_binding_cache_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_render_binding_gates original cpp default
+```

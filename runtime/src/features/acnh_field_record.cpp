@@ -39,6 +39,7 @@
 #include "../../../games/acnh/terrain_worker_visibility.h"
 #include "../../../games/acnh/render_resource_prefix.h"
 #include "../../../games/acnh/render_descriptor.h"
+#include "../../../games/acnh/render_binding_cache.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1912,6 +1913,7 @@ NX_HOOK(0x146aa50, worker_visibility_planes);
 bool use_cpp_render_prefix = false;
 bool trace_render_prefix = false;
 bool use_cpp_render_descriptor = false;
+bool use_cpp_render_binding_cache = false;
 
 uint64_t render_selector_caller(const CPU& cpu) {
     const uint64_t sp = cpu.x[31], fp = cpu.x[29];
@@ -1991,6 +1993,21 @@ bool render_descriptor_transfer(CPU& cpu) {
 }
 
 const ResumeHookRegistrar render_descriptor_resume{0x38eac68, render_descriptor_transfer};
+
+bool render_binding_cache(CPU& cpu) {
+    if (!use_cpp_render_binding_cache || !render_selector_caller(cpu) || cpu.x[21] != 0) return false;
+    const uint64_t state = cpu.x[19], context = cpu.x[20];
+    if (!state || !context || !acnh::render_binding_slots_empty({state}, {context}, GuestMemory{})) return false;
+
+    cpu.x[8] = 0xffffffffu;
+    cpu.x[23] = state + 0x190;
+    cpu.x[24] = context + 0x238;
+    cpu.x[25] = 0;
+    set_nzcv(cpu, 6);
+    return true;
+}
+
+const ResumeHookRegistrar render_binding_cache_resume{0x38ead64, render_binding_cache};
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6178,6 +6195,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_render_prefix = std::getenv("NX_ACNH_RENDER_PREFIX_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_RENDER_DESCRIPTOR");
     use_cpp_render_descriptor = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_RENDER_BINDING_CACHE");
+    use_cpp_render_binding_cache = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

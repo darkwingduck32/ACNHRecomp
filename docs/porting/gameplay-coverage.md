@@ -296,3 +296,10 @@ The private paired run labels are
 The private verifier is `private.heading.render_profile_pairs`.
 The shared DLL SHA-256 is
 `df38820aa8d2eb06cf1ebf20fe4f4400f9aa4222000679c3a4478f5e25371147`.
+
+The two scoped callers took the enabled, empty binding-cache
+route 1,787,992 times across the three original capture windows.
+The verified default tree window counted 575,921 C++
+continuations through this decision. Both binding refreshes
+and the submit wrapper remain generated.
+See [the binding cache checkpoint](ledger.md#empty-render-binding-cache).

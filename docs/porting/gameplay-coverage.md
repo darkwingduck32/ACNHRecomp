@@ -371,3 +371,9 @@ and three ordinary draw handoffs in tree, movement and shovel.
 The default tree gate routed 177,694 ordinary wrappers through
 C++. The draw children and the rare pass 13/14 wrapper paths stay
 generated. See [the terrain draw wrapper checkpoint](ledger.md#terrain-draw-pass-wrapper).
+
+The two selector callers reached the same indirect submit preparation
+1,798,830 times across the three original windows. The default tree
+gate counted 576,657 C++ preparations. The generated target lookup and
+indirect call still use the existing NVN submit implementation.
+See [the selector submit checkpoint](ledger.md#render-selector-indirect-submit-preparation).

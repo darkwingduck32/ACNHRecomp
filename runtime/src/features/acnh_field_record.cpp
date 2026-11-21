@@ -1918,6 +1918,7 @@ bool trace_render_prefix = false;
 bool use_cpp_render_descriptor = false;
 bool use_cpp_render_binding_cache = false;
 bool use_cpp_render_submit = false;
+bool use_cpp_render_selector_submit = false;
 Fn original_render_pass_float = nullptr;
 Fn original_render_format = nullptr;
 Fn original_terrain_draw_pass = nullptr;
@@ -2015,6 +2016,23 @@ bool render_binding_cache(CPU& cpu) {
 }
 
 const ResumeHookRegistrar render_binding_cache_resume{0x38ead64, render_binding_cache};
+
+bool render_selector_submit_arguments(CPU& cpu) {
+    if (!use_cpp_render_selector_submit || !render_selector_caller(cpu) || cpu.x[21] != 0 ||
+        !cpu.x[19] || !cpu.x[20] || !cpu.x[28]) return false;
+    const auto submit = acnh::prepare_render_selector_submit({cpu.x[19]}, {cpu.x[20]}, {cpu.x[28]}, GuestMemory{});
+    if (!submit.selected || !submit.receiver) return false;
+
+    cpu.x[0] = submit.receiver;
+    cpu.x[1] = 1;
+    cpu.x[2] = submit.record + 0x250;
+    cpu.x[8] = submit.record;
+    cpu.x[9] = 0x260;
+    cpu.x[23] = submit.lane;
+    return true;
+}
+
+const ResumeHookRegistrar render_selector_submit_resume{0x38eadf4, render_selector_submit_arguments};
 
 bool render_submit_arguments(CPU& cpu) {
     if (!use_cpp_render_submit || cpu.x[20] != 0 || cpu.x[24] != 1 || cpu.x[9] != 0) return false;
@@ -6344,6 +6362,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_render_binding_cache = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_RENDER_SUBMIT");
     use_cpp_render_submit = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_RENDER_SELECTOR_SUBMIT");
+    use_cpp_render_selector_submit = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_RENDER_PASS");
     if (!mode || std::string_view(mode) == "cpp") {
         wrap_function(entries, 0x38d6688, render_pass_float_adapter, original_render_pass_float);

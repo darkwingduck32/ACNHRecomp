@@ -27,4 +27,26 @@ RenderIndirectSubmit prepare_indirect_render_submit(RenderSubmitBindingRef bindi
     return {true, records, record, memory.template read<uint64_t>(sink.address + 0xb8)};
 }
 
+struct RenderSelectorSubmit {
+    bool selected{};
+    uint64_t record{};
+    uint64_t receiver{};
+    uint32_t lane{};
+};
+
+template<class Memory>
+RenderSelectorSubmit prepare_render_selector_submit(RenderStateRef state, RenderSlotTableRef slots,
+                                                      RenderSubmitBindingRef binding, const Memory& memory) {
+    const auto resource = memory.template read<uint64_t>(slots.address + 8);
+    if (!resource) return {};
+    const uint32_t lane = memory.template read<uint8_t>(resource + 0x2e5) & 3;
+    if (lane > 1) return {};
+    if (!(memory.template read<uint16_t>(state.address + 0x36) & 0x20)) return {};
+    const uint64_t record = binding.address + 0x20 + lane * 0x260;
+    if ((memory.template read<uint8_t>(record + 0x258) & 3) != 3) return {};
+    const RenderCommandSinkRef sink{memory.template read<uint64_t>(state.address + 0x18)};
+    if (!sink.address) return {};
+    return {true, record, memory.template read<uint64_t>(sink.address + 0xb8), lane};
+}
+
 } // namespace nx::acnh

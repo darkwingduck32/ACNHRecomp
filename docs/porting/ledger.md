@@ -3689,3 +3689,60 @@ $c = 'private/heading/acnh_terrain_draw_pass_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_terrain_draw_pass_gates original cpp default
 ```
+
+### Render selector indirect submit preparation
+
+The selector at `0x38ea910` now prepares the indirect command
+submit in C++ between `0x38eadf4` and `0x38eaec4`. The
+adapter checks the verified caller frames at `0x38ea190` and
+`0x38facfc`, the selector's slot zero and submit lanes zero or
+one. It reads the slot resource, descriptor flags, lane record
+and command sink in the original order. It supplies the original
+receiver, command record and scratch registers with NZCV intact.
+The original target lookup and indirect call at `0x38eaed0`
+continue to resolve `nvnCommandBufferCallCommands`. The direct,
+skip and other selector shapes stay generated. Set
+`NX_ACNH_RENDER_SELECTOR_SUBMIT=original` for generated preparation.
+
+| Original activity | `0x38ea190` indirect preparations | `0x38facfc` indirect preparations |
+| --- | ---: | ---: |
+| Tree shake | 225,486 | 369,434 |
+| Movement | 225,536 | 375,037 |
+| Shovel | 227,026 | 376,311 |
+
+All 1,798,830 observed first paths through the preparation were
+indirect. The 96 completed original samples covered lanes zero
+and one at both callers and matched two AArch64 replays each.
+The 240-case portable matrix independently matched 32 C++
+plans, including eight with the live guard shape. Its other
+controls covered 32 further indirect states, 144 direct paths
+and 32 skips. The matched plans preserve all original join
+registers, flags, ordered reads and the absence of stores.
+
+| Muted tree gate | Indirect preparations | C++ continuations |
+| --- | ---: | ---: |
+| Original | 595,906 | 0 |
+| Opt-in | 596,476 | 596,476 |
+| Default | 576,657 | 576,657 |
+
+Each route supplied 32 completed inputs and joins. The
+original replay matched each recorded preparation and all
+three routes reached the same stock indirect target. The
+original preparation executes 17 guest instructions per
+indirect call, so the default window replaced 9,803,169
+generated instructions in this slice. The selector body
+remains partial. Batch 4 has 30 verified functions and 100
+discovery candidates. The prior submit replay and the
+Release, profile and replay regression suites passed.
+
+The next trace-off measurement repeats the three activity
+windows with both the draw wrapper and this selector segment
+set to original and then default. It will rank the remaining
+generated work before the next port.
+
+```powershell
+$c = 'private/heading/acnh_render_selector_submit_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_render_selector_submit_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_selector_submit_gates original cpp default
+```

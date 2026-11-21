@@ -6,6 +6,8 @@
 #include "../../../games/acnh/field_action_state.h"
 #include "../../../games/acnh/field_bookkeeping.h"
 #include "../../../games/acnh/catalog_field_queries.h"
+#include "../../../games/acnh/animation_sidecar.h"
+#include "../../../games/acnh/placement_record.h"
 #include "../../../games/acnh/field_scan_queries.h"
 #include "../../../games/acnh/field_queries.h"
 #include "../../../games/acnh/field_provider.h"
@@ -2317,6 +2319,68 @@ bool terrain_draw_mask_prepare(CPU& cpu) {
 }
 
 const ResumeHookRegistrar terrain_draw_mask_resume{0x146b19c, terrain_draw_mask_prepare};
+
+bool use_cpp_animation_sidecar = false;
+
+bool animation_sidecar_caller(const CPU& cpu) {
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
+    if (!sp || (sp & 15) || fp != sp + 0x140 || !cpu.x[19] ||
+        cpu.x[27] != acnh::animation_sidecar_stride) return false;
+    const uint64_t caller = ld<uint64_t>(fp + 8) - main_base;
+    return caller == 0x63ac4c || caller == 0x115ba58;
+}
+
+bool animation_scalar_prepare(CPU& cpu) {
+    if (!use_cpp_animation_sidecar || !animation_sidecar_caller(cpu)) return false;
+    GuestMemory memory;
+    const auto entry = static_cast<uint32_t>(cpu.x[25]);
+    const auto update = acnh::update_animation_scalar({cpu.x[19], entry}, cpu.v[0].u32[0], memory);
+    cpu.x[8] = update.count;
+    cpu.x[9] = update.counter_address;
+    cpu.x[10] = update.tested_counter;
+    cpu.x[11] = acnh::animation_counter_limit;
+    cpu.x[21] = update.selected;
+    cpu.x[26] = update.row;
+    cpu.x[28] = update.base;
+    subs32(cpu, update.count, entry);
+    return true;
+}
+
+bool animation_name_prepare(CPU& cpu) {
+    if (!use_cpp_animation_sidecar || !animation_sidecar_caller(cpu)) return false;
+    GuestMemory memory;
+    const auto update = acnh::update_animation_name_links(
+        {cpu.x[19], static_cast<uint32_t>(cpu.x[25])},
+        {cpu.x[28], cpu.x[26], static_cast<uint32_t>(cpu.x[21])}, memory);
+    cpu.x[8] = update.base;
+    cpu.x[9] = update.count;
+    cpu.x[10] = update.first_byte;
+    subs32(cpu, update.compared_count, update.compared_index);
+    return true;
+}
+
+const ResumeHookRegistrar animation_scalar_resume{0x374f524, animation_scalar_prepare};
+const ResumeHookRegistrar animation_name_resume{0x374f658, animation_name_prepare};
+
+Fn original_placement_record = nullptr;
+
+void placement_record_adapter(CPU& cpu) {
+    const uint64_t caller = cpu.x[30] - main_base;
+    const uint64_t sp = cpu.x[31];
+    if ((caller != 0x1293030 && caller != 0x12933a4) || !sp ||
+        (sp & 15) || cpu.x[0] != sp || cpu.x[1] != sp + 0x28) {
+        original_placement_record(cpu);
+        return;
+    }
+    GuestMemory memory;
+    const auto result = acnh::initialize_placement_record(
+        {cpu.x[0]}, {cpu.x[1]}, main_base + 0x4893e98, memory);
+    cpu.x[8] = result.last_byte;
+    cpu.x[9] = result.has_extra_flag;
+    cpu.v[0] = vzero();
+    cpu.v[0].u32[0] = result.scalar_bits;
+    subs32(cpu, result.has_extra_flag, 0);
+}
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6526,6 +6590,11 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_terrain_draw_nonempty = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_TERRAIN_DRAW_MASK");
     use_cpp_terrain_draw_mask = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_ANIMATION_SIDECAR");
+    use_cpp_animation_sidecar = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_PLACEMENT_RECORD");
+    if (!mode || std::string_view(mode) == "cpp")
+        wrap_function(entries, 0x1298524, placement_record_adapter, original_placement_record);
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

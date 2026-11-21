@@ -2668,7 +2668,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 30.
+two promoted material queries. Verified so far, 31.
 
 The next implementation group is selected using [gameplay coverage](gameplay-coverage.md)
 across shovel, tree shaking, and movement.
@@ -3974,3 +3974,63 @@ $c = 'private/heading/acnh_terrain_draw_mask_candidate.exe'
 & private/venv/Scripts/python -B -m tests.acnh_terrain_draw_mask_replay `
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 ```
+
+### Animation sidecars and placement record initialization
+
+The animation update at `0x374f3b0` now runs the scalar and counter
+slice `0x374f524..0x374f5b8` and the post-name slice
+`0x374f658..0x374f6cc` in C++ for observed returns `0x63ac4c` and
+`0x115ba58`. The typed updates preserve the original read and
+write order, including reloads after writes, counter wrap and
+clamp, and collection and row selection. The guest boundary restores
+the continuation registers and NZCV. The original virtual calls,
+name transfer, fallbacks and second pass remain generated. Set
+`NX_ACNH_ANIMATION_SIDECAR=original` for the original slices.
+
+The tree original reached return `0x15db938`. The opt-in and
+default tree runs missed that return, so it stays generated and
+queued for a smaller capture targeted to that caller. A Windows
+host check compiled the final guards and confirmed both handlers
+decline this frame without changing CPU or memory.
+
+The whole placement initializer `0x1298524` runs in C++ at the
+tree and shovel returns `0x1293030` and `0x12933a4`. It uses the
+observed record and input at SP and SP+0x28, preserves all
+26 ordered stores including the intermediate packed flag bytes,
+and reproduces X0, X8, X9, NZCV and all of Q0. The wrapper callers
+and downstream placement consumer remain generated. Set
+`NX_ACNH_PLACEMENT_RECORD=original` to restore the original
+initializer at both callers.
+
+Each case ran twice on original AArch64. The portable suite
+covered 385 scalar, 108 post-name and 216 placement cases.
+This includes alias-driven reloads, null collection branches,
+signed saturation and raw lane bits. Fixed tree and shovel
+windows with a shared DLL and immutable cache passed all
+sampled access, value and register comparisons.
+
+| Activity | Route | Replayed samples | Scalar decisions | Post-name decisions | Placement calls |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Tree | Original | 68 | 199,143 | 199,143 | 4 |
+| Tree | Opt-in C++ | 44 | 201,852 | 201,852 | 4 |
+| Tree | Default C++ | 44 | 202,117 | 202,117 | 4 |
+| Shovel | Original | 41 | 203,156 | 203,156 | 1 |
+| Shovel | Opt-in C++ | 41 | 199,731 | 199,731 | 1 |
+| Shovel | Default C++ | 41 | 199,272 | 199,272 | 1 |
+
+The original and opt-in gates shared a host executable
+(`efb4566ddaab92b759d895ed087bb2caf31386242d649bb6077582dcccb53da1`).
+The default gate used the relinked host with both new defaults
+and the narrowed animation guard
+(`cacc480426db8c123c59a80e94016c4be3f8a641c97c6814b95bb4dca7a1d953`).
+The animation counts describe two partial scopes in the same
+body. The placement initializer adds one verified function and
+the [discovery queue](batch-4-candidates.md) still has 100 entries.
+All 14 Release CTests and 15 profile and replay checks passed.
+
+The scheduler probe's separate per-site quotas captured 640
+paired calls and returns in each activity. It did not record a
+wait at the candidate sites. The writer generation and consumed
+wait remain unresolved, so draw list traversal stays generated.
+The next animation capture will measure the packed resource
+lookup and its success and fallback paths in the second pass.

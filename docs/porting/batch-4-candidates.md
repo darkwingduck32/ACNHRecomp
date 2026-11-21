@@ -15,9 +15,14 @@ The scan followed direct calls up to seven levels from 123 gameplay caller
 roots. Roots include call sites observed in the disposable shovel probe.
 The scanner checked unwind ranges, complete instruction decoding, a return,
 no nested calls and no branches outside the function. `Observed` records
-a direct caller that appeared in the probe and was checked against the
-original BL instruction. `Discovery` records a static caller with a live
-trigger still to establish. The scheduler prioritizes observed routes.
+a gameplay call checked against the original instruction and effective
+target. `Discovery` records a static caller with a live trigger still to
+establish. The scheduler prioritizes observed routes.
+
+The placement initializer moved to the ledger. Its replacement in this
+queue is the render alignment leaf `0x380e150`, reached by both virtual
+calls in the [selector virtual checkpoint](ledger.md#render-selector-virtual-preparation-and-continuation).
+The original leaf has an 8-byte unwind range.
 
 The probe is `tree-shake-original-more1/console.log` in the local campaign
 directory. Its SHA-256 is
@@ -63,7 +68,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
     --probe "$r/tree-shake-default-batch4deep1/console.log" ba43f647aae40d6d244b54c77b23e17e7c9bbd39d704f73fe0e42fefd4f0722d
 ```
 
-| Main entry | Unwind size | Direct caller | Stage |
+| Main entry | Unwind size | Call site | Stage |
 | --- | --- | --- | --- |
 | `0x3753b94` | `0x68` | `0x19e82c4` | Observed |
 | `0x22254c` | `0x100` | `0x221bac` | Observed |
@@ -84,7 +89,7 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine'
 | `0x113b5b0` | `0x214` | `0x9d57f0` | Observed |
 | `0x120d468` | `0x168` | `0x1209f70` | Observed |
 | `0x7ea6d8` | `0x214` | `0x7eaa98` | Observed |
-| `0x1298524` | `0x104` | `0x129302c` | Observed |
+| `0x380e150` | `0x8` | `0x38eb0bc`, `0x38eb0d0` | Observed |
 | `0x22e0f4` | `0x234` | `0x22e79c` | Observed |
 | `0x2603058` | `0xdc` | `0x2542d54` | Observed |
 | `0x32d4244` | `0x1a4` | `0x32d4214` | Observed |

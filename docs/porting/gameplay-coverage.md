@@ -303,3 +303,10 @@ The verified default tree window counted 575,921 C++
 continuations through this decision. Both binding refreshes
 and the submit wrapper remain generated.
 See [the binding cache checkpoint](ledger.md#empty-render-binding-cache).
+
+The next sampled wrapper, `0x38facb0`, took its indirect
+path in 1,115,429 original calls across the three activities.
+The default tree gate counted 366,736 C++ preparations for
+that path. The generated load and indirect call still
+resolve the existing host NVN command submit implementation.
+See [the submit preparation checkpoint](ledger.md#indirect-render-submit-preparation).

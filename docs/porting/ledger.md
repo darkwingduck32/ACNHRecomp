@@ -3501,3 +3501,66 @@ $c = 'private/heading/acnh_render_binding_cache_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_render_binding_gates original cpp default
 ```
+
+### Indirect render submit preparation
+
+In three original action windows, the generated submit wrapper
+`0x38facb0` called the selector successfully and had effective
+mask zero on every counted pass. Every pass reached the indirect
+submit at `0x38fb084`. The scoped trace recorded no range rejects,
+bit-2 binding calls, indexed submits, command triplets or iterator
+and descriptor loop trips.
+
+| Activity | Wrapper entries and indirect submits |
+| --- | ---: |
+| Tree shake | 371,106 |
+| Movement | 366,357 |
+| Shovel | 377,966 |
+
+C++ now prepares indirect pass-zero arguments from `0x38fae10`
+at the witnessed virtual callers with saved return addresses
+`0x38f37b4`, `0x38f4cb4`, and `0x38f5bd4`. It checks the wrapper
+and parent frames, request byte one, context byte zero, pass-row
+and state flags, and the selected receiver. It resumes before
+the original target load at `0x38fb078`. No stores occur in
+this slice. The original target lookup and BLR still execute,
+and the Windows loader identified the receiver as the existing
+C++ NVN implementation of `nvnCommandBufferCallCommands`.
+Set `NX_ACNH_RENDER_SUBMIT=original` for the generated preparation.
+
+The 192 portable cases matched two original AArch64 runs
+and included 12 exact continuations with the original GPRs,
+NZCV and ordered reads. Twelve detailed original call records
+from each of tree, movement and shovel independently matched
+their own replay and the prepared callback arguments. The
+muted Windows original, opt-in and default gates each captured
+12 more exact calls and the same three caller, branch and
+target classes.
+
+| Route | Indirect calls | C++ preparations |
+| --- | ---: | ---: |
+| Original | 363,110 | 0 |
+| Opt-in | 370,239 | 368,495 |
+| Default | 368,480 | 366,736 |
+
+Both C++ gates kept 1,744 passes on generated preparation.
+The mask probe runs inside the generated slice, so the
+comparison counts it for those passes and observes the taken
+continuation for C++ passes. Sixteen guest instructions per
+default continuation yields 5,867,776 replaced instructions
+in that marked window. Other masks, callers, pass indices,
+binding paths and loops stay generated. This is a partial
+wrapper port. Batch 4 remains at 27 verified functions and
+100 discovery candidates. All 14 Release CTests and 15
+profile and replay checks passed.
+
+The next group will capture the observed render-pass float
+reader `0x38d6688`, its format helper `0x29e460`, and the
+writer `0x38d671c` if the same activities reach it.
+
+```powershell
+$c = 'private/heading/acnh_render_submit_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_render_submit_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_render_submit_gates original cpp default
+```

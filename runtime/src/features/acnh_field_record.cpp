@@ -40,6 +40,7 @@
 #include "../../../games/acnh/render_resource_prefix.h"
 #include "../../../games/acnh/render_descriptor.h"
 #include "../../../games/acnh/render_binding_cache.h"
+#include "../../../games/acnh/render_submit.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1914,6 +1915,7 @@ bool use_cpp_render_prefix = false;
 bool trace_render_prefix = false;
 bool use_cpp_render_descriptor = false;
 bool use_cpp_render_binding_cache = false;
+bool use_cpp_render_submit = false;
 
 uint64_t render_selector_caller(const CPU& cpu) {
     const uint64_t sp = cpu.x[31], fp = cpu.x[29];
@@ -2008,6 +2010,30 @@ bool render_binding_cache(CPU& cpu) {
 }
 
 const ResumeHookRegistrar render_binding_cache_resume{0x38ead64, render_binding_cache};
+
+bool render_submit_arguments(CPU& cpu) {
+    if (!use_cpp_render_submit || cpu.x[20] != 0 || cpu.x[24] != 1 || cpu.x[9] != 0) return false;
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
+    if (!sp || (sp & 15) || fp != sp + 0x30) return false;
+    const uint64_t lr = ld<uint64_t>(fp + 8) - main_base;
+    if (lr != 0x38f37b4 && lr != 0x38f4cb4 && lr != 0x38f5bd4) return false;
+    if (ld<uint64_t>(fp) != sp + 0x90) return false;
+
+    const uint64_t binding = cpu.x[13], state = cpu.x[19], sink = cpu.x[21];
+    if (!binding || !state || !sink) return false;
+    const auto submit = acnh::prepare_indirect_render_submit({binding}, {state}, {sink}, 0, 0, GuestMemory{});
+    if (!submit.selected || !submit.receiver) return false;
+
+    cpu.x[0] = submit.receiver;
+    cpu.x[1] = 1;
+    cpu.x[2] = submit.record + 0x250;
+    cpu.x[8] = submit.record;
+    cpu.x[9] = submit.records;
+    cpu.x[10] = 0x260;
+    return true;
+}
+
+const ResumeHookRegistrar render_submit_resume{0x38fae10, render_submit_arguments};
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6197,6 +6223,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     use_cpp_render_descriptor = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_RENDER_BINDING_CACHE");
     use_cpp_render_binding_cache = !mode || std::string_view(mode) == "cpp";
+    mode = std::getenv("NX_ACNH_RENDER_SUBMIT");
+    use_cpp_render_submit = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

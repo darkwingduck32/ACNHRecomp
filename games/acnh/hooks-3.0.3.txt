@@ -91,6 +91,8 @@ include features/camera/hooks-3.0.3.txt
 # dispatch 862700 # Sample the grid height at a world position
 # dispatch 63e274 # Test the terrain worker's cull volume
 # dispatch 14e9d34 # Test the terrain worker's depth plane
+146a9c0 # Remember whether the worker acquired a warm selector
+146aa50 # Evaluate the remaining warm worker planes
 # dispatch 22688e4 # Check the shovel height parameter type
 # dispatch 15f3ed0 # Classify a target point for the shovel field query
 # dispatch 15ea82c # Check shovel point obstruction materials

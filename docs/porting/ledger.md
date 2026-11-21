@@ -3175,3 +3175,55 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
 & private/venv/Scripts/python -B -m private.heading.replay_worker_visibility `
     "$r/tree-shake-default-worker-visibility-original1/console.log"
 ```
+
+### Warm terrain worker plane loop
+
+For the worker call at `0x11fd408`, ten-plane evaluations on the warm
+volume-miss path now run the tail rows through typed C++. The hook at
+`0x146a9c0` records the actual acquire result and the worker frame.
+At `0x146aa50`, the original has already evaluated the first row.
+The typed loop checks the rest and supplies the same scalar and
+branch outcome to the stock continuation. The generated pass resumes
+through `0x146ab10`, with the margin leaf still reached through
+`0x146ab28`. Reject resumes at `0x146aa54`.
+
+The selector callback, first plane, visibility byte stores and enqueue
+remain generated. The cold path, other callers and unsupported inputs
+also stay generated. Set `NX_ACNH_WORKER_VISIBILITY=original` to restore
+the generated plane loop for this call.
+
+Two original AArch64 executions matched the C++ result for each of
+233 portable controls and 13 Windows-derived overlay records. The
+checks compared the ordered row count, exact S0, and zero writes.
+A third execution substituted the native decision at `0x146aa50`,
+then took the stock branch and matched its endpoint, S0 and NZCV
+with zero additional stock row reads.
+
+The three serial muted tree runs completed the same frame window
+with identical input and guest DLL. Each logged 69 scoped candidate
+predictions and four actual enqueue handoffs. Every handoff matched
+two original AArch64 suffix runs on its captured input. This included
+a nine-row pass, a first-row reject and a late reject. Opt-in and
+default skipped the stock tail reads, preserved both handoff bytes,
+and reached the generated enqueue return. The three runs held the
+existing worker leaf switches on original for the group.
+
+The default trace thresholds establish at least 5,242,880 typed
+tail row tests across the complete tree fixture. The first row still
+executes generated on each of these invocations. This is a lower
+bound on work routed through C++. All 14 Release CTests and 14
+profile and replay checks passed. Batch 4 stays at 27 verified
+functions and 100 discovery candidates because the parent is a
+partial port. The two sites under `0x11fc610` are the next scoped
+expansion supported by the live plane captures.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
+$c = 'private/heading/acnh_terrain_worker_visibility_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_terrain_worker_visibility_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_worker_visibility_cut $c `
+    "$r/tree-shake-default-worker-visibility-gate-original1" `
+    "$r/tree-shake-default-worker-visibility-gate-cpp1" `
+    "$r/tree-shake-default-worker-visibility-gate-default1"
+```

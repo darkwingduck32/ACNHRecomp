@@ -36,6 +36,7 @@
 #include "../../../games/acnh/shovel_grid_height.h"
 #include "../../../games/acnh/terrain_clearance.h"
 #include "../../../games/acnh/terrain_cull_predicates.h"
+#include "../../../games/acnh/terrain_worker_visibility.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1827,6 +1828,63 @@ void terrain_clearance_adapter(CPU& cpu) {
         cpu.v[0].u32[0] = raw_scalar;
     }
 }
+
+bool use_cpp_worker_visibility = false;
+bool trace_worker_visibility = false;
+thread_local uint64_t warm_worker_visibility_stack = 0;
+
+void worker_visibility_acquire(CPU& cpu) {
+    if (!use_cpp_worker_visibility && !trace_worker_visibility) return;
+    warm_worker_visibility_stack = 0;
+    const auto sp = cpu.x[31], fp = cpu.x[29];
+    if (!(cpu.x[8] & 1u) || !sp || (sp & 15) || fp != sp + 0x60
+        || uint32_t(cpu.x[27]) != UINT32_MAX || cpu.x[22] != sp + 0xe8 || cpu.x[19]
+        || ld<uint64_t>(fp) != sp + 0x170 || ld<uint64_t>(fp + 8) != main_base + 0x11fd40c)
+        return;
+    warm_worker_visibility_stack = sp;
+}
+
+void worker_visibility_planes(CPU& cpu) {
+    if (!use_cpp_worker_visibility && !trace_worker_visibility) return;
+    const auto sp = cpu.x[31];
+    const bool warm = sp && warm_worker_visibility_stack == sp;
+    warm_worker_visibility_stack = 0;
+    if (!warm || cpu.x[29] != sp + 0x60 || uint32_t(cpu.x[27]) != UINT32_MAX
+        || uint32_t(cpu.x[8]) != 10 || !cpu.x[11]
+        || ld<uint64_t>(cpu.x[29] + 8) != main_base + 0x11fd40c) return;
+    const acnh::terrain_cull_detail::Vec3 point{cpu.v[9].f32[0], cpu.v[10].f32[0], cpu.v[11].f32[0]};
+    const float margin = cpu.v[8].f32[0], first = cpu.v[0].f32[0];
+    if (margin <= 0.f || !std::isfinite(margin) || !std::isfinite(first)
+        || !std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) return;
+
+    const GuestMemory memory;
+    const auto result = acnh::terrain_worker_remaining_planes({cpu.x[11] + 0x43c, 10}, point, margin, first, memory);
+    if (!std::isfinite(result.scalar)) return;
+    if (trace_worker_visibility) {
+        static std::atomic<uint64_t> samples[3]{};
+        const auto count = samples[result.passes ? 2 : (result.tested ? 1 : 0)]
+            .fetch_add(1, std::memory_order_relaxed) + 1;
+        if (count <= 8 || std::has_single_bit(count))
+            log("acnh worker visibility %s call=11fd408 planes=10 tested=%u pass=%u s0=%x",
+                use_cpp_worker_visibility ? "cpp" : "original", result.tested, unsigned(result.passes),
+                std::bit_cast<uint32_t>(result.scalar));
+    }
+    if (!use_cpp_worker_visibility) return;
+
+    cpu.v[0] = {};
+    cpu.v[0].f32[0] = result.scalar;
+    if (result.passes) {
+        // Take the stock PL branch, then exit its loop before the first tail row.
+        cpu.x[8] = 1;
+    } else {
+        // Match the flags left by the stock rejecting comparison.
+        cpu.nf = true;
+        cpu.zf = cpu.cf = cpu.vf = false;
+    }
+}
+
+NX_HOOK(0x146a9c0, worker_visibility_acquire);
+NX_HOOK(0x146aa50, worker_visibility_planes);
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6006,6 +6064,9 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     trace_terrain_clearance = std::getenv("NX_ACNH_TERRAIN_CLEARANCE_TRACE") != nullptr;
     if (use_cpp_terrain_clearance || trace_terrain_clearance)
         wrap_function(entries, 0x15eb1a0, terrain_clearance_adapter, original_terrain_clearance);
+    mode = std::getenv("NX_ACNH_WORKER_VISIBILITY");
+    use_cpp_worker_visibility = !mode || std::string_view(mode) == "cpp";
+    trace_worker_visibility = std::getenv("NX_ACNH_WORKER_VISIBILITY_TRACE") != nullptr;
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

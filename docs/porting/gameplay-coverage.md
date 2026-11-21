@@ -177,9 +177,11 @@ of the typed path. See the [verification ledger](ledger.md#terrain-clearance-and
 The shared worker culler now has a repeatable generated-route capture
 at five links. The tree action window reached both warm visibility
 outcomes after the volume miss, including ten-plane checks and the
-second predicate when all planes passed. The next native boundary is
-the two visibility bytes before the enqueue call. See the
-[handoff capture and replay](ledger.md#terrain-worker-visibility-handoff-capture).
+second predicate when all planes passed. The warm loop at one worker
+link now uses C++ after the first plane. The default tree trace supports
+a lower bound of 5,242,880 typed tail row tests. The selector, first
+plane, byte stores, and enqueue still run generated. See the
+[worker plane-loop checkpoint](ledger.md#warm-terrain-worker-plane-loop).
 
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.

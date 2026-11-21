@@ -38,6 +38,7 @@
 #include "../../../games/acnh/terrain_cull_predicates.h"
 #include "../../../games/acnh/terrain_worker_visibility.h"
 #include "../../../games/acnh/render_resource_prefix.h"
+#include "../../../games/acnh/render_descriptor.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1910,16 +1911,22 @@ NX_HOOK(0x146aa50, worker_visibility_planes);
 
 bool use_cpp_render_prefix = false;
 bool trace_render_prefix = false;
+bool use_cpp_render_descriptor = false;
+
+uint64_t render_selector_caller(const CPU& cpu) {
+    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
+    if (!sp || (sp & 15) || fp != sp + 0x30) return 0;
+    const uint64_t lr = ld<uint64_t>(fp + 8) - main_base;
+    const uint64_t caller_fp = lr == 0x38ea190 ? sp + 0xb0 : lr == 0x38facfc ? sp + 0xc0 : 0;
+    return caller_fp && ld<uint64_t>(fp) == caller_fp ? lr : 0;
+}
 
 bool render_resource_prefix(CPU& cpu) {
     if (!use_cpp_render_prefix && !trace_render_prefix) return false;
-    const uint64_t sp = cpu.x[31], fp = cpu.x[29];
-    if (!sp || (sp & 15) || fp != sp + 0x30) return false;
-    const uint64_t lr = ld<uint64_t>(fp + 8) - main_base;
-    const uint64_t caller_fp = lr == 0x38ea190 ? sp + 0xb0 : lr == 0x38facfc ? sp + 0xc0 : 0;
-    if (!caller_fp || ld<uint64_t>(fp) != caller_fp) return false;
+    const uint64_t lr = render_selector_caller(cpu);
+    if (!lr) return false;
 
-    const uint64_t state = cpu.x[0], slots = cpu.x[1], spill = sp + 0x28;
+    const uint64_t state = cpu.x[0], slots = cpu.x[1], spill = cpu.x[31] + 0x28;
     if (!state || !slots) return false;
     const auto overlaps_spill = [spill](uint64_t address, uint64_t width) {
         return address < spill + 8 && spill < address + width;
@@ -1956,6 +1963,34 @@ bool render_resource_prefix(CPU& cpu) {
 }
 
 const ResumeHookRegistrar render_resource_resume{0x38ea930, render_resource_prefix};
+
+bool render_descriptor_transfer(CPU& cpu) {
+    if (!use_cpp_render_descriptor || !render_selector_caller(cpu) || cpu.x[21] != 0) return false;
+    const uint64_t state = cpu.x[19], descriptor = cpu.x[11];
+    const uint64_t kind = cpu.x[12], flags = cpu.x[9];
+    if (!state || !descriptor || cpu.x[10] != descriptor + 0x68 || (kind != 2 && kind != 5) ||
+        flags > 0xffff || !(flags & 2) || cpu.x[8] != (flags & ~0x200ull)) return false;
+
+    // The observed descriptors have their own storage. Overlap stays on the generated path.
+    if (descriptor + 0x71 < state + 0x245 && state + 0x35 < descriptor + 0xe1) return false;
+    const uint32_t count = ld<uint32_t>(descriptor + 0x80);
+    if ((kind == 2 && count != 0xffffffffu) || (kind == 5 && (count != 0 || !(flags & 0x10)))) return false;
+
+    GuestMemory memory;
+    const auto update = acnh::transfer_render_descriptor({state}, {descriptor}, static_cast<uint32_t>(flags),
+                                                        count != 0, memory);
+    cpu.x[8] = update.flags;
+    cpu.x[9] = update.optional;
+    cpu.x[12] = update.kind;
+    if (update.copied) {
+        cpu.x[13] = state + 0x1e0;
+        cpu.x[14] = update.first_word;
+    }
+    subs32(cpu, update.kind, 5);
+    return true;
+}
+
+const ResumeHookRegistrar render_descriptor_resume{0x38eac68, render_descriptor_transfer};
 
 Fn original_worker_cull_volume = nullptr;
 Fn original_worker_cull_plane = nullptr;
@@ -6141,6 +6176,8 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_RENDER_PREFIX");
     use_cpp_render_prefix = !mode || std::string_view(mode) == "cpp";
     trace_render_prefix = std::getenv("NX_ACNH_RENDER_PREFIX_TRACE") != nullptr;
+    mode = std::getenv("NX_ACNH_RENDER_DESCRIPTOR");
+    use_cpp_render_descriptor = !mode || std::string_view(mode) == "cpp";
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

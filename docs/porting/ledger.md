@@ -3405,3 +3405,50 @@ $c = 'private/heading/acnh_render_resource_prefix_candidate.exe'
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_render_prefix_final
 ```
+
+### Render descriptor transfer
+
+The reset path of `0x38ea910` transfers the descriptor in C++
+from `0x38eac68` through the join at `0x38ead40` at the same two
+callers. The scope covers lane zero with disjoint state and
+descriptor storage, kind 2 with count `0xffffffff`, or kind 5
+with zero count and the optional fields enabled. Other shapes
+use the generated transfer. Set `NX_ACNH_RENDER_DESCRIPTOR=original`
+to select it for all descriptors. The prefix switch is independent.
+
+The first muted original tree capture recorded 64 transfers with
+ordered external reads and writes. Both callers reached both kinds.
+They matched two original AArch64 runs on the recorded inputs.
+The 120 portable cases independently matched ordered reads, store
+addresses, widths and values, continuation registers and NZCV.
+They include count boundaries, flags and alias cases. The runtime
+guard routes aliases to the generated code.
+
+The original, opt-in and default gates each recorded 64 actual
+joins on the same muted tree fixture and guest library. Each route
+observed 32 transfers of each kind. Every join matched the
+original replay on its own inputs, including the final bytes
+at the 21 kind-2 or five kind-5 write destinations and the
+registers and flags consumed by the stock suffix. The first
+stock callback came from `0x38eb008` and the selector returned
+W0=1 in all 192 records. Two default kind-2 samples arose after
+the matching prefix where the original captured them after
+the changed prefix at `0x38facf8`. The transfer matched the
+original on both inputs.
+
+The sampled default transfers replaced 48 generated instructions
+per kind-2 transfer and 15 per kind-5 transfer. The context reset,
+descriptor selection, other callers, and binding and draw effects
+remain generated. This adds scope to the partial render selector,
+leaving 27 verified functions and 100 discovery candidates.
+All 14 Release CTests, 15 profile and replay checks and the 285-case
+render prefix regression passed. The next checkpoint will measure
+the two render boundaries across the fixed tree, movement and shovel
+windows with validation tracing disabled.
+
+```powershell
+$c = 'private/heading/acnh_render_descriptor_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_render_descriptor_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_render_descriptor_gates original cpp default
+```

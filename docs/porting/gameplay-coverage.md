@@ -242,6 +242,11 @@ The render-only Windows reruns use `render-tree1` for stack samples,
 The matching packed resource prefix now runs in C++ at the two
 witnessed render call sites. The muted default tree gate captured
 136 such continuations, each skipping 27 generated guest
-instructions. This is a bounded trace count. The generated selector
-still owns fallback, context reset, descriptor transfer and the
-draw path. See [the render selector checkpoint](ledger.md#matching-packed-render-resource-selection).
+instructions. The disjoint descriptor transfer also runs in C++
+for two witnessed shapes at those callers. The default tree gate
+captured 32 kind-2 joins skipping 48 generated instructions each
+and 32 kind-5 joins skipping 15 each. These are bounded trace
+counts. The generated selector still owns unsupported shapes,
+context reset, descriptor choice, binding and draw effects.
+See [the render selector checkpoint](ledger.md#matching-packed-render-resource-selection)
+and [the descriptor transfer checkpoint](ledger.md#render-descriptor-transfer).

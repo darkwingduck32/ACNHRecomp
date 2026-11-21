@@ -42,6 +42,7 @@
 #include "../../../games/acnh/render_binding_cache.h"
 #include "../../../games/acnh/render_submit.h"
 #include "../../../games/acnh/render_pass.h"
+#include "../../../games/acnh/terrain_draw_pass.h"
 #include "../../../games/acnh/shovel_terrain_material_mask.h"
 #include "../../../games/acnh/shovel_terrain_triangle.h"
 #include "../../../games/acnh/shovel_terrain.h"
@@ -1919,6 +1920,7 @@ bool use_cpp_render_binding_cache = false;
 bool use_cpp_render_submit = false;
 Fn original_render_pass_float = nullptr;
 Fn original_render_format = nullptr;
+Fn original_terrain_draw_pass = nullptr;
 
 uint64_t render_selector_caller(const CPU& cpu) {
     const uint64_t sp = cpu.x[31], fp = cpu.x[29];
@@ -2038,14 +2040,15 @@ bool render_submit_arguments(CPU& cpu) {
 
 const ResumeHookRegistrar render_submit_resume{0x38fae10, render_submit_arguments};
 
-struct RenderPassMemory {
+struct RenderFrameMemory {
     uint64_t sp;
+    uint64_t frame_size;
     mutable bool valid = true;
 
     template<class T>
     T read(uint64_t address) const {
-        // The generated getter saves its frame before the format call. Keep frame aliases stock.
-        if (address < sp && sp - 0x30 < address + sizeof(T)) valid = false;
+        // These routes prepare inputs before saving the guest frame. Keep frame aliases stock.
+        if (address < sp && sp - frame_size < address + sizeof(T)) valid = false;
         return valid ? ld<T>(address) : T{};
     }
 };
@@ -2058,7 +2061,7 @@ void render_pass_float_adapter(CPU& cpu) {
     }
     const int32_t pass = std::bit_cast<int32_t>(static_cast<uint32_t>(cpu.x[1]));
     const int32_t index = std::bit_cast<int32_t>(static_cast<uint32_t>(cpu.x[2]));
-    const RenderPassMemory memory{sp};
+    const RenderFrameMemory memory{sp, 0x30};
     const auto byte_width = [&](uint8_t format) -> uint64_t {
         return format == 15 ? acnh::render_format_byte_width(main_base, format, memory) : 0;
     };
@@ -2089,6 +2092,66 @@ void render_format_adapter(CPU& cpu) {
     cpu.x[0] = bytes;
     cpu.x[8] = bytes - 4;
     subs32(cpu, 15, 15);
+}
+
+void terrain_draw_pass_adapter(CPU& cpu) {
+    const uint64_t sp = cpu.x[31];
+    if (cpu.x[30] != main_base + 0x38ea1e8 || sp < 0x50 || (sp & 15) ||
+        cpu.x[29] != sp + 0x20 || cpu.x[1] != sp || !cpu.x[0]) {
+        original_terrain_draw_pass(cpu);
+        return;
+    }
+    const RenderFrameMemory memory{sp, 0x50};
+    const auto plan = acnh::prepare_terrain_draw({cpu.x[0]}, {cpu.x[1]}, main_base, memory);
+    if (!memory.valid || !plan.supported) {
+        original_terrain_draw_pass(cpu);
+        return;
+    }
+
+    const uint64_t frame = sp - 0x50;
+    const uint64_t cell = frame + 0x18;
+    st<uint64_t>(frame, cpu.x[29]);
+    st<uint64_t>(frame + 8, cpu.x[30]);
+    st<uint64_t>(frame + 0x10, cpu.x[25]);
+    for (unsigned i = 0; i < 6; ++i)
+        st<uint64_t>(frame + 0x20 + 8 * i, cpu.x[24 - i]);
+    st<uint64_t>(cell, plan.binding);
+    cpu.x[29] = cpu.x[31] = frame;
+    cpu.x[19] = plan.descriptor.address;
+    cpu.x[20] = plan.manager.address;
+    cpu.x[21] = plan.context;
+    cpu.x[22] = plan.context_index;
+    cpu.x[23] = 0x4a8;
+    cpu.x[24] = uint32_t{plan.pass} - 13;
+    cpu.x[8] = plan.table;
+    cpu.x[9] = static_cast<int64_t>(std::bit_cast<int32_t>(plan.selected_index));
+    cpu.x[10] = 0x4a8;
+    cpu.x[11] = plan.pass;
+    cpu.x[25] = plan.context;
+    subs32(cpu, static_cast<uint32_t>(cpu.x[24]), 1);
+
+    constexpr std::array<uint64_t, 3> resumes{0x1461b08, 0x1461b20, 0x1461b38};
+    acnh::draw_terrain_lists(plan, [&](acnh::TerrainDrawList list) {
+        cpu.x[0] = plan.manager.address;
+        cpu.x[1] = plan.descriptor.address;
+        cpu.x[2] = list.address;
+        cpu.x[3] = plan.context;
+        cpu.x[4] = cell;
+        cpu.x[30] = main_base + resumes[list.lane];
+        call(cpu, main_base + 0x146b080);
+    });
+    subs32(cpu, static_cast<uint32_t>(cpu.x[24]), 1);
+
+    cpu.x[20] = ld<uint64_t>(frame + 0x40);
+    cpu.x[19] = ld<uint64_t>(frame + 0x48);
+    cpu.x[25] = ld<uint64_t>(frame + 0x10);
+    cpu.x[22] = ld<uint64_t>(frame + 0x30);
+    cpu.x[21] = ld<uint64_t>(frame + 0x38);
+    cpu.x[24] = ld<uint64_t>(frame + 0x20);
+    cpu.x[23] = ld<uint64_t>(frame + 0x28);
+    cpu.x[29] = ld<uint64_t>(frame);
+    cpu.x[30] = ld<uint64_t>(frame + 8);
+    cpu.x[31] = sp;
 }
 
 Fn original_worker_cull_volume = nullptr;
@@ -6286,6 +6349,9 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
         wrap_function(entries, 0x38d6688, render_pass_float_adapter, original_render_pass_float);
         wrap_function(entries, 0x29e460, render_format_adapter, original_render_format);
     }
+    mode = std::getenv("NX_ACNH_TERRAIN_DRAW_PASS");
+    if (!mode || std::string_view(mode) == "cpp")
+        wrap_function(entries, 0x1461a34, terrain_draw_pass_adapter, original_terrain_draw_pass);
     mode = std::getenv("NX_ACNH_WORKER_CULL");
     use_cpp_worker_cull = !mode || std::string_view(mode) == "cpp";
     trace_worker_cull = std::getenv("NX_ACNH_WORKER_CULL_TRACE") != nullptr;

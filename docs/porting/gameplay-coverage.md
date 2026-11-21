@@ -363,3 +363,11 @@ The private runs use label
 `render-pass-paired-{tree,movement,shovel}-{original,default}1` and
 verifier `private.heading.render_pass_profile_pairs`. The DLL SHA-256 is
 `2917b6b81e5f12297c093e89f20522ff5957762b2d3f780f2aabb08e976c1d8c`.
+
+The tree selector census recorded 580,255 calls across the two
+existing caller sites, including 487,440 C++ prefix continuations.
+The separate terrain draw capture found the same wrapper caller
+and three ordinary draw handoffs in tree, movement and shovel.
+The default tree gate routed 177,694 ordinary wrappers through
+C++. The draw children and the rare pass 13/14 wrapper paths stay
+generated. See [the terrain draw wrapper checkpoint](ledger.md#terrain-draw-pass-wrapper).

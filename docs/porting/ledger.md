@@ -2668,7 +2668,7 @@ and 14 profile and replay checks passed.
 
 The discovery queue starts with [100 candidates](batch-4-candidates.md).
 It carries forward unverified entries and adds replacements for the
-two promoted material queries. Verified so far, 27.
+two promoted material queries. Verified so far, 30.
 
 The next implementation group is selected using [gameplay coverage](gameplay-coverage.md)
 across shovel, tree shaking, and movement.
@@ -3624,4 +3624,68 @@ $c = 'private/heading/acnh_render_pass_candidate.exe'
 & private/venv/Scripts/python -B -m tests.acnh_render_pass_replay `
     H:/ACNH/ACNHRecomp/private/game/exefs/main $c
 & private/venv/Scripts/python -B -m private.heading.compare_render_pass_gates original cpp default
+```
+
+### Terrain draw pass wrapper
+
+The renderer's wrapper at `0x1461a34` now prepares ordinary terrain
+draw passes in C++ at virtual caller return `0x38ea1e8`. It selects the
+manager context from the descriptor and passes its three lists to the
+generated draw body `0x146b080` in order. All three calls share the same
+writable guest-frame binding cell. Each call sees the original guest
+SP, FP and return site. The generated body still owns list traversal,
+visibility, binding and draw effects.
+
+Passes 0, 2, 9 and 12 are enabled on the matching caller frame.
+The adapter prepares inputs before it saves its private guest frame.
+It preserves the order of the shared reads and checks that those reads
+do not overlap the new frame. The supported path then saves the original
+frame and binding cell before its first draw. The route keeps passes
+13 and 14, other callers and unsupported shapes generated. Set
+`NX_ACNH_TERRAIN_DRAW_PASS=original` to select the generated wrapper.
+
+| Original activity | Ordinary wrapper calls | Pass 13/14 calls | Replayed complete wrappers |
+| --- | ---: | ---: | ---: |
+| Tree shake | 177,346 | 2 | 26 |
+| Movement | 177,300 | 0 | 24 |
+| Shovel | 177,694 | 2 | 26 |
+
+The 76 completed Windows captures matched two original AArch64 runs
+each, including 220 ordered handoffs. The portable matrix ran 280
+cases twice in the original. The 160 admitted C++ plans matched
+ordered shared read addresses, context selection and draw arguments.
+The 120 remaining cases declined the C++ route. The replay used
+modeled draw effects to check that a callback's binding-cell write is
+visible to the next draw. The sampled live draw callbacks all left
+the cell value unchanged.
+
+| Muted tree gate | Ordinary wrapper calls | C++ calls | Complete samples | Ordered handoffs checked |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 178,088 | 0 | 26 | 74 |
+| Opt-in | 177,694 | 177,694 | 24 | 72 |
+| Default | 177,694 | 177,694 | 24 | 72 |
+
+Each gate kept one pass 13 and one pass 14 on the generated route.
+The opt-in and default captures matched their own original AArch64
+inputs, ordered reads and frame stores, child argument and scratch
+registers, NZCV and return state. The replay fed the observed
+generated child effects back to the original wrapper. It examined
+memory operations on the private frame separately from the ordered
+shared reads. The admitted original wrapper executes 59 instructions
+per call, excluding its draw children, so the default tree window
+replaced 10,483,946 generated wrapper instructions.
+
+Batch 4 advances to 30 verified functions with 100 discovery
+candidates. All 14 Release CTests, 15 profile and replay checks, and
+the prior 33 format and 450 reader cases passed. The next shared
+candidate is the selector's indirect submit preparation, pending
+counts and exact handoffs from the three activity windows. Draw
+list traversal remains generated pending a producer-to-consumer
+ownership proof.
+
+```powershell
+$c = 'private/heading/acnh_terrain_draw_pass_candidate.exe'
+& private/venv/Scripts/python -B -m tests.acnh_terrain_draw_pass_replay `
+    H:/ACNH/ACNHRecomp/private/game/exefs/main $c
+& private/venv/Scripts/python -B -m private.heading.compare_terrain_draw_pass_gates original cpp default
 ```

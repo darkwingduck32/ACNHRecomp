@@ -4075,6 +4075,48 @@ These are two more scoped parts of the existing animation body.
 The verified function count remains 31 and the queue remains 100.
 All 14 Release CTests and 15 profile and replay checks passed.
 
-The next stock inventory samples actual game-thread entry to
-grid height `0x862700`. It will determine which caller family
-still reaches the generated body under default routing.
+### Clearance grid-height callers
+
+The game-thread stock census identified two frequent routes from
+the clearance height call returning to `0x1161d94`. Ground
+reached grid height `0x862700` through `0x83b0cc` and `0x15e02e0`.
+The overlay route reached it through `0x83aa78` and `0x15e02f8`.
+Each route accounted for 80,915 of 322,701 counted stock entries
+in tree and 71,754 of 321,184 in shovel. Both censuses reached
+the 128-bucket limit, so these totals cover retained buckets.
+
+The two observed frames now dispatch to the existing C++ grid
+query. The adapter checks the saved returns, frame and argument
+offsets, query mode, and `FPCR=0x01000000`. Other clearance
+frames retain generated routing. Set
+`NX_ACNH_CLEARANCE_GRID_HEIGHT=original` to select the original
+path for this pair. The worker and shovel switches are independent.
+The guard check admitted both observed frames and declined 22 controls.
+
+The saved muted tree gates share the fixture, recorded inputs,
+frame window, pipeline cache, and generated DLL
+(`728660c7b9a9a14d49661a8998fe8c19505c72f2112f94290481387d3369e868`).
+The default runtime was relinked with only the default selection
+changed from the verified opt-in source.
+
+| Route | Ground calls | Overlay calls | Counted generated entries across retained buckets |
+| --- | ---: | ---: | ---: |
+| Original | 73,703 | 73,703 | 305,049 |
+| Opt-in | 77,699 | 77,699 | 166,740 |
+| Default | 87,896 | 87,896 | 179,222 |
+
+Each route supplied one sample per site. Two original AArch64
+replays per sample matched full `Q0` and the material and override
+outputs. The original gate matched ordered accesses and `NZCV`.
+The opt-in and default gates matched ordered caller-visible stores,
+excluding the original leaf's private scratch slot at `SP-4`.
+The typed gate checks preservation of the runtime's software `FPSR`.
+Original AArch64 can set the sticky inexact bit where the generated
+runtime preserves it. Typed `NZCV` equality is outside this gate.
+The overlay continuation sets flags with `FCMP` before branching.
+The immediate ground continuation moves `S0` and tests `X19` with
+`CBZ`, which consumes the register directly.
+
+Both 672-case grid replay variants passed, along with 14 Release
+CTests and 15 profile and replay checks. This routing expansion
+keeps the verified function count at 31 and the queue at 100.

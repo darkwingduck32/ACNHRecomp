@@ -2510,6 +2510,7 @@ bool use_cpp_shovel_grid_height = false;
 bool trace_shovel_grid_height = false;
 bool use_cpp_worker_grid_height = false;
 bool trace_worker_grid_height = false;
+bool use_cpp_clearance_grid_height = false;
 constexpr std::array worker_grid_height_resumes{0x11fca9cu, 0x11fcac4u, 0x11fd710u};
 
 bool worker_grid_height_site(const CPU& cpu, uint64_t resume) {
@@ -2540,6 +2541,20 @@ ShovelHeightScope shovel_grid_scope(const CPU& cpu) {
     return shovel_sampler_scope(ground, ld<uint64_t>(frame + 8) - main_base, ld<uint64_t>(frame));
 }
 
+bool clearance_grid_height_site(const CPU& cpu, uint64_t resume) {
+    const bool ground = resume == 0x83b0cc;
+    if (!ground && resume != 0x83aa78) return false;
+    const auto sp = cpu.x[31], fp = cpu.x[29];
+    if (!sp || (sp & 15) || fp != sp + 0x20 || !cpu.x[0] ||
+        cpu.x[1] != sp + (ground ? 0xb4 : 0xe4) ||
+        cpu.x[2] != sp + 0x1c || cpu.x[4] != sp + 0x18 ||
+        cpu.x[3] != uint64_t{ground} || cpu.fpcr != 0x1000000) return false;
+    const auto surface = ld<uint64_t>(fp);
+    return surface == sp + (ground ? 0x70 : 0xa0)
+        && ld<uint64_t>(fp + 8) == main_base + (ground ? 0x15e02e0 : 0x15e02f8)
+        && ld<uint64_t>(surface + 8) == main_base + 0x1161d94;
+}
+
 void shovel_grid_height_adapter(CPU& cpu) {
     const auto resume = cpu.x[30] - main_base;
     const bool worker_frame = (use_cpp_worker_grid_height || trace_worker_grid_height)
@@ -2562,16 +2577,18 @@ void shovel_grid_height_adapter(CPU& cpu) {
         }
     }
     const auto scope = shovel_grid_scope(cpu);
-    if (!worker && scope == ShovelHeightScope::unrelated) {
+    const bool clearance_grid = use_cpp_clearance_grid_height && scope == ShovelHeightScope::unrelated
+        && clearance_grid_height_site(cpu, resume);
+    if (!worker && !clearance_grid && scope == ShovelHeightScope::unrelated) {
         original_shovel_grid_height(cpu);
         return;
     }
     const acnh::GridHeightQuery query{{cpu.x[0]}, cpu.x[1], cpu.x[2], cpu.x[4], (cpu.x[3] & 1) != 0};
     const bool extended = is_new_height_scope(scope);
-    const bool native = worker ? use_cpp_worker_grid_height
-        : use_cpp_shovel_grid_height && (!extended || use_cpp_height_scope(scope));
-    bool trace = worker ? trace_worker_grid_height
-        : (extended ? trace_height_scope(scope) : trace_shovel_grid_height);
+    const bool native = clearance_grid || (worker ? use_cpp_worker_grid_height
+        : use_cpp_shovel_grid_height && (!extended || use_cpp_height_scope(scope)));
+    bool trace = !clearance_grid && (worker ? trace_worker_grid_height
+        : (extended ? trace_height_scope(scope) : trace_shovel_grid_height));
     if (worker && trace) {
         static std::array<std::atomic<uint64_t>, worker_grid_height_resumes.size()> samples{};
         const auto site = std::find(worker_grid_height_resumes.begin(), worker_grid_height_resumes.end(), resume);
@@ -2582,7 +2599,9 @@ void shovel_grid_height_adapter(CPU& cpu) {
     if (!trace) {
         if (native) {
             GuestMemory memory;
-            cpu.v[0].f32[0] = acnh::query_grid_height(query, memory);
+            const auto height = acnh::query_grid_height(query, memory);
+            if (clearance_grid) cpu.v[0] = vzero();
+            cpu.v[0].f32[0] = height;
         } else {
             original_shovel_grid_height(cpu);
         }
@@ -6653,7 +6672,9 @@ void install_field_record(const ModuleInfo& module, FuncEntry* functions) {
     mode = std::getenv("NX_ACNH_WORKER_GRID_HEIGHT");
     use_cpp_worker_grid_height = !mode || std::string_view(mode) == "cpp";
     trace_worker_grid_height = std::getenv("NX_ACNH_WORKER_GRID_HEIGHT_TRACE") != nullptr;
-    if (use_cpp_worker_grid_height || trace_worker_grid_height
+    mode = std::getenv("NX_ACNH_CLEARANCE_GRID_HEIGHT");
+    use_cpp_clearance_grid_height = !mode || std::string_view(mode) == "cpp";
+    if (use_cpp_worker_grid_height || trace_worker_grid_height || use_cpp_clearance_grid_height
         || use_cpp_shovel_grid_height || trace_shovel_grid_height || trace_shovel_height_chain || trace_shovel_cast_height || trace_shovel_collision_height || trace_shovel_collision_stage || trace_shovel_traversal_peak || trace_shovel_traversal_sweep || trace_shovel_traversal_height || trace_shovel_sweep_probe || trace_shovel_traversal_stage || trace_shovel_traversal_legs)
         wrap_function(entries, 0x862700, shovel_grid_height_adapter, original_shovel_grid_height);
 

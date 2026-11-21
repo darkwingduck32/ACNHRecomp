@@ -3315,3 +3315,37 @@ $r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
     "$r/tree-shake-default-worker-visibility-expand-cpp1" `
     "$r/tree-shake-default-worker-visibility-expand-default2"
 ```
+
+### Terrain draw repeated rejection chains
+
+The muted original tree rerun captured 24 complete rejection
+runs for passes 0 and 2 at `0x1461b04`, `0x1461b1c`, and
+`0x1461b34`. Each of those six caller/pass pairs produced
+both an accepted successor and a list-sentinel exit in the
+action window. The twelve action samples contained two to
+six rejected instances before the endpoint.
+
+Across those passes, the action counters recorded 479,058
+runs and 3,166,114 rejected instances after the first in a
+run. The longest observed run held 314 rejects. Those are
+trace counts over the marked action interval.
+
+All 24 bounded chains matched two original AArch64 replays.
+The fixture reconstructed links from the ordered flag observations
+and preserved the signed link offset, selected row and mask.
+It reached the accepted instance or normalized sentinel with
+the same ordered link, mask and flag reads, no external writes
+and no callbacks. The long-run counter is independent of the
+bounded detailed capture.
+
+Draw traversal, binding and command execution are generated.
+The producer audit has two enqueue origins and ordinary list
+loads and stores. The completion and reset boundaries for the
+matching list generation are still under investigation. The
+discovery queue has 100 entries and the verified count is 27.
+
+```powershell
+$r = 'H:/ACNH/ACNHRecomp/private/port-acnh-engine/worker-coverage-runs'
+& private/venv/Scripts/python -B -m private.heading.replay_terrain_draw_chains `
+    "$r/tree-shake-default-terrain-draw-chains-tree1/console.log"
+```

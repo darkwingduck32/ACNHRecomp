@@ -186,10 +186,10 @@ plane, byte stores, and enqueue still run generated. See the
 Terrain draw at `0x146b080` repeats its masked instance rejection
 across all three activities. The three common callers each contribute
 roughly one-third of the draw invocations. Passes 0 and 2 dominate
-the rejections. The pre-effect branch is now replayed, and the next
-capture targets consecutive rejects while leaving binding and draw
-commands on their generated routes. See the
-[terrain draw inventory](ledger.md#terrain-draw-pre-effect-visibility-capture).
+the rejections. The original tree chain capture adds 3,166,114
+rejections after the first in a run and 24 repeatable chain replays.
+List publication and reset remain the focus of the producer audit.
+See the [draw chain checkpoint](ledger.md#terrain-draw-repeated-rejection-chains).
 
 The alternate shovel leg remains on the generated route pending a
 repeatable trigger.

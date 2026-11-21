@@ -318,3 +318,48 @@ across the three activities. The default tree gate recorded
 221,864 C++ reads and 23 additional C++ format calls from the
 generated setter. The setter remains generated.
 See [the read and format checkpoint](ledger.md#render-pass-float-read-and-format-width).
+
+### Paired coverage after the render-pass reader checkpoint
+
+At `50a23e16fb34c933b3cdb9f09c662f5fb46024a5`, six muted
+Windows runs repeated the same three fixtures, input schedules and
+frame windows. Within each pair the executable, DLL and pipeline cache
+were identical. The original route selected generated code for the five
+render switches (prefix, descriptor, binding cache, submit and pass
+reader). The default route enabled their scoped C++ paths. Worker routing
+was default in both. Validation traces were off and the 47 Hz sampler
+reported zero ring drops.
+
+| Activity | Game-thread DLL leaves, original → default | Uniquely resolved DLL leaves, original → default | Selector `0x38ea910` | Terrain draw `0x146b080` | Submit `0x38facb0` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tree shake | 136/347 → 116/345 | 126 → 101 | 16 → 10 | 4 → 7 | 4 → 1 |
+| Movement | 146/350 → 122/351 | 131 → 109 | 17 → 6 | 8 → 7 | 0 → 0 |
+| Shovel | 140/346 → 131/345 | 127 → 118 | 13 → 9 | 6 → 8 | 4 → 0 |
+
+| Activity | Guest-worker DLL leaves, original → default | Generated reader `0x38d6688` on game thread | Generated reader on guest workers |
+| --- | ---: | ---: | ---: |
+| Tree shake | 209/19,085 → 214/18,975 | 0 → 0 | 0 → 0 |
+| Movement | 211/19,250 → 206/19,305 | 1 → 0 | 5 → 0 |
+| Shovel | 222/19,030 → 206/18,975 | 3 → 0 | 1 → 0 |
+
+The format helper resolved to zero samples in both buckets on all six
+runs. Unresolved and ambiguous DLL leaves still count toward the DLL
+totals. Host leaves include handwritten C++, runtime and other native
+work, and these samples cannot attribute the host remainder to a typed
+subsystem. The single pair per activity gives a coverage comparison.
+The event counts in the reader checkpoint specify the work moved into
+C++.
+
+The selector and terrain draw remain first and second by activity
+breadth and mean exclusive game-thread leaf share. Animation
+`0x374f3b0` has 3, 2 and 1 default samples across these windows. The
+next render capture will measure selector caller coverage and record
+the draw wrapper `0x1461a34` through its stock child calls. A scoped
+wrapper could move context and argument preparation while preserving
+the binding cell shared by the calls. The draw list traversal needs
+generation-matched producer and reset evidence before it can move.
+
+The private runs use label
+`render-pass-paired-{tree,movement,shovel}-{original,default}1` and
+verifier `private.heading.render_pass_profile_pairs`. The DLL SHA-256 is
+`2917b6b81e5f12297c093e89f20522ff5957762b2d3f780f2aabb08e976c1d8c`.

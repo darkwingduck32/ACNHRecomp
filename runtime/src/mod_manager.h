@@ -22,10 +22,18 @@ bool write_enabled(const std::string& data_root, const std::vector<std::string>&
 
 bool set_enabled(const std::string& data_root, const std::string& id, bool on, std::string* error = nullptr);
 
+// Settings controls edit the caller's config snapshot; no file write or runtime activation.
+enum class FeatureAvailability { Ready, Missing, Unavailable };
+FeatureAvailability feature_availability(const std::string &data_root, const std::string &id);
+bool feature_selected(const std::string &enabled_csv, const std::string &id);
+bool configure_feature(const std::string &data_root, const std::string &id, bool on, const std::string &current_csv,
+                       std::string &result_csv, std::string *error = nullptr);
+
 // Move `id` one step earlier (toward first / higher priority) or later in game.mods.
 bool move_enabled(const std::string& data_root, const std::string& id, int delta, std::string* error = nullptr);
 
-// Folder or .zip with a romfs/ (case-insensitive) within 0–2 nesting levels. Copies only the RomFS tree.
+// Folder or ZIP containing RomFS. Legacy imports copy only RomFS; v1 manifest
+// packages retain validated profiles and update atomically by manifest ID.
 // Auto-enables the new mod. Sets *had_exefs when ExeFS/skyline was detected beside romfs (not imported).
 bool import_mod(const std::string& data_root, const std::string& source_path, std::string* out_id = nullptr,
                 bool* had_exefs = nullptr, std::string* error = nullptr);

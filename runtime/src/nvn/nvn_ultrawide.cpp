@@ -1,4 +1,5 @@
 #include "nvn_ultrawide.h"
+#include "features/runtime.h"
 
 #include <algorithm>
 #include <atomic>
@@ -414,7 +415,8 @@ void rewrite(uint64_t object, Camera& c, float k, bool dirty) {
     // (the map app, the NookPhone: 40 degrees, far plane 10000) keep Vert+, or their sides were cut off.
     // NX_UW_VERT_PLUS=1: Vert+ for all.
     static const bool vert_plus = std::getenv("NX_UW_VERT_PLUS") && std::getenv("NX_UW_VERT_PLUS")[0] == '1';
-    const bool world = f32_of(c.fov_base) < 0.5f;
+    const bool world = f32_of(c.fov_base) < 0.5f ||
+        features::world_projection(f32_of(w[0x98 / 4]), f32_of(w[0x9c / 4]), f32_of(c.fov_base));
     if (k < 1.0f && (vert_plus || !world)) fov = bits_of(2.0f * std::atan(std::tan(f32_of(c.fov_base) * 0.5f) / k));
     if (a != wide_bits || f != fov) {  // with the half-angle terms the matrix is made from
         float half = f32_of(fov) * 0.5f;

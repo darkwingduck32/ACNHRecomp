@@ -11,7 +11,12 @@
 #include <map>
 #include <set>
 
+#include "nvn_spirv_instance.h"
+#ifndef NX_INSTANCE_STANDALONE
 #include "nvn_pipeline.h"
+#else
+namespace nx::nvn { inline void log(const char*,...) {} }
+#endif
 
 namespace nx::nvn {
 

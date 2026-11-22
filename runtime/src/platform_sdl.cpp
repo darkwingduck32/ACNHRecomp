@@ -289,6 +289,8 @@ static void sample_input() {
         if (k[SDL_SCANCODE_BACKSPACE]) p.buttons |= kB;
     } else if (focused && !nx::ui::ui_text_field()) {
         const bool* k = SDL_GetKeyboardState(nullptr);
+        if (k[SDL_SCANCODE_F6]) p.buttons |= kFreeCameraZoom;
+        if (k[SDL_SCANCODE_F7]) p.buttons |= kFreeCameraReset;
         const uint64_t now = SDL_GetTicks();
         auto held = [&](int sc) {
             return sc > 0 && k[sc] && (!nx::plat::key_types(sc) || nx::plat::keyboard_state_known() ||
@@ -320,7 +322,7 @@ static void sample_input() {
             bool pad = typing && (u == SDL_SCANCODE_UP || u == SDL_SCANCODE_DOWN || u == SDL_SCANCODE_LEFT ||
                                   u == SDL_SCANCODE_RIGHT || u == SDL_SCANCODE_RETURN || u == SDL_SCANCODE_KP_ENTER ||
                                   u == SDL_SCANCODE_BACKSPACE);
-            if (!pad) usb[u / 8] |= uint8_t(1u << (u % 8));
+            if (!pad && u != SDL_SCANCODE_F6 && u != SDL_SCANCODE_F7) usb[u / 8] |= uint8_t(1u << (u % 8));
         }
         // KeyboardModifier bits: Control 0, Shift 1, LeftAlt 2, RightAlt 3, Gui 4, CapsLock 8, ScrollLock 9, NumLock 10.
         SDL_Keymod m = SDL_GetModState();

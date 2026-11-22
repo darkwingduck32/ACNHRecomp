@@ -11,6 +11,7 @@
 
 #include "nvn_draw_state.h"
 #include "nvn_ultrawide.h"
+#include "nvn_extensions.h"
 
 namespace nx::nvn {
 uint64_t bound_generation();  // nvn_draw.cpp
@@ -225,10 +226,21 @@ struct ConstantsBlock {
     Range storage[16];  // all driver_constants reads outside compute
     std::array<uint8_t, 0x1000> bytes;
 };
-constexpr size_t kBlocks = 32;  // more distinct ones in a submit: copied per draw, as before
+constexpr size_t kBlocks = 32;  // driver-constant blocks; support blocks have a separate capacity below
 PerThread<std::vector<std::unique_ptr<SupportBlock>>> g_support;
 PerThread<std::vector<std::unique_ptr<ConstantsBlock>>> g_constants;
 PerThread<size_t> g_support_used, g_constants_used;
+PerThread<uint64_t> g_support_fallbacks, g_constants_fallbacks, g_support_peak;
+size_t support_capacity() {
+    // Expanded island views use over 70 viewport/render-scale combinations.
+    // Falling back after 32 copies the support block for every remaining draw,
+    // which also prevents otherwise compatible draws from being merged. Blocks
+    // are allocated lazily and kept at stable addresses for per-submit dedup.
+    static const char* value=std::getenv("NX_SUPPORT_BLOCKS");
+    static const size_t capacity=value?size_t(std::clamp(std::atoi(value),32,1024)):256;
+    static const bool ab=std::getenv("NX_SUPPORT_BLOCKS_AB")!=nullptr;
+    return ab ? ((g_frame.load(std::memory_order_relaxed)/600)%2?256:32) : capacity;
+}
 
 const SupportBuffer* support_block(float width, float height, const RenderScales& scales) {
     // The last block found first: runs of draws (and the two stages of a draw) ask for the same one.
@@ -241,9 +253,10 @@ const SupportBuffer* support_block(float width, float height, const RenderScales
     if (last < (*g_support_used) && same(last)) return &(*g_support)[last]->sb;
     for (size_t k = 0; k < (*g_support_used); k++)
         if (same(k)) return &(*g_support)[last = k]->sb;
-    if ((*g_support_used) == kBlocks) return nullptr;
+    if ((*g_support_used) >= support_capacity()) { (*g_support_fallbacks)++; return nullptr; }
     if ((*g_support_used) == (*g_support).size()) (*g_support).push_back(std::make_unique<SupportBlock>());
     SupportBlock& b = *(*g_support)[(*g_support_used)++];
+    *g_support_peak=std::max<uint64_t>(*g_support_peak,*g_support_used);
     b.width = width, b.height = height, b.scales = scales;
     last = (*g_support_used) - 1;
     b.sb = support_buffer_defaults();
@@ -265,7 +278,7 @@ const uint8_t* constants_block(ShaderStage stage, int st) {
     if (l < (*g_constants_used) && same(l)) return (*g_constants)[l]->bytes.data();
     for (size_t k = 0; k < (*g_constants_used); k++)
         if (same(k)) return (*g_constants)[l = k]->bytes.data();
-    if ((*g_constants_used) == kBlocks) return nullptr;
+    if ((*g_constants_used) == kBlocks) { (*g_constants_fallbacks)++; return nullptr; }
     if ((*g_constants_used) == (*g_constants).size()) (*g_constants).push_back(std::make_unique<ConstantsBlock>());
     ConstantsBlock& b = *(*g_constants)[(*g_constants_used)++];
     b.hw = hw;
@@ -315,6 +328,7 @@ struct BufMemo {
     VkDescriptorBufferInfo info{};
 };
 PerThread<TlsArray<BufMemo, 2048>> g_buf_memo;
+
 PerThread<uint64_t> g_memo_hits, g_memo_misses;
 
 VkDescriptorBufferInfo buffer_of(VkCommandBuffer cb, const void* bytes, uint64_t size, uint64_t min_size = 16,
@@ -353,6 +367,10 @@ VkDescriptorBufferInfo buffer_of(VkCommandBuffer cb, const void* bytes, uint64_t
 
 }  // namespace
 
+bool uniform_host_patch(const ShaderInfo* shader, int bank) {
+    return extension_uniform_host_patch(shader,bank);
+}
+
 // A uniform block binding's buffer, from the bound range (build_sets; draw merging's run continuation, nvn_draw.cpp).
 VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, const DescriptorBinding& b, const Range& r) {
     const uint8_t* p = r.address ? guest_bytes(r.address) : nullptr;
@@ -370,6 +388,7 @@ VkDescriptorBufferInfo uniform_info(VkCommandBuffer cb, const ShaderInfo* s, con
     // In place (nvn_zero_copy.cpp) when every byte bound is the block's own: past it Maxwell reads 0.
     const uint64_t a = vk_robust_buffer_align();  // as buffer_of sizes the binding
     const uint64_t n = (std::max<uint64_t>((size + 15) & ~15ull, min_size) + a - 1) & ~(a - 1);
+    if (auto patched=extension_uniform_patch(s,b,p,size,n)) return *patched;
     if (Upload u; p && n <= r.size && zero_copy_range(r.address, n, zero_copy_uniform_align(), u)) return {u.buffer, u.offset, n};
     return buffer_of(cb, p, size, min_size);
 }
@@ -949,6 +968,11 @@ void sets_begin_submit() {
 }
 
 void sets_log() {
+    log("nvn: host constant cache: support peak %llu capacity %llu fallback %llu; driver fallback %llu",
+        (unsigned long long)*g_support_peak,(unsigned long long)support_capacity(),
+        (unsigned long long)*g_support_fallbacks,(unsigned long long)*g_constants_fallbacks);
+    *g_support_peak=*g_support_fallbacks=*g_constants_fallbacks=0;
+    extension_uniform_stats();
     if (*g_binds_made + *g_binds_kept)
         log("nvn: descriptor binds: %llu recorded, %llu repeats left out", (unsigned long long)*g_binds_made,
             (unsigned long long)*g_binds_kept);

@@ -37,6 +37,7 @@ struct Entry {
 // clang-format off
 
 const Entry kEn[] = {
+#include "features/camera/text_en.inc"
     {"controls.touch_layout", "On-screen layout"},
     {"controls.touch_layout.desc", "Drag the buttons to where your thumbs want them. The face buttons and the d-pad move together."},
     {"controls.touch_layout.edit", "Edit"},
@@ -426,6 +427,7 @@ const Entry kEn[] = {
     {"saves.export.ok", "Save exported to {}"},
     {"saves.export.fail", "Could not export the save: {}"},
     {"saves.detected", "Saves found on this computer"},
+    {"saves.detected.scanning", "Searching for saves..."},
     {"saves.detected.none", "No emulator saves found."},
     {"saves.backup", "Back up now"},
     {"saves.backup.ok", "Backup made: {}"},

@@ -1,4 +1,5 @@
 #include "mod_manager.h"
+#include "mod_package.h"
 
 #include <algorithm>
 #include <array>
@@ -328,7 +329,9 @@ struct ZipEntry {
 
 bool safe_zip_name(std::string& n) {
     std::replace(n.begin(), n.end(), '\\', '/');
-    if (n.empty() || n[0] == '/' || n.find(':') != std::string::npos) return false;
+    std::string file=n;
+    if(!file.empty()&&file.back()=='/')file.pop_back();
+    if(!mod_package::safe_path(file))return false;
     size_t pos = 0;
     while (pos <= n.size()) {
         size_t slash = n.find('/', pos);
@@ -365,6 +368,7 @@ bool zip_list(const fs::path& zip, std::vector<ZipEntry>& out, std::string* erro
     if (!read_at(f, cd_off, cd_size, cd)) return set_err(error, "cannot read the zip file"), false;
     const auto* c = reinterpret_cast<const unsigned char*>(cd.data());
     size_t pos = 0;
+    std::set<std::string> names;
     for (uint16_t i = 0; i < count; ++i) {
         if (pos + 46 > cd.size() || rd32(c + pos) != 0x02014b50) return set_err(error, "damaged zip file"), false;
         ZipEntry e;
@@ -379,6 +383,8 @@ bool zip_list(const fs::path& zip, std::vector<ZipEntry>& out, std::string* erro
         e.name.assign(cd, pos + 46, nlen);
         pos += 46 + nlen + xlen + clen;
         if (!safe_zip_name(e.name)) return set_err(error, "unsafe path in zip: " + e.name), false;
+        auto folded=lower(e.name);
+        if(!names.insert(folded).second)return set_err(error,"Duplicate ZIP path"),false;
         if (!e.name.empty() && e.name.back() == '/') continue;
         if (e.name.rfind("__MACOSX/", 0) == 0) continue;
         out.push_back(std::move(e));
@@ -497,6 +503,23 @@ bool zip_extract_prefix(const fs::path& zip, const std::vector<ZipEntry>& entrie
     return true;
 }
 
+// Packages retain profiles and metadata; legacy imports still copy only RomFS.
+bool finish_import(const std::string& root, fs::path staging, std::string& id, std::string* error) {
+    mod_package::Manifest manifest;
+    std::error_code ec;
+    if(fs::exists(staging/"manifest.json",ec)) {
+        if(!mod_package::validate(staging,root,&manifest,error)) return false;
+        id=manifest.id;
+    }
+    const auto dst=mods_root(root)/u8_path(id), old=mods_root(root)/u8_path(id+".previous");
+    if(fs::exists(old,ec)) return set_err(error,"Previous package recovery folder exists; restore or remove it first."),false;
+    bool replacing=fs::exists(dst,ec);
+    if(replacing) {fs::rename(dst,old,ec);if(ec)return set_err(error,"Cannot back up installed package: "+ec.message()),false;}
+    fs::rename(staging,dst,ec);
+    if(ec) {if(replacing){std::error_code recovery;fs::rename(old,dst,recovery);}return set_err(error,"Cannot install package: "+ec.message()),false;}
+    return true; // keep .previous until enablement has committed
+}
+
 bool import_from_folder(const std::string& data_root, const fs::path& src, std::string* out_id, bool* had_exefs,
                         std::string* error) {
     fs::path romfs, pack;
@@ -513,16 +536,14 @@ bool import_from_folder(const std::string& data_root, const fs::path& src, std::
     std::error_code ec;
     fs::remove_all(staging, ec);
     fs::create_directories(staging / "romfs", ec);
-    if (!copy_tree(romfs, staging / "romfs", error)) {
+    bool packaged=fs::is_regular_file(pack/"manifest.json",ec);
+    mod_package::Manifest manifest;
+    if(packaged && !mod_package::validate(pack,data_root,&manifest,error)) {fs::remove_all(staging,ec);return false;}
+    if (!(packaged ? copy_tree(pack,staging,error) : copy_tree(romfs, staging / "romfs", error))) {
         fs::remove_all(staging, ec);
         return false;
     }
-    fs::remove_all(dst, ec);
-    fs::rename(staging, dst, ec);
-    if (ec) {
-        fs::remove_all(staging, ec);
-        return set_err(error, "cannot install the mod: " + ec.message()), false;
-    }
+    if(!finish_import(data_root,staging,id,error)) {fs::remove_all(staging,ec);return false;}
     if (out_id) *out_id = id;
     log("mod_manager: imported folder as %s", id.c_str());
     return true;
@@ -543,16 +564,14 @@ bool import_from_zip(const std::string& data_root, const fs::path& zip, std::str
     std::error_code ec;
     fs::remove_all(staging, ec);
     fs::create_directories(staging / "romfs", ec);
-    if (!zip_extract_prefix(zip, entries, prefix, staging / "romfs", error)) {
+    auto slash=prefix.rfind('/',prefix.size()-2);
+    std::string package_prefix=slash==std::string::npos?"":prefix.substr(0,slash+1);
+    bool packaged=std::any_of(entries.begin(),entries.end(),[&](const ZipEntry& e){return e.name==package_prefix+"manifest.json";});
+    if (!zip_extract_prefix(zip, entries, packaged?package_prefix:prefix, packaged?staging:staging / "romfs", error)) {
         fs::remove_all(staging, ec);
         return false;
     }
-    fs::remove_all(dst, ec);
-    fs::rename(staging, dst, ec);
-    if (ec) {
-        fs::remove_all(staging, ec);
-        return set_err(error, "cannot install the mod: " + ec.message()), false;
-    }
+    if(!finish_import(data_root,staging,id,error)) {fs::remove_all(staging,ec);return false;}
     if (out_id) *out_id = id;
     log("mod_manager: imported zip as %s", id.c_str());
     return true;
@@ -608,6 +627,13 @@ bool write_enabled(const std::string& data_root, const std::vector<std::string>&
         if (!valid_id(id) || !seen.insert(id).second) continue;
         clean.push_back(id);
     }
+    for(const auto& id:clean) {
+        auto root=mods_root(data_root)/u8_path(id);
+        if(!fs::exists(root/"manifest.json"))continue;
+        mod_package::Manifest m;
+        if(!mod_package::validate(root,data_root,&m,error))return false;
+        for(auto& conflict:m.conflicts)if(seen.count(conflict))return set_err(error,id+" conflicts with "+conflict+"; disable it first."),false;
+    }
     return write_game_mods_key(data_root, join_mods(clean), error);
 }
 
@@ -621,6 +647,66 @@ bool set_enabled(const std::string& data_root, const std::string& id, bool on, s
         cur.erase(it);
     }
     return write_enabled(data_root, cur, error);
+}
+
+FeatureAvailability feature_availability(const std::string &data_root, const std::string &id) {
+    if (id != "freecamera" && id != "tool_durability")
+        return FeatureAvailability::Unavailable;
+    const auto root = mods_root(data_root) / id;
+    if (!fs::is_directory(root / "romfs"))
+        return FeatureAvailability::Missing;
+    if (fs::exists(root / "manifest.json")) {
+        mod_package::Manifest manifest;
+        if (!mod_package::validate(root, data_root, &manifest, nullptr) || manifest.id != id ||
+            (id == "freecamera" && manifest.runtime != mod_package::camera_capability) ||
+            (id == "tool_durability" && manifest.runtime != "romfs.v1"))
+            return FeatureAvailability::Unavailable;
+    } else if (id == "freecamera" &&
+               (!fs::is_directory(mods_root(data_root) / "camera303/romfs") ||
+                !fs::is_regular_file(mods_root(data_root) / "camera303/terrain_scale.txt"))) {
+        return FeatureAvailability::Unavailable;
+    }
+    return FeatureAvailability::Ready;
+}
+bool feature_selected(const std::string &csv, const std::string &id) {
+    const auto ids = split_mods(csv);
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+bool configure_feature(const std::string &data_root, const std::string &id, bool on, const std::string &current_csv,
+                       std::string &result_csv, std::string *error) {
+    if (id != "freecamera" && id != "tool_durability")
+        return set_err(error, "Unknown feature"), false;
+    auto ids = split_mods(current_csv);
+    std::vector<std::string> conflicts;
+    bool legacy_camera = false;
+    if (id == "freecamera")
+        conflicts.push_back("camera303");
+    if (on) {
+        if (feature_availability(data_root, id) != FeatureAvailability::Ready)
+            return set_err(error, "Install a complete, compatible feature package first."), false;
+        const auto root = mods_root(data_root) / id;
+        if (fs::exists(root / "manifest.json")) {
+            mod_package::Manifest m;
+            if (!mod_package::read(root, m, error))
+                return false;
+            conflicts = m.conflicts;
+        } else if (id == "freecamera") {
+            legacy_camera = true;
+        }
+    }
+    ids.erase(std::remove_if(ids.begin(), ids.end(),
+                             [&](const std::string &name) {
+                                 return name == id ||
+                                        std::find(conflicts.begin(), conflicts.end(), name) != conflicts.end();
+                             }),
+              ids.end());
+    if (on) {
+        if (legacy_camera)
+            ids.insert(ids.begin(), "camera303");
+        ids.insert(ids.begin(), id);
+    }
+    result_csv = join_mods(ids);
+    return true;
 }
 
 bool move_enabled(const std::string& data_root, const std::string& id, int delta, std::string* error) {
@@ -649,7 +735,22 @@ bool import_mod(const std::string& data_root, const std::string& source_path, st
     else
         return set_err(error, "pick a mod folder or a .zip"), false;
     if (!ok) return false;
-    if (!set_enabled(data_root, id, true, error)) return false;
+    auto dst=mods_root(data_root)/u8_path(id),old=mods_root(data_root)/u8_path(id+".previous");
+    mod_package::Manifest manifest;
+    auto enabled=read_enabled(data_root);
+    if(fs::exists(dst/"manifest.json",ec)) {
+        if(!mod_package::read(dst,manifest,error)) return false;
+        // Migrate only explicitly superseded feature folders; native bundled mods remain independent.
+        enabled.erase(std::remove_if(enabled.begin(),enabled.end(),[&](const std::string& name){
+            return name==id || std::find(manifest.conflicts.begin(),manifest.conflicts.end(),name)!=manifest.conflicts.end();
+        }),enabled.end());
+        enabled.insert(enabled.begin(),id);
+    } else if(std::find(enabled.begin(),enabled.end(),id)==enabled.end()) enabled.push_back(id);
+    if(!write_enabled(data_root,enabled,error)) {
+        fs::remove_all(dst,ec);if(fs::exists(old,ec))fs::rename(old,dst,ec);
+        return false;
+    }
+    fs::remove_all(old,ec);
     if (out_id) *out_id = id;
     return true;
 }

@@ -24,7 +24,7 @@ import os
 import sys
 
 BUTTONS = {"A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Plus", "Minus", "Up", "Down", "Left", "Right",
-           "LUp", "LDown", "LLeft", "LRight"}
+           "LUp", "LDown", "LLeft", "LRight", "RUp", "RDown", "RLeft", "RRight", "StickL", "StickR"}
 DIRS = {"up": ["LUp"], "down": ["LDown"], "left": ["LLeft"], "right": ["LRight"],
         "up-left": ["LUp", "LLeft"], "up-right": ["LUp", "LRight"],
         "down-left": ["LDown", "LLeft"], "down-right": ["LDown", "LRight"]}

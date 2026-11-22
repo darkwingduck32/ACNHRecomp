@@ -18,6 +18,9 @@ usage: live.py <root> <command> [args]
   wait <frames>                 wait until the game is <frames> further
   play <session> [last frame]   replay a recorded session (the root's sent.txt, or a scenario in that form) at
                                 the frames it was recorded at
+  settings open|close|open-temporal
+                                control settings; open-temporal waits for the first DLSS/FSR frame
+  configure <key> <value>        transient harness setting through config_set; does not save the INI
   alive                         exit 0 when the game process of this root is running
 <root> is a name under private/play/roots or a path.
 """
@@ -34,13 +37,31 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 
 
 def root_of(name):
-    return name if os.path.isdir(name) and "/" in name else os.path.join(REPO, "private", "play", "roots", name)
+    return os.path.abspath(name) if os.path.isdir(name) else os.path.join(REPO, "private", "play", "roots", name)
 
 
 def alive(root):
     pidf = os.path.join(root, "game.pid")
     try:
-        pid = int(open(pidf).read())
+        with open(pidf) as f:
+            pid = int(f.read())
+        if os.name == "nt":
+            # os.kill(pid, 0) terminates processes on Windows; query a handle instead.
+            import ctypes
+            from ctypes import wintypes
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.OpenProcess(0x1000, False, pid)
+            if not handle:
+                return False
+            try:
+                status = wintypes.DWORD()
+                return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(status))) and status.value == 259
+            finally:
+                kernel.CloseHandle(handle)
         os.kill(pid, 0)
         return True
     except (OSError, ValueError):
@@ -49,7 +70,8 @@ def alive(root):
 
 def frame(root):
     try:
-        return int(open(os.path.join(root, "live_frame")).read())
+        with open(os.path.join(root, "live_frame")) as f:
+            return int(f.read())
     except (OSError, ValueError):
         return -1
 
@@ -76,7 +98,19 @@ def write_atomic(path, text):
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         f.write(text)
-    os.rename(tmp, path)
+    os.replace(tmp, path)
+
+
+def png(src, dst, resize=False):
+    if sys.platform == "darwin":
+        cmd = ["sips", "-s", "format", "png"] + (["-Z", "960"] if resize else []) + [src, "--out", dst]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        from PIL import Image
+        with Image.open(src) as im:
+            if resize:
+                im.thumbnail((960, 960))
+            im.save(dst)
 
 
 def send(root, script, wait=True):
@@ -110,6 +144,35 @@ def send(root, script, wait=True):
             if time.time() - t0 > 60 + end / 5:
                 sys.exit("live: timed out waiting for the input to play out")
             time.sleep(0.2)
+    return frame(root)
+
+
+def settings(root, action):
+    if action not in ("open","close","open-temporal"):
+        raise ValueError("settings expects open, close, or open-temporal")
+    need_alive(root)
+    path=os.path.join(root,"ui_live")
+    write_atomic(path,action)
+    start=time.time()
+    while os.path.exists(path):
+        need_alive(root)
+        if time.time()-start>(180 if action=="open-temporal" else 15):raise TimeoutError("renderer did not acknowledge the settings command")
+        time.sleep(.1)
+    return frame(root)
+
+
+def configure(root, key, value):
+    """Transient harness setting; uses config_set without writing the saved INI."""
+    need_alive(root)
+    if not key or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789._' for c in key) or any(c in str(value) for c in '\r\n\0'):
+        raise ValueError('Invalid harness setting')
+    path = os.path.join(root, 'config_live')
+    write_atomic(path, key+'='+str(value))
+    start=time.monotonic()
+    while os.path.exists(path):
+        need_alive(root)
+        if time.monotonic()-start>15: raise TimeoutError('renderer did not acknowledge the setting')
+        time.sleep(.05)
     return frame(root)
 
 
@@ -216,8 +279,7 @@ def sheet(paths, out, scale=4, cols=3):
     tmp = out + ".ppm"
     with open(tmp, "wb") as f:
         f.write(b"P6\n%d %d\n255\n" % (tw * cols, th * n_rows) + b"".join(lines))
-    subprocess.run(["sips", "-s", "format", "png", tmp, "--out", out], check=True, stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL)
+    png(tmp, out)
     os.remove(tmp)
     return out
 
@@ -271,8 +333,7 @@ def shot(root, name=None, full=False, crop=None):
     if crop:
         src = p + ".crop.ppm"
         crop_ppm(p, src, crop)
-    cmd = ["sips", "-s", "format", "png"] + ([] if full or crop else ["-Z", "960"]) + [src, "--out", out]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    png(src, out, resize=not (full or crop))
     for q in new + ([src] if crop else []):
         os.remove(q)
     return out
@@ -299,6 +360,10 @@ def main():
         sys.exit(0 if alive(root) else 1)
     elif cmd == "wait":
         print(wait_frames(root, int(rest[0])))
+    elif cmd == "settings":
+        print(settings(root,rest[0]))
+    elif cmd == "configure":
+        print(configure(root,rest[0],rest[1]))
     elif cmd == "send":
         print(send(root, rest[0], wait="--no-wait" not in rest))
     elif cmd == "play":

@@ -1,0 +1,23 @@
+# Begin only after outdoor control is available, with no menus/dialogue open.
+# Run in an isolated save copy. This sequence does not move the player.
+# Camera speed is wall-time based: record actual headings, never infer a
+# cardinal heading from a frame number when comparing different frame rates.
+press StickR
+wait 180
+mark native_pose
+hold RDown 24
+wait 180
+mark low_view
+hold RRight 240
+wait 180
+mark low_sweep_end
+press StickR
+hold RUp 24
+wait 180
+mark high_view
+hold RRight 240
+wait 180
+mark high_sweep_end
+press StickR
+wait 60
+mark restored

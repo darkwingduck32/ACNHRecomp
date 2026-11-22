@@ -180,6 +180,10 @@ if(NX_TESTS AND NOT ANDROID)
     add_executable(features_test tests/features_test.cpp runtime/src/features/embedded_resources.cpp)
     target_link_libraries(features_test PRIVATE nx_feature_core nx_resource_data)
     add_test(NAME native_features COMMAND features_test)
+    add_executable(narrative_observation_test tests/narrative_observation_test.cpp)
+    target_include_directories(narrative_observation_test PRIVATE runtime/src)
+    target_compile_features(narrative_observation_test PRIVATE cxx_std_20)
+    add_test(NAME narrative_observation COMMAND narrative_observation_test)
     add_executable(resource_delta_test tests/resource_delta_test.cpp)
     target_link_libraries(resource_delta_test PRIVATE nx_resource_data)
     add_test(NAME resource_delta COMMAND resource_delta_test)
@@ -295,6 +299,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/nvn/nvn_extensions.cpp
     runtime/src/features/runtime.cpp
     runtime/src/features/builtins.cpp
+    runtime/src/features/narrative/native.cpp
     runtime/src/features/tool_durability/native.cpp
     runtime/src/features/embedded_resources.cpp
     runtime/src/game_folder.cpp

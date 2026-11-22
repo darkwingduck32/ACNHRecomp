@@ -625,6 +625,12 @@ else()
     endif()
 endif()
 
+if(NX_TESTS AND NOT ANDROID AND NX_VULKAN_INCLUDE)
+    add_executable(upload_dedup_test tests/upload_dedup_test.cpp runtime/src/nvn/nvn_dedup.cpp)
+    target_include_directories(upload_dedup_test PRIVATE runtime/include runtime/src runtime/src/nvn "${NX_VULKAN_INCLUDE}")
+    add_test(NAME upload_dedup COMMAND upload_dedup_test)
+endif()
+
 # The settings screen (runtime/src/ui): Dear ImGui (NX_IMGUI_DIR, above). Without it the screen is a stub;
 # config.ini still works.
 if(EXISTS "${NX_IMGUI_DIR}/imgui.cpp")

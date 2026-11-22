@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "platform.h"
+#include "thread_time.h"
 
 #if defined(__linux__) && !defined(__ANDROID__)
 #include <fcntl.h>
@@ -38,15 +39,7 @@ namespace nx::plat {
 
 namespace {
 
-uint64_t thread_cpu_ns() {
-#if defined(CLOCK_THREAD_CPUTIME_ID)
-    timespec ts{};
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
-    return uint64_t(ts.tv_sec) * 1'000'000'000ull + uint64_t(ts.tv_nsec);
-#else
-    return 0;
-#endif
-}
+uint64_t thread_cpu_ns() { return nx::thread_cpu_time_ns(); }
 
 #if defined(__ANDROID__)
 // Cluster of each CPU, 0 = slowest, from cpufreq's highest clock.

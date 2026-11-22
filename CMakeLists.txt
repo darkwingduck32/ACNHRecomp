@@ -85,6 +85,32 @@ endif()
 # Unit tests of runtime pieces that build without the game (docs/nvn/WINDOWS-PLAN.md, "Test plan"): ctest.
 option(NX_TESTS "Build the standalone unit tests" OFF)
 if(NX_TESTS AND NOT ANDROID)
+    if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(thread_time_test tests/thread_time_test.cpp runtime/src/thread_time.cpp)
+        target_include_directories(thread_time_test PRIVATE runtime/src)
+        target_compile_features(thread_time_test PRIVATE cxx_std_20)
+        add_test(NAME thread_time COMMAND thread_time_test)
+    endif()
+    add_executable(freecamera_test tests/freecamera_test.cpp)
+    target_include_directories(freecamera_test PRIVATE runtime/src)
+    add_test(NAME freecamera COMMAND freecamera_test)
+    add_executable(background_scan_test tests/background_scan_test.cpp)
+    target_include_directories(background_scan_test PRIVATE runtime/src)
+    find_package(Threads REQUIRED)
+    target_link_libraries(background_scan_test PRIVATE Threads::Threads)
+    add_test(NAME background_scan COMMAND background_scan_test)
+    set_tests_properties(background_scan PROPERTIES TIMEOUT 10)
+    add_executable(uniform_reads_test tests/uniform_reads_test.cpp)
+    add_executable(instance_link_test tests/instance_link_test.cpp runtime/src/nvn/nvn_spirv_instance.cpp
+                   runtime/src/nvn/nvn_spirv_instance_link.cpp)
+    target_compile_definitions(instance_link_test PRIVATE NX_INSTANCE_STANDALONE)
+    target_include_directories(instance_link_test PRIVATE runtime/src/nvn)
+    add_test(NAME instance_link COMMAND instance_link_test)
+    target_include_directories(uniform_reads_test PRIVATE runtime/src/nvn)
+    add_test(NAME uniform_reads COMMAND uniform_reads_test)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/private/game/spirv/2330b41795e4250d.spv")
+        add_test(NAME uniform_reads_acnh COMMAND uniform_reads_test "${CMAKE_SOURCE_DIR}/private/game/spirv")
+    endif()
     enable_testing()
     add_executable(gpu_pick_test tests/gpu_pick_test.cpp runtime/src/nvn/nvn_gpu_pick.cpp)
     target_compile_definitions(gpu_pick_test PRIVATE NX_GPU_PICK_STANDALONE)
@@ -149,10 +175,29 @@ endif()
 # Dear ImGui: the settings screen and the launcher. tools/setup_acnh.py downloads it into private/third_party/imgui.
 set(NX_IMGUI_DIR "${CMAKE_SOURCE_DIR}/private/third_party/imgui" CACHE PATH "Dear ImGui sources")
 
-add_library(nx_save_storage STATIC runtime/src/save_storage.cpp runtime/src/save_profiles.cpp)
+include(runtime/src/features/features.cmake)
+if(NX_TESTS AND NOT ANDROID)
+    add_executable(features_test tests/features_test.cpp runtime/src/features/embedded_resources.cpp)
+    target_link_libraries(features_test PRIVATE nx_feature_core nx_resource_data)
+    add_test(NAME native_features COMMAND features_test)
+    add_executable(resource_delta_test tests/resource_delta_test.cpp)
+    target_link_libraries(resource_delta_test PRIVATE nx_resource_data)
+    add_test(NAME resource_delta COMMAND resource_delta_test)
+    if(EXISTS "${NX_NATIVE_ASSET_GAME}/mods/freecamera/romfs")
+        add_executable(native_resources_test tests/native_resources_test.cpp runtime/src/features/embedded_resources.cpp)
+        target_link_libraries(native_resources_test PRIVATE nx_feature_core nx_resource_data nx_embedded_resources)
+        add_test(NAME native_resources COMMAND native_resources_test "${NX_NATIVE_ASSET_GAME}" "${CMAKE_BINARY_DIR}/native-resource-test-cache")
+    endif()
+endif()
+add_library(nx_save_storage STATIC runtime/src/save_storage.cpp runtime/src/save_profiles.cpp runtime/src/save_archive.cpp)
 target_include_directories(nx_save_storage PUBLIC ${CMAKE_SOURCE_DIR}/runtime/src)
 
-add_library(nx_mod_manager STATIC runtime/src/mod_manager.cpp)
+add_library(nx_mod_manager STATIC runtime/src/mod_manager.cpp runtime/src/mod_package.cpp)
+if(NX_TESTS AND NOT ANDROID)
+    add_executable(mod_package_test tests/mod_package_test.cpp launcher/save_log_stub.cpp)
+    target_link_libraries(mod_package_test PRIVATE nx_mod_manager)
+    add_test(NAME mod_package COMMAND mod_package_test)
+endif()
 target_include_directories(nx_mod_manager PUBLIC ${CMAKE_SOURCE_DIR}/runtime/src)
 target_link_libraries(nx_mod_manager PUBLIC nx_save_storage)
 if(WIN32)
@@ -160,8 +205,16 @@ if(WIN32)
 endif()
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)
+    target_link_libraries(nx_save_storage PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(nx_save_storage PRIVATE NX_HAVE_ZLIB)
     target_link_libraries(nx_mod_manager PRIVATE ZLIB::ZLIB)
     target_compile_definitions(nx_mod_manager PRIVATE NX_HAVE_ZLIB)
+endif()
+
+if(NX_TESTS AND NOT ANDROID)
+    add_executable(save_profiles_test tests/save_profiles_test.cpp launcher/save_log_stub.cpp)
+    target_link_libraries(save_profiles_test PRIVATE nx_save_storage)
+    add_test(NAME save_profiles COMMAND save_profiles_test)
 endif()
 
 # The launcher (launcher/): the program a player opens first. It has no game code, so it builds from a plain
@@ -236,7 +289,14 @@ foreach(mod ${NX_MODULES})
     endif()
 endforeach()
 
+include(runtime/src/features/camera/camera.cmake)
+
 set(NX_RUNTIME_SOURCES
+    runtime/src/nvn/nvn_extensions.cpp
+    runtime/src/features/runtime.cpp
+    runtime/src/features/builtins.cpp
+    runtime/src/features/tool_durability/native.cpp
+    runtime/src/features/embedded_resources.cpp
     runtime/src/game_folder.cpp
     runtime/src/main.cpp
     runtime/src/sampler.cpp
@@ -293,6 +353,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/perf_hint.cpp
     runtime/src/thermal.cpp
     runtime/src/frame_stats.cpp
+    runtime/src/thread_time.cpp
     runtime/src/write_watch.cpp
     runtime/src/nvn/nvn_caps.cpp
     runtime/src/nvn/nvn_renderpass.cpp
@@ -338,6 +399,7 @@ set(NX_RUNTIME_SOURCES
     runtime/src/nvn/nvn_spirv_nan.cpp
     runtime/src/nvn/nvn_spirv_fragcoord.cpp
     runtime/src/nvn/nvn_spirv_instance.cpp
+    runtime/src/nvn/nvn_spirv_instance_link.cpp
     runtime/src/nvn/nvn_spirv_alpha.cpp
     runtime/src/nvn/nvn_spirv_clamp.cpp
     runtime/src/nvn/nvn_spirv_motion.cpp
@@ -563,6 +625,12 @@ else()
     endif()
 endif()
 
+if(NX_TESTS AND NOT ANDROID AND NX_VULKAN_INCLUDE)
+    add_executable(upload_dedup_test tests/upload_dedup_test.cpp runtime/src/nvn/nvn_dedup.cpp)
+    target_include_directories(upload_dedup_test PRIVATE runtime/include runtime/src runtime/src/nvn "${NX_VULKAN_INCLUDE}")
+    add_test(NAME upload_dedup COMMAND upload_dedup_test)
+endif()
+
 # The settings screen (runtime/src/ui): Dear ImGui (NX_IMGUI_DIR, above). Without it the screen is a stub;
 # config.ini still works.
 if(EXISTS "${NX_IMGUI_DIR}/imgui.cpp")
@@ -576,7 +644,7 @@ else()
     target_sources(${NX_GAME} PRIVATE runtime/src/ui/ui_stub.cpp)
 endif()
 target_sources(${NX_GAME} PRIVATE runtime/src/saves.cpp)
-target_link_libraries(${NX_GAME} PRIVATE nx_save_storage)
+target_link_libraries(${NX_GAME} PRIVATE nx_save_storage nx_camera nx_mod_manager nx_feature_core nx_embedded_resources nx_feature_capabilities nx_resource_data)
 
 # Mbed TLS (Apache-2.0): the game's nn::ssl connections (NEX, the island services) and the signed account id_token
 # for Nextendo Online (docs/NEXTENDO.md). Fetched as a release archive on the first configure.

@@ -18,6 +18,7 @@
 #include <nx/runtime.h>
 
 #include "platform.h"
+#include "features/runtime.h"
 
 namespace nx {
 
@@ -231,13 +232,16 @@ HleFn hle_lookup(const char* name) {
 // Registered at static init, read-only afterwards: the generated code asks for every hooked instruction it runs.
 
 namespace {
-std::unordered_map<uint64_t, HleFn>& hooks() {
-    static std::unordered_map<uint64_t, HleFn> h;
+std::unordered_map<uint64_t, std::vector<HleFn>>& hooks() {
+    static std::unordered_map<uint64_t, std::vector<HleFn>> h;
     return h;
 }
 }  // namespace
 
-HookRegistrar::HookRegistrar(uint64_t offset, HleFn fn) { hooks()[offset] = fn; }
+HookRegistrar::HookRegistrar(uint64_t offset, HleFn fn) {
+    auto& chain=hooks()[offset];
+    if(std::find(chain.begin(),chain.end(),fn)==chain.end())chain.push_back(fn);
+}
 
 }  // namespace nx
 
@@ -245,7 +249,7 @@ HookRegistrar::HookRegistrar(uint64_t offset, HleFn fn) { hooks()[offset] = fn; 
 NX_GAME_API void nx_hook(nx::CPU& c, uint64_t pc) {
     auto it = nx::hooks().find(pc - nx::kModuleBase);
     if (it != nx::hooks().end()) [[likely]]
-        it->second(c);
+        for(auto fn:it->second) fn(c);
     else {
         static std::atomic<int> logged{0};
         if (logged++ < 8) nx::log("hook at %s compiled in, nothing registered for it", nx::describe(pc).c_str());
@@ -477,6 +481,7 @@ FastModule fast_module(const ModuleInfo* mi) {
     auto* funcs = new FuncEntry[mi->func_count + 1];
     std::copy(mi->funcs, mi->funcs + mi->func_count, funcs);
     std::sort(funcs, funcs + mi->func_count, [](const FuncEntry& a, const FuncEntry& b) { return a.offset < b.offset; });
+    features::module_loaded(*mi, funcs);
     funcs[mi->func_count] = {~0ull, nullptr};
     size_t blocks = (mi->text_size + 63) / 64;
     auto* block = new uint32_t[blocks];

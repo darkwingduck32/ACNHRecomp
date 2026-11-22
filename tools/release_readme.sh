@@ -63,9 +63,14 @@ your saves (the "user" folder inside your game folder) before playing.
 4. Keep it handy
    $KEEP
 
-Brazilian Portuguese and 60 FPS: the first start downloads the pt-BR fan translation and the files of the 60 FPS
-SpeedFix into your game folder (a few seconds, checked before use). Portuguese is then in the game's languages,
-and the game runs at 60 FPS at its normal speed. Without internet it starts normally and tries again the next day.
+Camera features: Camera and 360 Camera in Settings control FOV, zoom, fog reduction, orbit and visual enhancements.
+Reviewed model patches and extended tool durability are enabled by default. Models reconstruct from your own
+matching game data and are cached locally; complete replacement models are not included. Restart to apply FOV,
+model selection or durability changes. Right stick: orbit; hold R3 and move vertically: zoom; tap R3: recenter.
+
+Brazilian Portuguese and 60 FPS: the pt-BR fan translation and SpeedFix are bundled as separately managed mods.
+The player installs them into your game folder after checking their contents. SpeedFix retains its own files
+and implementation. Existing user choices are preserved.
 
 New versions: the launcher looks for one when it opens and says so on its home page, with a button to download
 it (Settings: "Look for new versions" turns it off). The version in use is in the launcher's Settings and in the
@@ -77,7 +82,7 @@ Settings: in the launcher (Settings), or in the game with F1 (on a controller: M
 3.0.3 of the game gets every fix of the port.
 
 Problems, questions, saves: our Discord (https://discord.gg/VJW9Dtdu7a) or the issues of
-https://github.com/Nycolazs/ACNHRecomp. A report made in the game's settings (About > Report a problem) helps a lot.
+https://github.com/darkwingduck32/ACNHRecomp. A report made in the game's settings (About > Report a problem) helps a lot.
 
 Not affiliated with or endorsed by Nintendo. Animal Crossing is a trademark of Nintendo. Only play a copy you own.
 
@@ -88,6 +93,9 @@ text | sed "s/\$/${EOL%$'\n'}/" > "$DIR/README.txt"
 cp LICENSE "$DIR/LICENSE.txt"
 if [ -n "$4" ]; then
   cp "$4/_deps/mbedtls-src/LICENSE" "$DIR/LICENSE-mbedtls.txt"
+  mkdir -p "$DIR/licenses"
+  cp "$4/_deps/nx_zstd-src/LICENSE" "$DIR/licenses/Zstandard-LICENSE.txt"
+  cp private/third_party/imgui/LICENSE.txt "$DIR/licenses/ImGui-LICENSE.txt"
 fi
 {
   echo "ACNHRecomp release packages carry these libraries, unmodified, under their own licences:"
@@ -99,4 +107,5 @@ fi
   echo "(BSD 3-clause). libvorbis and libogg: https://xiph.org (BSD 3-clause). Dear ImGui (in the launcher and the"
   echo "settings screen): https://github.com/ocornut/imgui (MIT). Mbed TLS (linked into acnh, for Nextendo Online):"
   echo "https://github.com/Mbed-TLS/mbedtls (Apache 2.0, text in LICENSE-mbedtls.txt)."
+  echo "Zstandard (linked into acnh, BSD): https://github.com/facebook/zstd (text in licenses/Zstandard-LICENSE.txt)."
 } | sed "s/\$/${EOL%$'\n'}/" > "$DIR/THIRD-PARTY.txt"

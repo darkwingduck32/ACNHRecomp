@@ -1,7 +1,7 @@
-// The settings screen's folder picker and "open folder" while the game runs (the Saves page: import, export, the
+// The settings screen's save picker and "open folder" while the game runs (the Saves page: import, export, the
 // save folder). NativeActivity cannot get an activity result, so platform_android.cpp starts this one: with "out" it
 // asks for a folder (the system picker) and writes its path to that file ("" when cancelled), which pick_result()
-// reads; with "open" it shows that folder in a file manager.
+// reads; with "zip" it copies a selected ZIP into the app's cache and returns that path; with "open" it shows a folder.
 package io.github.acnhrecomp;
 
 import android.app.Activity;
@@ -14,11 +14,13 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 public class Picker extends Activity {
     private static final int PICK = 1;
     private String out;
+    private boolean zip;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -30,9 +32,18 @@ public class Picker extends Activity {
             return;
         }
         out = getIntent().getStringExtra("out");
+        String zipOut = getIntent().getStringExtra("zip");
+        zip = zipOut != null;
+        if (zip) out = zipOut;
         if (state != null) return;  // re-created while the picker is up: its result still comes here
         try {
-            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK);
+            Intent picker = new Intent(zip ? Intent.ACTION_OPEN_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT_TREE);
+            if (zip) {
+                picker.addCategory(Intent.CATEGORY_OPENABLE);
+                picker.setType("application/zip");
+                picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"application/zip", "application/x-zip-compressed"});
+            }
+            startActivityForResult(picker, PICK);
         } catch (Exception e) {
             write("");
             finish();
@@ -45,13 +56,35 @@ public class Picker extends Activity {
         String path = "";
         if (request == PICK && result == RESULT_OK && data != null && data.getData() != null) {
             try {
-                path = pathOf(data.getData());
+                path = zip ? copyZip(data.getData()) : pathOf(data.getData());
             } catch (Exception e) {
                 path = "";
             }
         }
         write(path);
         finish();
+    }
+
+    // Document providers may expose only a content URI. Keep a local copy until import is confirmed or cancelled;
+    // the next ZIP selection replaces it, so cached imports do not accumulate.
+    private String copyZip(Uri uri) throws Exception {
+        File file = new File(getCacheDir(), "save-import.zip");
+        try (InputStream in = getContentResolver().openInputStream(uri);
+             FileOutputStream dest = new FileOutputStream(file)) {
+            if (in == null) throw new java.io.IOException("Cannot read ZIP");
+            byte[] buffer = new byte[65536];
+            long total = 0;
+            int size;
+            while ((size = in.read(buffer)) != -1) {
+                total += size;
+                if (total > (1L << 30)) throw new java.io.IOException("ZIP too large for a save");
+                dest.write(buffer, 0, size);
+            }
+        } catch (Exception e) {
+            file.delete();
+            throw e;
+        }
+        return file.getAbsolutePath();
     }
 
     private void write(String path) {

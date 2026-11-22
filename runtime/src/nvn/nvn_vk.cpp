@@ -751,7 +751,9 @@ bool gpu_is_integrated() { return g_integrated; }
 bool gpu_is_nvidia() { return g_nvidia; }
 bool gpu_require_subgroup32() { return g_require_sg32; }
 
-uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want) {
+uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags prefer) {
+    if (prefer) for (uint32_t k = 0; k < g_memory.memoryTypeCount; k++)
+        if ((bits >> k) & 1 && (g_memory.memoryTypes[k].propertyFlags & (want | prefer)) == (want | prefer)) return k;
     for (uint32_t k = 0; k < g_memory.memoryTypeCount; k++)
         if ((bits >> k) & 1 && (g_memory.memoryTypes[k].propertyFlags & want) == want) return k;
     return 0;
@@ -1328,18 +1330,19 @@ void present_image(const int32_t* crop, Record&& record) {
         frame_sig_flush(presents);
     }
     const bool due = real && frame_dump_due(presents);
-    // The game's boot shows black frames for a while: every other one is read back until one has something on it. A
+    // The game's boot shows black frames for a while: probe a small converted image every other frame. A
     // window held back for that (plat::picture_shown) appears then, and the startup hint follows (ui.cpp).
     static bool picture = false;
     static uint64_t first_ns = 0;
     const bool probe = real && !picture && src && presents % 2 == 0;
-    bool dump = src && (due || probe);
-    if (dump) transition(g_cb, *src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);  // the present pass left it sampled
+    bool dump = src && due;
+    if (dump || probe) transition(g_cb, *src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);  // the present pass left it sampled
     dump = dump && frame_dump_record(g_cb, *src);
+    const bool probed = probe && picture_probe_record(g_cb, *src);
     VkSemaphore rendered = async_gpu() ? frame_rendered_semaphore(index) : g_rendered;
     parts.mark(1);
     if (async_gpu())  // the blit's fence is not waited for (vkQueuePresentKHR waits on `rendered`); a dumped frame is
-        frame_submit(acquired, rendered, {}, dump);
+        frame_submit(acquired, rendered, {}, dump || probed);
     else
         end_and_wait(acquired, rendered);
     // Handed to the presenter thread: game frames, and on Android without frame generation their repeats too.
@@ -1366,10 +1369,11 @@ void present_image(const int32_t* crop, Record&& record) {
     if (dump && due) frame_dump_write(*src, presents);
     if (due) debug_dump_textures(presents);
     bool shown_now = false;
+    const bool detected = real && !picture && probed && picture_probe_lit();
     if (real && !picture) {
         if (!first_ns) first_ns = plat::monotonic_ns();
         // Not every format can be read back; after a minute the window shows whatever it holds.
-        picture = (dump && probe && frame_readback_lit(*src)) || plat::monotonic_ns() - first_ns > 60'000'000'000ull;
+        picture = detected || plat::monotonic_ns() - first_ns > 60'000'000'000ull;
         shown_now = picture;
     }
     VkPresentTimeGOOGLE when{uint32_t(display_timing_next(real)), 0};
@@ -1398,7 +1402,10 @@ void present_image(const int32_t* crop, Record&& record) {
     parts.done(real);
     if (real) plat::frame_presented();  // cores, CPU time, present intervals (frame_stats.cpp)
     if (shown_now) {
-        log("nvn/vk: first picture at present %llu", (unsigned long long)presents);
+        picture_probe_release();
+        log("nvn/vk: first picture at present %llu (%.2f s after first present, %s)",
+            (unsigned long long)presents, double(plat::monotonic_ns() - first_ns) / 1e9,
+            detected ? "probe" : "timeout");
         plat::picture_shown();
         ui::ui_picture_shown();
     }

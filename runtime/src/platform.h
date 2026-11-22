@@ -128,6 +128,7 @@ enum : uint64_t {
     kStickLLeft = 1ull << 16, kStickLUp = 1ull << 17, kStickLRight = 1ull << 18, kStickLDown = 1ull << 19,
     kStickRLeft = 1ull << 20, kStickRUp = 1ull << 21, kStickRRight = 1ull << 22, kStickRDown = 1ull << 23,
     kSettingsButton = 1ull << 63,  // not a pad button: the drawn controls' gear, which opens the settings screen
+    kFreeCameraZoom = 1ull << 62, kFreeCameraReset = 1ull << 61, // host-only shortcuts, stripped before guest HID
 };
 constexpr int32_t kStickMax = 0x7FFF;
 

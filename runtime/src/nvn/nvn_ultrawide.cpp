@@ -1,4 +1,5 @@
 #include "nvn_ultrawide.h"
+#include "features/runtime.h"
 
 #include <algorithm>
 #include <atomic>
@@ -414,7 +415,8 @@ void rewrite(uint64_t object, Camera& c, float k, bool dirty) {
     // (the map app, the NookPhone: 40 degrees, far plane 10000) keep Vert+, or their sides were cut off.
     // NX_UW_VERT_PLUS=1: Vert+ for all.
     static const bool vert_plus = std::getenv("NX_UW_VERT_PLUS") && std::getenv("NX_UW_VERT_PLUS")[0] == '1';
-    const bool world = f32_of(c.fov_base) < 0.5f;
+    const bool world = f32_of(c.fov_base) < 0.5f ||
+        features::world_projection(f32_of(w[0x98 / 4]), f32_of(w[0x9c / 4]), f32_of(c.fov_base));
     if (k < 1.0f && (vert_plus || !world)) fov = bits_of(2.0f * std::atan(std::tan(f32_of(c.fov_base) * 0.5f) / k));
     if (a != wide_bits || f != fov) {  // with the half-angle terms the matrix is made from
         float half = f32_of(fov) * 0.5f;
@@ -478,8 +480,15 @@ void projection_update(CPU& c) {
                 double(f[0]), double(f[1]), double(f[2]), double(f[6]), double(f[7]), double(f[8]),
                 (unsigned long long)(c.x[30] - kModuleBase));
         }
-        if (g_cams.size() == 1 || (g_cams.size() & (g_cams.size() - 1)) == 0)
-            log("nvn: screen scale: %zu camera projections seen", g_cams.size());
+        // The game recycles projection objects, so the live count can return
+        // to eight every frame. Desktop logging flushes synchronously: report
+        // new high-water marks instead of writing the same diagnostic forever.
+        static size_t most_cameras = 0;
+        if (g_cams.size() > most_cameras) {
+            most_cameras = g_cams.size();
+            if (most_cameras == 1 || (most_cameras & (most_cameras - 1)) == 0)
+                log("nvn: screen scale: %zu camera projections seen", most_cameras);
+        }
     }
     rewrite(object, it->second, k, false);  // made right after this: no need to mark it
 }

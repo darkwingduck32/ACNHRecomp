@@ -1,0 +1,14 @@
+# Start during outdoor gameplay. Capture with live.py sweep and 12 frames.
+# A wide elevated orbit exposes terrain omitted by native-camera culling.
+press StickR
+wait 30
+hold RDown 60
+wait 30
+hold StickR 48
+at 140
+hold RDown 48
+wait 60
+hold RRight 180
+wait 60
+hold RUp 60
+wait 60

@@ -5,6 +5,7 @@
 #include <cctype>
 #include <atomic>
 #include <deque>
+#include <filesystem>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -17,6 +18,7 @@
 #include <nx/runtime.h>
 
 #include "config.h"
+#include "features/runtime.h"
 #include "platform.h"
 
 namespace nx {
@@ -29,12 +31,14 @@ constexpr uint32_t kStyleFullKey = 1u << 0;
 uint64_t g_sampling = 0;
 
 // Scripted input for automated runs: NX_INPUT="3300:A,3900:A,4200:Down,4300:LUp,4400:T640x360" holds the button (A B X Y
-// L R ZL ZR Plus Minus Up Down Left Right; or tilts the left stick: LUp, LDown, LLeft, LRight; or touches the screen at
+// L R ZL ZR Plus Minus Up Down Left Right StickL StickR; or tilts either stick:
+// LUp, LDown, LLeft, LRight / RUp, RDown, RLeft, RRight; or touches the screen at
 // x, y) for 8 frames from the given frame. M<x>x<y> moves the mouse there (button up) on that frame.
 struct Scripted {
     uint64_t frame;
     uint64_t buttons;
     int32_t lx = 0, ly = 0;  // left stick (LUp, LDown, LLeft, LRight): full tilt
+    int32_t rx = 0, ry = 0;  // right stick: full tilt, passed through normal camera controls
     bool touch = false;      // T<x>x<y>: a touch at that point of the 1280x720 screen
     bool move = false;       // M<x>x<y>: the mouse moves to that point
     uint32_t tx = 0, ty = 0;
@@ -52,12 +56,17 @@ std::vector<Scripted> parse_script(const std::string& s, uint64_t base) {
             std::string b = item.substr(colon + 1);
             uint64_t bits = b == "A" ? kA : b == "B" ? kB : b == "X" ? kX : b == "Y" ? kY : b == "Plus" ? kPlus :
                             b == "Minus" ? kMinus : b == "Up" ? kUp : b == "Down" ? kDown : b == "Left" ? kLeft :
-                            b == "Right" ? kRight : b == "L" ? kL : b == "R" ? kR : b == "ZL" ? kZL : b == "ZR" ? kZR : 0;
+                            b == "Right" ? kRight : b == "L" ? kL : b == "R" ? kR : b == "ZL" ? kZL : b == "ZR" ? kZR :
+                            b == "StickL" ? kStickL : b == "StickR" ? kStickR : 0;
             Scripted sc{base + std::strtoull(item.c_str(), nullptr, 10), bits};
             if (b == "LUp") sc.ly = kStickMax;
             if (b == "LDown") sc.ly = -kStickMax;
             if (b == "LLeft") sc.lx = -kStickMax;
             if (b == "LRight") sc.lx = kStickMax;
+            if (b == "RUp") sc.ry = kStickMax;
+            if (b == "RDown") sc.ry = -kStickMax;
+            if (b == "RLeft") sc.rx = -kStickMax;
+            if (b == "RRight") sc.rx = kStickMax;
             if (b.size() > 1 && b[0] == 'T' && std::sscanf(b.c_str() + 1, "%ux%u", &sc.tx, &sc.ty) == 2) sc.touch = true;
             if (b.size() > 1 && b[0] == 'M' && std::sscanf(b.c_str() + 1, "%ux%u", &sc.tx, &sc.ty) == 2) sc.move = true;
             v.push_back(sc);
@@ -96,7 +105,9 @@ void poll_live(std::vector<Scripted>& script) {
         if (FILE* f = fopen_utf8(tmp, "wb")) {
             std::fprintf(f, "%llu\n", (unsigned long long)g_frame.load());
             std::fclose(f);
-            std::rename(tmp.c_str(), out.c_str());
+            std::error_code error;
+            // filesystem::rename replaces an existing destination on Windows too.
+            std::filesystem::rename(std::filesystem::u8path(tmp), std::filesystem::u8path(out), error);
         }
     }
     if (!live_files()) return;
@@ -153,6 +164,14 @@ PadState read() {
             if (s.lx) p.lx = s.lx;
             if (s.ly) p.ly = s.ly;
         }
+    bool right_stick = false;
+    for (const auto& s : script)
+        if ((s.rx || s.ry) && g_frame >= s.frame && g_frame < s.frame + 8) {
+            if (!right_stick) p.rx = p.ry = 0, right_stick = true;
+            if (s.rx) p.rx = s.rx;
+            if (s.ry) p.ry = s.ry;
+        }
+    features::input(p);
     stick_buttons(p);
     return p;
 }

@@ -417,6 +417,10 @@ void trace_draw(const Targets& t, uint32_t mode, bool indexed, const Cmd& c, con
     static const char* target_env = std::getenv("NX_TRACE_TARGET");
     static const uint64_t trace_target = target_env ? std::strtoull(target_env, nullptr, 16) : 0;
     static uint64_t traced = 0;
+    // Narrow a bounded trace to a known primitive size without logging the
+    // thousands of unrelated terrain draws preceding a water/fullscreen quad.
+    static const uint64_t trace_vertices = std::getenv("NX_TRACE_VERT_COUNT")
+        ? std::strtoull(std::getenv("NX_TRACE_VERT_COUNT"), nullptr, 10) : 0;
     // NX_TRACE_FS_HASH=<hash>[,<hash>...]: only draws with those fragment shaders.
     static const char* fs_env = std::getenv("NX_TRACE_FS_HASH");
     static const uint64_t trace_count = std::getenv("NX_TRACE_COUNT") ? std::strtoull(std::getenv("NX_TRACE_COUNT"), nullptr, 10) : 80;
@@ -424,7 +428,7 @@ void trace_draw(const Targets& t, uint32_t mode, bool indexed, const Cmd& c, con
     static const uint64_t trace_frame = std::getenv("NX_TRACE_FRAME") ? std::strtoull(std::getenv("NX_TRACE_FRAME"), nullptr, 10) : 0;
     LiveDebug& live = live_debug();
     if ((trace_env && (*g_stats).done >= trace_from && traced < trace_count && (!trace_target || t.colors[0] == trace_target) &&
-         g_frame.load(std::memory_order_relaxed) >= trace_frame &&
+         g_frame.load(std::memory_order_relaxed) >= trace_frame && (!trace_vertices || count == trace_vertices) &&
          (!fs_env || (fs && std::strstr(fs_env, fs->hash.c_str())))) ||  // one hash or a comma list
         (live.trace_left && live.trace_left--)) {
         traced++;
@@ -477,6 +481,23 @@ void trace_draw(const Targets& t, uint32_t mode, bool indexed, const Cmd& c, con
                 if (auto* f = reinterpret_cast<const float*>(guest_bytes(u.address)))
                     log("  vs c%d: %g %g %g %g | %g %g %g %g | %g %g %g %g | %g %g %g %g", blk + 3, f[0], f[1], f[2], f[3],
                         f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11], f[12], f[13], f[14], f[15]);
+        // Park UBER's world deformation constants are outside c3..c6. A
+        // matching view/projection alone does not establish matching geometry.
+        if (std::getenv("NX_TRACE_VS_BLOCKS"))
+            if (const Range& u = (*g_state).uniforms[0][5]; u.address && u.size >= 47*16)
+                if (auto* f = reinterpret_cast<const float*>(guest_bytes(u.address)))
+                    for (int row : {45,46})
+                        log("  vs c8[%d]: %g %g %g %g", row,f[4*row],f[4*row+1],f[4*row+2],f[4*row+3]);
+        if (std::getenv("NX_TRACE_VS_BLOCKS")) {
+            if (const Range& u = (*g_state).uniforms[0][2]; u.address && u.size >= 13*16)
+                if (auto* f = reinterpret_cast<const float*>(guest_bytes(u.address)))
+                    for (int row : {10,11,12})
+                        log("  vs c5[%d]: %g %g %g %g",row,f[4*row],f[4*row+1],f[4*row+2],f[4*row+3]);
+            if (const Range& u = (*g_state).uniforms[1][3]; u.address && u.size >= 30*16)
+                if (auto* f = reinterpret_cast<const float*>(guest_bytes(u.address)))
+                    for (int row : {27,28,29})
+                        log("  fs c6[%d]: %g %g %g %g",row,f[4*row],f[4*row+1],f[4*row+2],f[4*row+3]);
+        }
         if (const Range& u = (*g_state).uniforms[0][0]; u.address)
             if (auto* f = reinterpret_cast<const float*>(guest_bytes(u.address)))
                 log("  vs c3 @%llx: %g %g %g %g | %g %g %g %g", (unsigned long long)u.address, f[0], f[1], f[2], f[3], f[4],

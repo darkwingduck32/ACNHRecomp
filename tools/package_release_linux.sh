@@ -60,6 +60,14 @@ chmod +x "$R/Start ACNHRecomp.sh"
 # The pt-BR translation and the SpeedFix files, which the player copies into the game folder (mod_fetch.cpp).
 tools/bundle_mods.sh "$R"
 tools/release_readme.sh "$R" linux "$VER" "$BUILD"
+if [ -n "$SDL" ]; then
+    cp "$SDL/share/licenses/SDL3/LICENSE.txt" "$R/licenses/SDL3-LICENSE.txt"
+else
+    cp /usr/share/doc/libsdl3-dev/copyright "$R/licenses/SDL3-LICENSE.txt"
+fi
+for dep in libvpx-dev libvorbis-dev libogg-dev; do
+    cp "/usr/share/doc/$dep/copyright" "$R/licenses/$dep-LICENSE.txt"
+done
 # A tarball keeps the executables executable.
 tar -czf "$OUT.tar.gz" -C "$OUT" ACNHRecomp
 rm -rf "${OUT:?}"

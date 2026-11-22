@@ -1,3 +1,4 @@
+#include "mod_package.h"
 // The launcher's pages (launcher.h), in the settings screen's style (ui/theme.h).
 //
 //   welcome   two ways in: set up from the game files, or pick a build folder made before
@@ -33,6 +34,9 @@
 #include "imgui_internal.h"
 
 #include "mod_manager.h"
+#include "features/acnh_settings.h"
+#include "features/capabilities.h"
+#include "features/camera/preferences.h"
 #include "save_profiles.h"
 
 #include "ui/i18n.h"
@@ -199,7 +203,8 @@ ImVec2 g_drag_pos;
 ImVec2 g_page_min, g_page_max;  // the visible part of the page (it scrolls)
 
 // File dialogs answer on their own time (and maybe on another thread): queued here, applied in the frame.
-enum Target { kPickGame, kPickMod, kPickInstall, kPickBuild, kPickSaveImport, kPickModImportFolder, kPickModImportZip };
+enum Target { kPickGame, kPickMod, kPickInstall, kPickBuild, kPickSaveImport, kPickModImportFolder, kPickModImportZip,
+              kPickSaveImportZip };
 struct Picked {
     int target;
     std::vector<std::string> paths;
@@ -286,6 +291,12 @@ void refresh_mods() {
     g_mods.clear();
     if (*g_build_problem != 0) return;
     g_mods = nx::mod_manager::list_mods(g_build.data);
+    std::erase_if(g_mods, [&](const auto& mod) {
+        if (mod.id=="freecamera" || mod.id=="camera303" || mod.id=="tool_durability") return true;
+        nx::mod_package::Manifest manifest;
+        return nx::mod_package::read(std::filesystem::u8path(g_build.data)/"mods"/mod.id,manifest,nullptr) &&
+               manifest.runtime==nx::mod_package::camera_capability;
+    });
 }
 
 void refresh_save_profiles() {
@@ -328,7 +339,11 @@ void refresh_save_profiles() {
     }
 }
 
-void load_game_ini() { g_game_ini.load(g_build.data + "/config.ini"); }
+void load_game_ini() {
+    g_game_ini.load(g_build.data + "/config.ini");
+    if (nx::features::migrate_acnh_settings([](const std::string& key) { return g_game_ini.get(key); },
+        [](const std::string& key, const std::string& value) { g_game_ini.set(key, value); })) g_game_ini.save();
+}
 
 // ---- dialogs --------------------------------------------------------------------------------------------------
 
@@ -362,6 +377,7 @@ void pick(Target t) {
             break;
         case kPickBuild: SDL_ShowOpenFolderDialog(on_picked, user, g_window, nullptr, false); break;
         case kPickSaveImport: SDL_ShowOpenFolderDialog(on_picked, user, g_window, where, false); break;
+        case kPickSaveImportZip: SDL_ShowOpenFileDialog(on_picked, user, g_window, zip, 1, where, false); break;
         case kPickModImportFolder: SDL_ShowOpenFolderDialog(on_picked, user, g_window, where, false); break;
         case kPickModImportZip: SDL_ShowOpenFileDialog(on_picked, user, g_window, zip, 2, where, false); break;
     }
@@ -446,7 +462,8 @@ void apply_picks() {
         switch (p.target) {
             case kPickInstall: g_install = first, g_prereqs = check_prerequisites(g_install); break;
             case kPickBuild: use_build_folder(first); break;
-            case kPickSaveImport: {
+            case kPickSaveImport:
+            case kPickSaveImportZip: {
                 std::string err;
                 std::string id = nx::save_profiles::create_empty_profile(g_build.data, &err);
                 if (id.empty()) {
@@ -457,8 +474,11 @@ void apply_picks() {
                     toast(tr("launcher.saves.import_ok"));
                     select_save_profile(id);
                     refresh_save_profiles();
-                } else
+                } else {
                     g_banner = trf("launcher.saves.import_failed", err);
+                    nx::save_profiles::delete_profile(g_build.data, id);
+                    refresh_save_profiles();
+                }
                 break;
             }
             case kPickModImportFolder:
@@ -1947,10 +1967,19 @@ void saves_popup() {
                 select_save_profile(id);
         }
         ImGui::SameLine();
-        if (button(import_l, kBlue, true, pair_w)) pick(kPickSaveImport);
+        if (button(import_l, kBlue, true, pair_w)) ImGui::OpenPopup("save_import_source");
+        const bool choosing_import = ImGui::IsPopupOpen("save_import_source");
+        ImGui::PushStyleColor(ImGuiCol_NavCursor, col4(kBlue));
+        if (ImGui::BeginPopup("save_import_source")) {
+            if (ImGui::Selectable(tr("saves.pick_folder"))) pick(kPickSaveImport);
+            ImGui::SetItemDefaultFocus();
+            if (ImGui::Selectable(tr("saves.pick_zip"))) pick(kPickSaveImportZip);
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleColor();
         align_right({close_l});
-        if (button(close_l, kWhite) || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
-            ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))
+        if (button(close_l, kWhite) || (!choosing_import && (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+            ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false))))
             g_saves_open = false, g_saves_delete_id.clear(), ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
@@ -2412,37 +2441,95 @@ void footer_home() {
 
 using Choices = std::vector<std::pair<std::string, std::string>>;
 
-void setting_row(const char* label, const char* desc, const char* key, const char* fallback, const Choices& choices) {
+void setting_control_row(const char *label, const char *desc, const char *key,
+                         const std::function<void(float)> &control) {
     float avail = ImGui::GetContentRegionAvail().x;
     bool narrow = avail < S(560);
-    float ctrl_w = narrow ? avail : std::min(S(360), avail * 0.45f);
+    float ctrl_w = narrow ? avail : std::min(S(360), avail * .45f);
     ImGui::PushID(key);
     ImGui::BeginGroup();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + (narrow ? avail : avail - ctrl_w - S(16)));
     ImGui::TextUnformatted(tr(label));
-    if (desc) text_small(tr(desc));
+    if (desc)
+        text_small(tr(desc));
     ImGui::PopTextWrapPos();
     ImGui::EndGroup();
-    if (!narrow) ImGui::SameLine(avail - ctrl_w + ImGui::GetStyle().WindowPadding.x * 0.0f);
-    std::string cur = g_game_ini.get(key, fallback), shown = cur;
-    for (auto& [v, t] : choices)
-        if (v == cur) shown = t;
+    if (!narrow)
+        ImGui::SameLine(avail - ctrl_w);
     ImGui::SetNextItemWidth(ctrl_w);
-    if (ImGui::BeginCombo("##c", shown.c_str())) {
-        for (auto& [v, t] : choices) {
-            if (ImGui::Selectable(t.c_str(), v == cur) && v != cur) {
-                g_game_ini.set(key, v);
-                if (!g_game_ini.save()) toast(tr("launcher.settings.save_failed"));
-            }
-            if (v == cur) ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
+    control(ctrl_w);
     nav_item();
     ImGui::PopID();
     ImGui::Dummy(ImVec2(0, S(2)));
     ImGui::Separator();
     ImGui::Dummy(ImVec2(0, S(2)));
+}
+void setting_row(const char *label, const char *desc, const char *key, const char *fallback, const Choices &choices) {
+    setting_control_row(label, desc, key, [&](float) {
+        std::string cur = g_game_ini.get(key, fallback), shown = cur;
+        for (auto &[v, t] : choices)
+            if (v == cur)
+                shown = t;
+        if (ImGui::BeginCombo("##c", shown.c_str())) {
+            for (auto &[v, t] : choices) {
+                if (ImGui::Selectable(t.c_str(), v == cur) && v != cur) {
+                    g_game_ini.set(key, v);
+                    if (!g_game_ini.save())
+                        toast(tr("launcher.settings.save_failed"));
+                }
+                if (v == cur)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    });
+}
+void camera_feature_settings() {
+    ImGui::TextUnformatted(tr("camera.defaults_section"));
+    text_small(tr("camera.restart"));
+    auto options = [&](const auto &items) {
+        for (const auto &option : items) {
+            setting_control_row(option.label, option.description, option.key, [&](float) {
+                int value = option.fallback;
+                try {
+                    value = std::stoi(g_game_ini.get(option.key, std::to_string(value)));
+                } catch (...) {
+                }
+                value = std::clamp(value, option.min, option.max);
+                if (ImGui::SliderInt("##s", &value, option.min, option.max, option.format))
+                    g_game_ini.set(option.key, std::to_string(value));
+                if (ImGui::IsItemDeactivatedAfterEdit() && !g_game_ini.save())
+                    toast(tr("launcher.settings.save_failed"));
+            });
+        }
+    };
+    options(nx::freecamera::kCameraOptions);
+    setting_row("camera.reduce_fog", "camera.reduce_fog.desc", "camera.reduce_fog", "1", {{"0", tr("common.off")}, {"1", tr("common.on")}});
+    ImGui::TextUnformatted(tr("camera.section"));
+    setting_row("camera.enabled", "camera.enabled.desc", "camera.enabled", "1", {{"0", tr("common.off")}, {"1", tr("common.on")}});
+    const bool on = g_game_ini.get("camera.enabled", "1") != "0";
+    ImGui::BeginDisabled(!on);
+    options(nx::freecamera::kOrbitOptions);
+    setting_row("camera.invert_vertical", "camera.invert_vertical.desc", "camera.invert_vertical", "0",
+                {{"0", tr("common.off")}, {"1", tr("common.on")}});
+    ImGui::EndDisabled();
+    text_small(tr("camera.enhancements"));
+    ImGui::BeginDisabled(!nx::features::camera_models_available);
+    setting_row("camera.replace_models", "camera.replace_models.desc", "camera.replace_models", "1", {{"0", tr("common.off")}, {"1", tr("common.on")}});
+    ImGui::EndDisabled();
+    if (!nx::features::camera_models_available) text_small(tr("camera.native_assets_missing"));
+    ImGui::BeginDisabled(!on);
+    for (auto key : {"camera.reduce_glare"}) {
+        setting_row(key, (std::string(key) + ".desc").c_str(), key, "1",
+                    {{"0", tr("common.off")}, {"1", tr("common.on")}});
+    }
+    ImGui::EndDisabled();
+    if (on)
+        text_small(tr("camera.controls"));
+    ImGui::TextUnformatted(tr("camera.gameplay_section"));
+    ImGui::BeginDisabled(!nx::features::tool_durability_available);
+    setting_row("camera.durability", "camera.durability.desc", "gameplay.extended_tool_durability", "1", {{"0", tr("common.off")}, {"1", tr("common.on")}});
+    ImGui::EndDisabled();
 }
 
 void page_settings() {
@@ -2472,6 +2559,7 @@ void page_settings() {
     setting_row("video.framerate", "video.framerate.desc", "video.frame_rate",
                 is_dir(g_build.data + "/mods/speedfix60/romfs") ? "60" : "30",
                 {{"30", tr("video.framerate.30")}, {"60", tr("video.framerate.60")}});
+    camera_feature_settings();
     // The launcher's own: new releases looked for at each start (launcher.ini), and the version in use.
     {
         Ini& li = settings();

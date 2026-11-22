@@ -884,7 +884,7 @@ void set_master_volume(float) {}
 std::string controller_name() { return ""; }
 std::string controller_kind() { return ""; }
 void rumble(float, float, uint32_t) {}
-// The folder picker and "open folder" (the settings screen's Saves page) are android/java Picker: NativeActivity gets
+// The save picker and "open folder" (the settings screen's Saves page) are android/java Picker: NativeActivity gets
 // no activity results, so the picked path comes back through a file in the app's own folder.
 namespace {
 std::string pick_answer_file() { return std::string(g_app ? g_app->activity->internalDataPath : "") + "/pick_result.txt"; }
@@ -920,9 +920,9 @@ void empty_answer() {
 
 void open_path(const std::string& path) { start_picker("open", path); }
 
-void pick_path(bool, const std::string&) {
+void pick_path(bool zip, const std::string&) {
     std::remove(pick_answer_file().c_str());
-    g_picking = start_picker("out", pick_answer_file());
+    g_picking = start_picker(zip ? "zip" : "out", pick_answer_file());
     if (!g_picking) empty_answer();  // no picker: an empty answer, so the screen does not wait forever
 }
 

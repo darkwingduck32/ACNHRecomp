@@ -1,0 +1,4 @@
+﻿# Boot input for the settings/loading regression. Start with an isolated save copy.
+# Run tools/play/settings_loading.py against the live root immediately after launch.
+press A 6 600
+wait 600

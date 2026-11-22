@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "save_log.h"
+#include "save_archive.h"
 #include "save_storage.h"
 
 namespace fs = std::filesystem;
@@ -70,7 +71,13 @@ bool replace_profile_save(const std::string& data_root, const fs::path& profile_
     fs::path staging = profile_dir / "device_save.new";
     std::error_code ec;
     remove_all_quiet(staging);
-    if (!copy_tree(src_root, staging, error)) return remove_all_quiet(staging), false;
+    if (fs::is_regular_file(src_root, ec)) {
+        if (!save_archive::extract(src_root, staging, error)) return remove_all_quiet(staging), false;
+    } else {
+        fs::path root;
+        if (!find_acnh_save_root(src_root, &root, error)) return false;
+        if (!copy_tree(root, staging, error)) return remove_all_quiet(staging), false;
+    }
     if (!flat_save(staging, error)) return remove_all_quiet(staging), false;
     remove_all_quiet(profile_dir / "device_save");
     fs::rename(staging, profile_dir / "device_save", ec);
@@ -241,9 +248,7 @@ bool import_into_profile(const std::string& data_root, const std::string& id, co
     std::error_code ec;
     if (!fs::is_directory(target, ec)) return set_err(error, "profile not found: " + id), false;
 
-    fs::path root;
-    if (!find_acnh_save_root(u8_path(from), &root, error)) return false;
-    if (!replace_profile_save(data_root, target, root, error)) return false;
+    if (!replace_profile_save(data_root, target, u8_path(from), error)) return false;
 
     std::string active = read_active_id(data_root);
     if (active.empty()) active = kDefaultId;

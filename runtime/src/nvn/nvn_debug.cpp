@@ -75,7 +75,8 @@ bool make_scratch(Scratch& s, uint32_t w, uint32_t h) {
     p_vkGetBufferMemoryRequirements(d, s.buffer, &req);
     ai.allocationSize = req.size;
     ai.memoryTypeIndex =
-        memory_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        memory_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
     if (p_vkAllocateMemory(d, &ai, nullptr, &s.buffer_memory) != VK_SUCCESS) return false;
     p_vkBindBufferMemory(d, s.buffer, s.buffer_memory, 0);
     return true;
@@ -323,7 +324,11 @@ bool frame_dump_record(VkCommandBuffer cb, GpuImage& img) {
         VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
         ai.allocationSize = req.size;
         ai.memoryTypeIndex =
-            memory_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            // Reading millions of individual colour bytes from uncached BAR memory
+            // stalls discrete GPUs' host readback. Prefer cached coherent RAM,
+            // retaining the coherent fallback on devices without that memory type.
+            memory_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                        VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
         p_vkAllocateMemory(d, &ai, nullptr, &g_readback.memory);
         p_vkBindBufferMemory(d, g_readback.buffer, g_readback.memory, 0);
         g_readback.size = size;
@@ -361,20 +366,63 @@ void frame_dump_write(const GpuImage& img, uint64_t frame, const char* suffix) {
     p_vkUnmapMemory(vk_device(), g_readback.memory);
 }
 
-// Whether the frame frame_dump_record read back has something on it: any of a grid of points brighter than the boot's
-// black (or the dark grey of a texture never drawn into).
-bool frame_readback_lit(const GpuImage& img) {
+namespace {
+constexpr uint32_t kProbeWidth = 128, kProbeHeight = 72;
+Scratch g_picture_probe;
+GpuImage g_picture_image;
+}  // namespace
+
+// The startup visibility check has its own small RGBA8 readback. Blitting also
+// converts HDR's RGBA16F source, which the SDR-only frame dump cannot copy.
+bool picture_probe_record(VkCommandBuffer cb, GpuImage& img) {
+    VkFormatProperties src{}, dst{};
+    p_vkGetPhysicalDeviceFormatProperties(vk_physical(), img.format, &src);
+    p_vkGetPhysicalDeviceFormatProperties(vk_physical(), VK_FORMAT_R8G8B8A8_UNORM, &dst);
+    if (!(src.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
+        !(dst.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)) return false;
+    if (!g_picture_probe.image) {
+        if (!make_scratch(g_picture_probe, kProbeWidth, kProbeHeight)) {
+            g_picture_probe.destroy(vk_device());
+            g_picture_probe = {};
+            return false;
+        }
+        g_picture_image.image = g_picture_probe.image;
+        g_picture_image.format = VK_FORMAT_R8G8B8A8_UNORM;
+    }
+    transition(cb, g_picture_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkImageBlit blit{};
+    blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    blit.srcOffsets[1] = {int32_t(img.width), int32_t(img.height), 1};
+    blit.dstSubresource = blit.srcSubresource;
+    blit.dstOffsets[1] = {int32_t(kProbeWidth), int32_t(kProbeHeight), 1};
+    p_vkCmdBlitImage(cb, img.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_picture_probe.image,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
+    transition(cb, g_picture_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    VkBufferImageCopy copy{};
+    copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    copy.imageExtent = {kProbeWidth, kProbeHeight, 1};
+    p_vkCmdCopyImageToBuffer(cb, g_picture_probe.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            g_picture_probe.buffer, 1, &copy);
+    return true;
+}
+
+// Called after the probe's GPU work completes. Ignore alpha: opaque black is
+// still a boot frame, and an undrawn texture may contain dark grey.
+bool picture_probe_lit() {
     void* p = nullptr;
-    if (p_vkMapMemory(vk_device(), g_readback.memory, 0, VK_WHOLE_SIZE, 0, &p) != VK_SUCCESS) return false;
+    if (p_vkMapMemory(vk_device(), g_picture_probe.buffer_memory, 0, VK_WHOLE_SIZE, 0, &p) != VK_SUCCESS) return false;
     const uint8_t* px = static_cast<const uint8_t*>(p);
     bool lit = false;
-    for (uint32_t gy = 0; gy < 72 && !lit; gy++)
-        for (uint32_t gx = 0; gx < 128 && !lit; gx++) {
-            const uint8_t* s = px + (size_t(gy * img.height / 72) * img.width + gx * img.width / 128) * 4;
-            lit = s[0] > 40 || s[1] > 40 || s[2] > 40;
-        }
-    p_vkUnmapMemory(vk_device(), g_readback.memory);
+    for (size_t i = 0; i < size_t(kProbeWidth) * kProbeHeight && !lit; i++)
+        lit = px[i*4] > 40 || px[i*4+1] > 40 || px[i*4+2] > 40;
+    p_vkUnmapMemory(vk_device(), g_picture_probe.buffer_memory);
     return lit;
+}
+
+void picture_probe_release() {
+    g_picture_probe.destroy(vk_device());
+    g_picture_probe = {};
+    g_picture_image = {};
 }
 
 // ---- GPU profile (NX_GPU_PROFILE=1) --------------------------------------------------------------------------------

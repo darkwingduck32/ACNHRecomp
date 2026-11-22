@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <unordered_map>
@@ -26,6 +27,8 @@
 
 #include "platform.h"
 #include "users.h"
+#include "features/runtime.h"
+#include "mod_package.h"
 
 namespace fs = std::filesystem;
 
@@ -51,8 +54,11 @@ struct RecentOp {
     char text[200] = {0};
 } g_recent[kRecentOps];
 uint64_t g_recent_seq = 0;
+std::string resource_path(const std::string& guest);
 
 void note_open(const char* what, const std::string& guest_path, const char* result) {
+    if ((!std::strcmp(result,"ok") || !std::strcmp(result,"virtual")) && !std::strcmp(what,"OpenFile"))
+        if(auto path=resource_path(guest_path);!path.empty()) features::resource_opened(path);
     if (result[0] == 'o' && result[1] == 'k' && !result[2]) discord_presence_file(guest_path);
     std::lock_guard lk(g_recent_lock);
     RecentOp& r = g_recent[g_recent_seq % kRecentOps];
@@ -199,6 +205,14 @@ const std::vector<fs::path>& mod_roots() {
             while (!name.empty() && name.back() == ' ') name.pop_back();
             while (!name.empty() && name.front() == ' ') name.erase(0, 1);
             if (name.empty() || name.find("..") != std::string::npos) continue;
+            if (features::owns_legacy_mod(name)) continue;
+            fs::path package=data_root()/"mods"/fs::u8path(name);
+            if(fs::exists(package/"manifest.json")) {
+                std::string error;mod_package::Manifest manifest;
+                if(!mod_package::validate(package,plat::data_root(),&manifest,&error)) {
+                    log("fs: mod %s skipped: %s",name.c_str(),error.c_str());continue;
+                }
+            }
             fs::path root = data_root() / "mods" / fs::u8path(name) / "romfs";
             std::error_code ec;
             if (fs::is_directory(root, ec)) {
@@ -244,6 +258,25 @@ fs::path resolve(const std::string& guest) {
         }
     }
     return it->second / fs::u8path(rest);
+}
+
+std::string resource_path(const std::string& guest) {
+    const auto colon=guest.find(':');
+    if(colon==guest.npos) return {};
+    const auto mount=g_mounts.find(guest.substr(0,colon));
+    if(mount==g_mounts.end() || mount->second!=romfs_root()) return {};
+    std::string path=guest.substr(colon+1);
+    std::replace(path.begin(),path.end(),'\\','/');
+    while(!path.empty() && path.front()=='/') path.erase(0,1);
+    if(path.empty() || !mod_package::safe_path(path)) return {};
+    return path;
+}
+FILE* transform_readonly_resource(const std::string& guest,int mode,FILE* source,int64_t offset,int64_t size) {
+    if(mode&6) return nullptr; // never transform writable/append files or save/DLC mounts
+    const auto path=resource_path(guest);
+    if(path.empty()) return nullptr;
+    std::vector<std::string> applied;
+    return features::transform_resource(path,source,offset,size,applied);
 }
 
 // The path inside the packed RomFS of a resolved host path, when it is one of the RomFS's own (not a mod's or an
@@ -460,6 +493,7 @@ void OpenFile(CPU& c) {  // (FileHandle* out, path, int mode: 1 read, 2 write, 4
         }
         std::fwrite(v->data(), 1, v->size(), f);
         std::fflush(f);
+        if(FILE* patched=transform_readonly_resource(guest,mode,f,0,v->size())){std::fclose(f);f=patched;}
         uint64_t h = g_next++;
         g_files[h] = std::make_shared<File>(f, guest);
         st<uint64_t>(c.x[0], h);
@@ -478,7 +512,8 @@ void OpenFile(CPU& c) {  // (FileHandle* out, path, int mode: 1 read, 2 write, 4
             return;
         }
         uint64_t h = g_next++;
-        g_files[h] = std::make_shared<File>(k->f, guest, it->second.first, it->second.second);
+        FILE* patched=transform_readonly_resource(guest,mode,k->f,it->second.first,it->second.second);
+        g_files[h] = patched?std::make_shared<File>(patched,guest):std::make_shared<File>(k->f, guest, it->second.first, it->second.second);
         st<uint64_t>(c.x[0], h);
         note_open("OpenFile", guest, "ok");
         if (trace_fs()) log("fs: OpenFile(%s, %d) -> %llu (packed)", guest.c_str(), mode, (unsigned long long)h);
@@ -499,6 +534,7 @@ void OpenFile(CPU& c) {  // (FileHandle* out, path, int mode: 1 read, 2 write, 4
         c.x[0] = kPathNotFound;
         return;
     }
+    if(FILE* patched=transform_readonly_resource(guest,mode,f,0,-1)){std::fclose(f);f=patched;}
     uint64_t h = g_next++;
     g_files[h] = std::make_shared<File>(f, guest);
     st<uint64_t>(c.x[0], h);

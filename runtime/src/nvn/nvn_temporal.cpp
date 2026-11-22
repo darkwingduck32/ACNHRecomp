@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "config.h"
+#include "features/runtime.h"
 #include "kernel.h"
 #include "nvn_shaders.h"
 #include "nvn_temporal.h"
@@ -52,6 +53,9 @@
 #endif
 
 namespace nx::nvn {
+namespace {std::atomic<uint64_t> g_recorded_temporal_frames{0};}
+uint64_t temporal_frames() {return g_recorded_temporal_frames.load(std::memory_order_relaxed);}
+
 
 VkQueue vk_queue();             // nvn_vk.cpp
 std::mutex& vk_queue_mutex();  // nvn_vk.cpp: held around vkQueueSubmit
@@ -170,6 +174,7 @@ std::shared_ptr<const TemporalFrame> snapshot() {
 
 // main+37e4624 (3.0.2) / +37e4634 (3.0.3): sead::LookAtCamera::doUpdateMatrix(this = x0, Matrix34f* dst = x1).
 void lookat_update(CPU& c) {
+    features::camera_update(c.x[0], c.x[30] - kModuleBase);
     if (!temporal_on()) return;
     const uint64_t cam = c.x[0];
     if (cam < kHeapBase || cam >= kHeapBase + heap_size()) return;
@@ -1314,6 +1319,7 @@ void temporal_before_tonemap(VkCommandBuffer cb, GpuImage& scene, const GpuImage
         return;
     }
     g.dispatched++;
+    g_recorded_temporal_frames.fetch_add(1,std::memory_order_relaxed);
 
     // 3. Back into the scene, which the tonemap samples next.
     // DLAA's: RCAS (video.temporal_sharpness_pct, read live; 0 off). FSR sharpens inside.

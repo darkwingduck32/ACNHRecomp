@@ -1,0 +1,846 @@
+{
+  "build_id": "FF1D1C05670DB6021C85B624A710B963",
+  "format": 1,
+  "resources": [
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "38946794e3473237a64be82809bb0604710c58d8757b65307353870ed130a960",
+      "output_sha256": "f63e135dfa970fae2a9fa332bb0870d8939b0ec86a42f746f149f1f9c41207da",
+      "path": "Model/CloudVR.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "2799271717497b3650eb5a40f573752fe703c6fc018c0f0115362f780e5338c1",
+      "output_sha256": "a0a34cfac8438bab1e76f1359977f0f109aa1d612a99ffbabc15d30126ab6d81",
+      "path": "Model/FldOutE00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "09d26ae51c11785384fa1466d777353c24af09177b98c9da1601c5f764cd7a15",
+      "output_sha256": "397b094457383a01846f8e178b904e9e6dd80933d2a3e89454a2757b61117693",
+      "path": "Model/FldOutE01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a3f3acdc8d6dafd6bfda12a291b50a1f72ec6f6f3df007e71617d143f9d430f0",
+      "output_sha256": "78882fa939e4fd1c4e300639de09c0829e599cb211ad3a1bceef58733610cc93",
+      "path": "Model/FldOutE02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "1dd5cb732b997b427532a3bfef1ff22c916f759a9bbbee8779a3c2fb24c71c7a",
+      "output_sha256": "106658ef6432b3dd326e6e4eb3a2967267ac1672e4952645c6ba13d784679062",
+      "path": "Model/FldOutE03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "882ee4411c1a5546519741d6117a60a3bdf5e08a81e0f6f0a2e14ac866ef46ba",
+      "output_sha256": "3f476fc309c5ec773739963d633440d53d4e35639de4dc1c4f37d382439a1f4c",
+      "path": "Model/FldOutE04.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "360f1389bebe961a26f7717bf0aee95d668ded5f5a1f4b21f77cfad18cc4c3a2",
+      "output_sha256": "86f9d87a4def27d66c785b0da76c00f19abc52e1068ac5c69e4cae72ceb7f642",
+      "path": "Model/FldOutECliff00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a4a985d34e02d11e9176e4a8e7184c884633a056fe60fb71c4c378a40b52a0c4",
+      "output_sha256": "9e9e15829494efeef297b6c31abeb7f07bc5a02619632d2509139157b8d4978e",
+      "path": "Model/FldOutECliff01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "798c4ff6e9fb0e64145f6f9b33e6c72045b5ce175e5dffe2228cc59f774cfe89",
+      "output_sha256": "d1617b34bafba3f7b2a11d1f6c8cf7347f4ebe64a049aa6c76db98e5bc885bdd",
+      "path": "Model/FldOutECliff02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "9c826a6ce20944f49c6312b314bae2935942e1cd4c2eafdb3e8751d510aeed9b",
+      "output_sha256": "6f9066dd591ecb6420cb498aab15e82be3ad83213a3242b3dea90cc585ff5eb3",
+      "path": "Model/FldOutEGarden00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0820a3d66efea508e74ccfa37fbb31430a5e25f1fd1c45257db2ff78d5e04834",
+      "output_sha256": "7b6176c919a807bbb0636fc4cd89e660c04b61fa4a0a188c85e559124d7b9135",
+      "path": "Model/FldOutEIslandDown00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "b4b66f80562d6a428b2e6e012a1133e10eedab230a13bf8ca28da12d592b18f0",
+      "output_sha256": "d552f3a295ad704b87a7eac76e6dd89134297e0a3bfa2d6d9b1a11ed6abc8f9c",
+      "path": "Model/FldOutEIslandDown01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "24697b09cb621e91d951c992d43042f9e8974defc484af0ff8b61bea29599f17",
+      "output_sha256": "93268c4bba7218a8d81888486b1c9e4c08a35934ed3a04c3137486f1914dd23b",
+      "path": "Model/FldOutEIslandDown02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a0dd78bd64602e981fba4dc546fffa93bf1f312518a86f0473576746445e96d4",
+      "output_sha256": "fbf73ecb449962aa65856f5abf9122067f41203b184b9428715bceed93507d32",
+      "path": "Model/FldOutEIslandUp00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "95a37d91b6ce4129b61e45fee1693d39d3a0b4153fe355ef3f1a14d2152b17b5",
+      "output_sha256": "4e6f9238e92d8721ceb9ee09973b7a29ada44ce124f6d13b4948f820237cbee1",
+      "path": "Model/FldOutEIslandUp01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0a4ddc388e8df3358be47912a1e95ae3f4ad98145eed7eaecc4d0a56311a4509",
+      "output_sha256": "15ac9651ee275136854d4a982bce3dde90bfa5537300064655d3df4fad2ec8b9",
+      "path": "Model/FldOutEIslandUp02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "e1d016a96aea5a681201f37a93eac73b6fa38265e2afb708ec576598d5724118",
+      "output_sha256": "c4b6b1987d94770499c978bb3b0545a402e96308b0c7cb8df638fcf401a2cbcd",
+      "path": "Model/FldOutERiver00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "e4b98eaf491aea45f8bb42aab540f4e5eb724a53396be85c0935f302ee9f0827",
+      "output_sha256": "929406c1370a92d38f2f6a6d12f6ffd945239d0ef35723a96bafca0a6d1f98cd",
+      "path": "Model/FldOutERiver01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "d883469131d77cb56f92899739b87177ff6dfc47d48e371e03baeaa95b5d0215",
+      "output_sha256": "1619f0fe7dd1df505080b62ba67c679c91a783eb3e1d7d0dc74f831f945e3cd4",
+      "path": "Model/FldOutESeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "90a9ea6e27d06f9b07cddc360bfee2793b3362f2bcb9dc63e5e59e1956a46872",
+      "output_sha256": "76867bba06721e22509362c8b4b950d960577e1a940afaa3be0e4477c75103e7",
+      "path": "Model/FldOutEStone00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c09eae68278875a1749806ffac3bac7b11eb5191938a6989b4606f087adba612",
+      "output_sha256": "dd20725bcba3c3cb0478e48827be761f49a8394734bc7dfcfd825a89426be814",
+      "path": "Model/FldOutEStone01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "124fe24ac76a711513d9535f873fdc929dc3f2f8a8284c3d28f2e2ee9c7c1889",
+      "output_sha256": "a0c52deb479107f83c8b420749242b601b470dbbb497c4b12e91ccb429e958c1",
+      "path": "Model/FldOutEStone02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "2095a441b29da5676d36cabd4b5d8875eac2fc5a18551ebbac6a215309417d99",
+      "output_sha256": "6885697fe458df5727e9528c27f858daccc62446b0a75025efeaa7934744445c",
+      "path": "Model/FldOutEStone03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "d0e87a7bce4760b23bdd33de9eaf4f3a47814bed240ea6ec30a1108188c5dfa2",
+      "output_sha256": "c7ed01d1e17516314a2a4ea9aa18012511134f8fef27596e2415858cf4de2be1",
+      "path": "Model/FldOutNESeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "1e93572bfdc26219652fc89a4d07e1ca60e584988acbf18a38a488149db2a629",
+      "output_sha256": "1ec54d4c246624df147a543979cc3afdb4523255f577b671583228e423f3a3d2",
+      "path": "Model/FldOutNEStone00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "de910b4b7425fd27fb858a93c402fda51505e80a48dc6331d9b29b12446c6963",
+      "output_sha256": "6c76e6720e740055a1dfc65b03953ac6ca7e8eb2f3ee8bd42297b0c47a3722a0",
+      "path": "Model/FldOutNEStone01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "4773c7284071c84ec903a9dc7e6331ed7c05bb840f64a2c14d2d81ba305f6a7d",
+      "output_sha256": "a3221cb74ef886f0f11d3a1dd2d07bccfe2e2c45ca7664068c837663ca84114d",
+      "path": "Model/FldOutNEStone02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "655201b34c838f8e64a59473d619954f0a0d9f133410fd35df99387f3d2f95d9",
+      "output_sha256": "b168303d713444066c6325891aceb0cbce68a53356477953ca259eccde4d577a",
+      "path": "Model/FldOutNGarden00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "123d8aa91d21182ce801894e3cefacca7230d972e64e2a8cb781a1a070439f9c",
+      "output_sha256": "0620f0bc331a4bc033e243032ec13fe32dbe5a0800c1b1b92e0c201ccc12b442",
+      "path": "Model/FldOutNGardenL00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "8db140ded5f7ef1d48e6fc8ca8ddda7ed939703edf8fd5403bbb3b489e7e9b30",
+      "output_sha256": "e367650ec1ca6c862a5ef262abf5ab22b0163b3a30345fcfcd41bcd59609eb13",
+      "path": "Model/FldOutNGardenL01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "294eb82b2490eeaa13c3524f8a5ea0c71027042da9a3c628512f09d63ac701b2",
+      "output_sha256": "2000d9410da540f1355084a92e853100244bd06ad83ffb9bd5fed67c1bbe84ec",
+      "path": "Model/FldOutNGardenR00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "9ef552b643a78ff6f89d203d801849d10c639872bbfc92f2670982f092ac6e18",
+      "output_sha256": "953766cfac789fb74832fb52d77fe56a37be01439d352bde4dd76a3a571778f9",
+      "path": "Model/FldOutNGardenR01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "aefca029aaedb961c1bc899554847c1cbc5ee221f9e84b98e082811dcad87410",
+      "output_sha256": "d178bc2a363cd05755b768b5cfdf7c10c34e650bfc29bf3619305ccaf8966eb9",
+      "path": "Model/FldOutNSeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "4cc5e8367989b162c80a6d5c2f73cc2df6071d4d26276940c65fc62e0dd94608",
+      "output_sha256": "599b4e71fc09949e9ab4598e2b80064cc551f0acb95e4b4542f6cb0c9b9df518",
+      "path": "Model/FldOutNShip00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "ffb67d4aee73e7ba243ac6f4527562407b945776fe07fba8a60a483bb73248c9",
+      "output_sha256": "2f77fee17487727a20e702a33a7574c36053f2c9a124a587455fa9c626729017",
+      "path": "Model/FldOutNShip01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "1d22ac1572767788b7ad84935dd270a1e4de0b52ec0d772bfc83ec0e63eff635",
+      "output_sha256": "3ef738089a3874bc1d59adf85143b13d8c9609ef80e1c6b60eb69a90a92d5403",
+      "path": "Model/FldOutNShip02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "6998a6c5f59dd02be23082f1e8ed4f07760d17431108bdbb35d836f90dcb9016",
+      "output_sha256": "16222a9bd7dd371284ab9506c26486594cb4cccc7738250685baa443f4c49708",
+      "path": "Model/FldOutNStone00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "64aa4026988232948a921ad63ebd63841c50ee4bf0b646eb43c21efdc295c9b7",
+      "output_sha256": "420f189e5c44912a6e547f194aa1d8d8bb1261aae48c473b42b79dc5bc7d23ee",
+      "path": "Model/FldOutNStone01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "866d3b8acbeb752afa5c3ec9d4ff458da2881533a4f67c8b963e4496af7ffd31",
+      "output_sha256": "8998bb348ae86cb81c07e4c1f272bca76f01e32a4e7d4f92fe0744d283f7a82f",
+      "path": "Model/FldOutNStone02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "7c4da0db6635a110b3cb8bfa81f932ed28837eea880ccb6ea167304a0c41fae6",
+      "output_sha256": "e3cbf12f4f6f96850feec99350b4742bb13ad28100fbe54770b28b7cba0b5236",
+      "path": "Model/FldOutNStone03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "8b444196bce2bfeda0aaf1607873457fed2a3c90293a8359412e33749a4fb446",
+      "output_sha256": "b65d708a765ae4730f6299dc986f9696548fe3f884bb48b21a7587ab18b74770",
+      "path": "Model/FldOutNStone04.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "bc4a91ccd372e590d48d5d2c9c0809bccbf67c0d06759d1e4448e7b2c021e41c",
+      "output_sha256": "7255234dc827bc2d50da27e8fd503cac5e219c36031fec0dc77f4cc40231ec32",
+      "path": "Model/FldOutNStoneL00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "d3b8762bdf02dacf4797ce56e8157ecedef9dfe40345eda267761b414ec0baf7",
+      "output_sha256": "27c1281d142c95c02fa454a702f0f595d7a0cc472035ef13e2492197610fde6d",
+      "path": "Model/FldOutNStoneR00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "b2ca5033402f2b787cae9ee4b7275363036b23e8300686c763479fae67fb2db4",
+      "output_sha256": "8ee1d9bef1e9f45b3e02fad41a9b105728c47e9e2c58b8d83a749b2829e7fa42",
+      "path": "Model/FldOutNWSeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "689397b59b3646b772db18fc1779a22124f136a8e1bbf2e6eb36e038e49331e6",
+      "output_sha256": "d226b31fc2f30874fae602f796e1c6a42027f12f7bcfbe7ccf5a87ddfdbf35fc",
+      "path": "Model/FldOutNWStone00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c5de78816a0e9762c1921124a0f9cabfb9745b45f74d5246c60363ef5cee470f",
+      "output_sha256": "6bd6e5c8826fdf4fe99a922f60a914bef1b2847c02044bc4dab1e744cc4f5878",
+      "path": "Model/FldOutNWStone01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "f68eb7d8368cdd8601ab9b87697a5bb5c2f9e56cca67edf009d23dd3b7979b09",
+      "output_sha256": "36c6e7c813e74c462469c8105c99d0f90dd7188590eaf6aca856c1d97b530179",
+      "path": "Model/FldOutNWStone02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "451b3888e00d884ff087ccf9c0c137ba55ccc0923866537e26ae3835548ab536",
+      "output_sha256": "807ff1714f8e09cf321ffa49c611ae67659be98008ed01bd560dc08f134e0c9e",
+      "path": "Model/FldOutS00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "92750b2e1148edcafd6e5f944f19330c974e66672c80740591736e82f7cd5bc1",
+      "output_sha256": "4001880a5b02d3fd3785e6fbdb83d8b7fa183be7c6b264bb22192e9e4ef4636b",
+      "path": "Model/FldOutS01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "11f2c076373cc43ded977a32b30b9526b437c8e3b1a24f75784e968fdfea0bb4",
+      "output_sha256": "44664bd8b181c6b203ecaa87068fe4b377436ec73fd1e458c6b9bb5bbf93f8c0",
+      "path": "Model/FldOutS02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "5cc31dedd2b5e36b552cf7d8f23ebb1b2cdff1d80602caa4e5d071f2556510c7",
+      "output_sha256": "56d82e9519f520ec81779a3e60add538b9566c36ece1518dfd58cc9a16f49dbd",
+      "path": "Model/FldOutS03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "655b0ca998a53ab82c683803820a7a5b7836b8e03bb87514c0fab534e4c62c91",
+      "output_sha256": "2293c1d63d29660417e9a34f2e41197207333c455c2878c50c2a268e68ce89a3",
+      "path": "Model/FldOutS04.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a04a361d0a571c3f6784fa52f04ef0d939946c274a77db29c96f2d8cae6b923b",
+      "output_sha256": "1a5607876d0c0245dd8df3968ecfb94d178b4f063e5a3ce42cf49c764b973f43",
+      "path": "Model/FldOutSAirPortLeft00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "7c24f32ecae9ce7d0277377d536c92e51da3632c016f2a6db07aa7671a17a2be",
+      "output_sha256": "8bf4834a731442506001fe8ebf23e78f761237098b85f47bbd02c0af9f78ce44",
+      "path": "Model/FldOutSAirPortRight00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a662f69a4490364c59e2c4104f8ba648d3cf111bffe31c4306f99a75f7bb0f24",
+      "output_sha256": "1879d7d46b533d516fa82bf8fd5e387fbe61c8abf10ee9d376badd2add6f157e",
+      "path": "Model/FldOutSBridge00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "1a4660320f1543a1153e6750b370a46596c0f8bd382db6c203a5900a9226adaa",
+      "output_sha256": "7de4e000cf7b5540b817020eb267dfcb8f2ee2baf255e186e83d5e68f3440869",
+      "path": "Model/FldOutSBridge01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "5a1489728dfba7a76d72450d4fe60b32be7e9ddb73d2b5ffeb3cc4a959ca1a6a",
+      "output_sha256": "49233605964ef38ebce3f6362c217d56a1f81406aa8dc31b21723743ee4e4bd3",
+      "path": "Model/FldOutSBridge02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "07dc779d379863c4e0c7a1bc4aa062d12cdf01cf6cd834fd3d3162bdac4cb9f1",
+      "output_sha256": "07010b9e156d403df4f270c46765a10796d57089b788909cb6ee110db9e49ecf",
+      "path": "Model/FldOutSBridgeSP00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "970450fe388234227aaa5e69c5fcdb7939b4cf780783825221ee70fb9127b796",
+      "output_sha256": "1189ac28339af5108244c6f8375273241db0d1247664f80d8f4f3a5516fdeb08",
+      "path": "Model/FldOutSBridgeSP01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "505bb0caba15c4bc282bb4e3d17984d8ffd9608592eb5ed4a2ec92067408dc06",
+      "output_sha256": "3d6b04a7a73041dd0c7b8ad151e9505455dab78a5cb0e02cd27c1e578c86643d",
+      "path": "Model/FldOutSBridgeSP02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "969fb26fb92f0a48331a9aedfa6505441e3bd90e1334a9f6fc8ec609bacdfc1e",
+      "output_sha256": "041366f07895586fb7f073fd182d86b70fabcecb91db727b6ef8807137be16c2",
+      "path": "Model/FldOutSE00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "43d84fafe3549dd28ea8a871a40f312716ecb3489874b4eb39b4d1cfaa21303b",
+      "output_sha256": "121b8fbf8b8e398a01a077fb8f5d5dbff3e06ae8acd097205ce00ee84d072659",
+      "path": "Model/FldOutSE01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "4d3155205172668c48757d3432c7e24e6f27b2ea86c7fe97eb95f25a4d471d1a",
+      "output_sha256": "a80fc2c9d9bb59f1d4bc5befd27059ed8cefd955dacbd0bcc337733e7de88c2b",
+      "path": "Model/FldOutSE02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "e40825ae242e2cda127e20902cbda2710e7cc9288da6d5e70ca347e64bb37d8d",
+      "output_sha256": "fe812e967b8471dad140738ca9006c97d3997646359aafb198fe334a61efa969",
+      "path": "Model/FldOutSE03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "1c19d5a0069ef5df4ec4812ec9282e00a5cebb64775bdd91603ebc2733aa3a88",
+      "output_sha256": "5f516785ee1ba7b503605fa89f640cde3ad1c92685da453eb23ffb8201ba717b",
+      "path": "Model/FldOutSEBridge00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "375dcce255a585817fdc7ac8ebf87cdc7bb6bdafae608ac50024aa895218fccb",
+      "output_sha256": "7a8ab3e699d2f3ffb52f7f99431ad6cb2576a0d62cb7fee101a1b690b6027d9a",
+      "path": "Model/FldOutSEBridge01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "edf1bc16b698428753b69358b72943b3179129e69006610d75ddb7234fd31ade",
+      "output_sha256": "114f42a60a3054c964a90f11a3268ad0f83a3810a0ada14e9844c21620962be3",
+      "path": "Model/FldOutSESeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "54634b112851e158774625c34904dac84b342f969a0fcf95483ef93b6a634dde",
+      "output_sha256": "b32574ac437c57e59137ca0796341c38e5d848cbc66dc0d1344e7802d14d2f57",
+      "path": "Model/FldOutSGarden00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0802866001889124d2f5001dac083b3f02862443fbca52ca58fc350cc2c6dea4",
+      "output_sha256": "3f872bb27a8e898219847e8326f02136a654ed6770470bbdc45336a8bbb709e2",
+      "path": "Model/FldOutSGardenL00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "9332954571df0138afdfe9be2117a998583f540da44c189eaf203eb0bab9c006",
+      "output_sha256": "95ddb52c5446397faa14ac315c635262766a2d67802db812c070fbd9c1b722c5",
+      "path": "Model/FldOutSGardenR00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "b08aec5cfcc8e5552004a517e4236158070e5177a38e0e1a9062bedcb5b331f3",
+      "output_sha256": "a6fc3555173686a7dec2ed77d4d9c852f12bbe2a2b0281f33ebf8bda078ddda8",
+      "path": "Model/FldOutSRiver00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "3d0c309d7fb87122487504c22d115deb8ff31d409a1bb3cb380755626d41c402",
+      "output_sha256": "9523a67ea8ec133712f629f873c4bba00748ae3681d7acb4d21ff1c33d759cc8",
+      "path": "Model/FldOutSRiver01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c9bb3be7bc3acd26cb518dc567a58e49184e88f94264454ead95301d9f26548a",
+      "output_sha256": "6bfc958b50d2ad870fbb888a9423d4441d4f8e601e04b682c9d59674b6326b0f",
+      "path": "Model/FldOutSRiver02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "483156d7c604c556af1b0373e2b8455e6df0a1d2fb5796fc40c8742f8cf2464f",
+      "output_sha256": "8456695458964a79c552f7508fe17d7f090cc9df7e0574f6e3f8aed90c5a383d",
+      "path": "Model/FldOutSSeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0815ca2bfcf27993ba0a72b9c22569de328ee26ea07f4bb32ee25004523337ef",
+      "output_sha256": "7b2727d20b51b124bf789029fff98f53e83a2323439f30e87027efde842cfba8",
+      "path": "Model/FldOutSSeaOnly01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "b12b1909e22c6d46a315c7077fec5fee2d0a197c52da21f1af5089c713e23c8b",
+      "output_sha256": "c6d0fb1c947943ef1ccb0526e9868b5f32e4ca8476f6d313090ddc264ef0ab71",
+      "path": "Model/FldOutSSeaOnly02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0c0f7f2e21dd2f17e1f1c16772442f45aa48b429e7d878f77536883b3b1e06c4",
+      "output_sha256": "ba85201fa3f17d90fab95685a825f19e10853d26b1ffa2254ba28d4f8b634925",
+      "path": "Model/FldOutSW00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "cdce84afe972811e6b2c6f5930f762c1c79c61da54848616cc7846f670c9fff4",
+      "output_sha256": "86bb5f56006ee8fc55c66e4dfed6938977ad26abec4c308c4e754439f5465d73",
+      "path": "Model/FldOutSW01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "587b503823037bcadf6a7a46d91447e5709caa046f54a08b23bcf84143b18c1e",
+      "output_sha256": "f80b7d29259ac2973dd07e513a758177d56a3a786aa0db04b523029be3e5e5bf",
+      "path": "Model/FldOutSW02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "64425049eac08e54bf4a1570e146077c58661b3c56ee72d3bcc786feea2ae591",
+      "output_sha256": "8dca3725b481bb9bf7ba62b24fd80be57ad5e78a7eac4beb8622074a7cc3aa6a",
+      "path": "Model/FldOutSW03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "6ebbd891e5393a832b60d1d29b4798686fdebd66e50810e9542cf6d71f79b390",
+      "output_sha256": "652ea7891a871328bf3097f4965c29bd775b34a082ebfe934f6f48d094e261af",
+      "path": "Model/FldOutSWBridge00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "fe276eee3c885e613555e215fc2f3dbb14ec88a26d4e65ac5195a5c439d95875",
+      "output_sha256": "99b1f4eb6a04477d42cdffe4dd7a2229a4ac09d842ec47c7c7de2601eab6f358",
+      "path": "Model/FldOutSWBridge01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "5b6a1da7fee3ade75bc0aeac2031f888bb6e831d1859db8aba1cdafbd12136ad",
+      "output_sha256": "c41503353365f84d7f47dc8d5ff83df7fa1dbbfed89ed7b24d1c0ac9de707a6e",
+      "path": "Model/FldOutSWSeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "de579206ccd3f6960c3deedeb604413d42300d62be69b2a230a753b5f3c1d9c6",
+      "output_sha256": "4b85e6b73d2b26555b07e7f65c9b108aabfe3c270f70ebe722db7640c1b118b0",
+      "path": "Model/FldOutW00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "904c3b35f4b6c10bd394debf04574b9073ac6e3343340fa771d20bd3c2547453",
+      "output_sha256": "1a6a5ae35ca53f79da55bc24eac7fcf7c07010cb7d4e507657f6746199bee494",
+      "path": "Model/FldOutW01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "bfa508f9f2826c813b3e756a5f1b73b8783253be8480249f275b30045232df89",
+      "output_sha256": "0b8a78191bfc2ca56874b86e95e8edb605a98c436b5a60853bce66bd43a9c2a9",
+      "path": "Model/FldOutW02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "29a309695d8d7dde20a82b9d271c93f5dcea0da17c45be77dc7a708f7b5cd534",
+      "output_sha256": "deb256a60591a6926b213a935639d175d5d7d0a3e1e1b8a5fe22932938ee762a",
+      "path": "Model/FldOutW03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "1b8070c4c2f34c886b74da7c2982ec2c3acaed08a5094b554344b2e1ab37e9c0",
+      "output_sha256": "0d4c9b4b2c9d91feb4b9750bbf4ce3e89e1d22adbfd859621574861920b08e3c",
+      "path": "Model/FldOutW04.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "deb257c6627f77b228df318fadcd00847bd00a548ec623c7416d96ff81b14586",
+      "output_sha256": "7dc0f550a5029f54ec04700a818960d4bd907f51d2b4be91d52f3017aa1d81b4",
+      "path": "Model/FldOutWCliff00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "f333e91d1dc0fe5b7f5baf8799d7cd0c7fee4bbadae33a324ac2f54877501e74",
+      "output_sha256": "3c00c73465428445f329a8dc6f774f86a817202fc553235a07047c7a0a7ef213",
+      "path": "Model/FldOutWCliff01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "3c4918a4213f4e7037462c7bf785bd48328f26243ba9811f902f070565bc35a0",
+      "output_sha256": "fe8a02edf3169824e31bea956d3c96480d43c3acd8a62c16343fa102ff364cba",
+      "path": "Model/FldOutWCliff02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "999aa2c5d15df5dc62c63b98465f0ab0f3ad984b5d49ec499fb4154f8d61222e",
+      "output_sha256": "8bf917e2a5ba5b0bdcd75d440b02a986e8f448dfb102bf34332e154a5eb5906c",
+      "path": "Model/FldOutWHarborN00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "aa570129bc3c3256737e35a35533cfff5baf6b792a596440e370a95b705c4122",
+      "output_sha256": "2dd5abefa4e7e0de294a43fcc5fa061104a47313a49296736b1f2c37fab6a48f",
+      "path": "Model/FldOutWHarborS00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "82c62f369d0c4f76f71d64c8fb00e80f01fe87a966f3a1182a50122425f44d3f",
+      "output_sha256": "65aaf6f1db9d662dcd2d8d423bc2dc0a5825d72a023de7eaf99ba3c724499712",
+      "path": "Model/FldOutWHarborS01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "51d21f4783eba7a913d8d3ef9f51a94c28889e0d8724eb873c42e561a03ce7a4",
+      "output_sha256": "ab2ff28c7b09e0ee8e4f272be6e08eabdceb3c69a0b140df4655567427c009d4",
+      "path": "Model/FldOutWherearenE00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "b00827d1c041a4aee5ddbc13737a0d222c4b6a4549effe5d29b49dd25d9f64a0",
+      "output_sha256": "232d1602350ce5ea9a2ed8ed7adf9870700fd4468ffec07f37a1ec54f8d429e5",
+      "path": "Model/FldOutWherearenN00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "50584d10e20934876b35a488a893e55820f7400a8e010a6e5af58145d59c577f",
+      "output_sha256": "d3da8567eb72ad0c1595625422dca4034f479c19fbe5c1d61f87f9662fa86483",
+      "path": "Model/FldOutWherearenN01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0c7bf55980834e1fa9872cf2e99ede03dde0ff4736ee9613ff05538d7b815dad",
+      "output_sha256": "fa8c61a4a144c8c657b3312bfd552a16b377ea207fa0e03c53d2bfcda23c626b",
+      "path": "Model/FldOutWherearenNE00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "594a6c3e8e60fbdbafc91a8c9a76890dc2a0c032c2adcb64cd0e4380ddba50de",
+      "output_sha256": "d24bf1a5a56312bf44b5165d5095712a2d44118ec135e93f36447e9668487eda",
+      "path": "Model/FldOutWherearenNW00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0bda6233d441480e3eb682c46f8f5dd70cb6da9ba2b2392838e01ea7f9235570",
+      "output_sha256": "2e587260dd40f32da198a167eb164a1d0ec747896711c7bd76bd0eeff02d87af",
+      "path": "Model/FldOutWherearenS01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0da6f05142a4ffbccbff7571c411850b6ed21a3bf4ae7de6b2a900532ee1ceb9",
+      "output_sha256": "19c2cfebb26239ce4c914e0bd1dc5fc2acb6de0c81dd20a2090c16ab5ec42811",
+      "path": "Model/FldOutWherearenS02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "efe719eb5d48728cc3e7089f552e9aeeecc9e7f4bd0eba0f172169f92cb563f2",
+      "output_sha256": "376ef4fa0e6dba45ef03d3c40354095cc7a937b60b7e59d5a21fe650db1b2e15",
+      "path": "Model/FldOutWherearenSE00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "cb1e9bc8d596e1a7956cc3746ebc4c2bdfb67dafaaead1ef2fec0ea9ce090c6f",
+      "output_sha256": "50d43058b112f6598e18ded4e8c1cac006bd4901e216cb6bd9e23947c90341a5",
+      "path": "Model/FldOutWherearenSW00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c8924d991fa0cd1056acddbae735fc9b0704445e0fa8fd383cc8029b03cd68b9",
+      "output_sha256": "4176ff4d3b36a6fbb4387e426e52d863de68bacb6cf6052312e394b4bdf18c50",
+      "path": "Model/FldOutWherearenW00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a8b228aa4808b488c81798328e761e518e5b0a7fb943f0fdd2c11f8fbdf79381",
+      "output_sha256": "8beff8f0382ac1e7628e17b33552cb3d16f4ce768cef99411650fafd70be260e",
+      "path": "Model/FldOutWIslandDown00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "6dc7bd1e237a33666302989b77fc0d6169d746db480f77e6d417f9311366e089",
+      "output_sha256": "3b48c2e96fa38f37e0c88512c9c6eb820fc6b6bd69020661de0057c9aca929ab",
+      "path": "Model/FldOutWIslandDown01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "b9035650c62d83a023be6cd4d5e9683d57c9ead47197a917afbfdd2543802e56",
+      "output_sha256": "f90e1d1f2f72b43f2624c8ed335a30f3c68fe46e7019f9a52398cd9e2ba92e53",
+      "path": "Model/FldOutWIslandDown02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "75a13e4479231ba3c5b6a521d638d6fd3fa576fa3c264605924d1690ac91e49b",
+      "output_sha256": "bd352510a1f031c6086667fe907721b8c581b12dfe900ae0559d797d1c91fc65",
+      "path": "Model/FldOutWIslandUp00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "2b607b3b4f42b8b7f97693b55f6c8cef9bd2f951042f8dc9901008db6396d725",
+      "output_sha256": "2df8f3046ed0c60c6bc4577648ba90704d2755824e5af05f9c01e9e5cf6c1a9b",
+      "path": "Model/FldOutWIslandUp01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "e0800fba048098047e6d57715a058bc4ed16b0f400cd4dbd7b1cdd81a2412a21",
+      "output_sha256": "7ff8e8cc8ddc72a6dd9425d265085f2d8552514b8a73862c23719247ccde3709",
+      "path": "Model/FldOutWIslandUp02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "2b5bc78ed952cc21392bf6fc5ae1be8898c7e26ac607ed18f8ae24a5ac3b7362",
+      "output_sha256": "5a49a0af3efd6439789ce33547c3ff11d77c1cd95397f48edb25e2d1c733e46b",
+      "path": "Model/FldOutWRiver00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "31ec7138b7764bf10a11b29d93d101860644001d4278b8cd99ee269ce943f6c8",
+      "output_sha256": "dfd8e1bae9128c8627bafc5f6f7852634bd3d47b6d66c97546931538a1f8a96a",
+      "path": "Model/FldOutWRiver01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c374b31af34fb18e83c453b353460e550b08f16d338ea0c2484f590229b3e320",
+      "output_sha256": "01518eff611f67dd67466ed7cca3ecf6f63f2ecf67289672524ea60cf0f6a15d",
+      "path": "Model/FldOutWSeaOnly00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "917e8cfb2c84e7d27c664114b2df213b786ef74aee506e5cb8a7a88e97912b89",
+      "output_sha256": "59169af2f5892d8e353f22d5570e8815429e640fd69bf4f37c04f91b79044247",
+      "path": "Model/FldOutWStone00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "d249d64f1daedabf14c3780e5f221c79a1348400df70ca77287cdf150ad9ae2d",
+      "output_sha256": "4b253cb33a522904b2c37de699aee8240cd0db8f38ce404645c0d00c3fd84cab",
+      "path": "Model/FldOutWStone01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "3f8112cc5f66eaa75a362ac6f904b581b316fb5d634b367786f227186aa48a31",
+      "output_sha256": "28d42669589c3470790186b4b11344f5b739f3ccd8ad34c6258969758c1a5541",
+      "path": "Model/FldOutWStone02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "7e2a7c72d7bd0989bea65f16d289dfab6885fe4a79ec45bb3debb2d7d0c4aee6",
+      "output_sha256": "a188dd7ad0899ea373a56676dfa7fa0c686c2b73d1f14ba22d2e2bb9225975f2",
+      "path": "Model/FldOutWStone03.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "144ef4ba94250ed7d7d97f4d266cfef8289023b728dcd64d0fe39df1486cf2a2",
+      "output_sha256": "902ffdfa508b1a1ee20dc44bc9ab374d818623bca70d8134d07bb801f8738315",
+      "path": "Model/FtrPinetree.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "15749b257778bfd2c21547c9cc7a3a527b2b20d9d567645aba4c121ef9076179",
+      "output_sha256": "7d188686274eb929c27ae793f80fb65ea32e437d02cec9f42e5ce3889a818f14",
+      "path": "Model/IdrMuseumInsect0Obj.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "7ea907f2f8123b184ed7c28ef249e585a74d70a856ff30d03229b018365d769b",
+      "output_sha256": "76d8761ddded05a6a2a5c5a13160edcf486c0280a006e32537b9302cd3becf40",
+      "path": "Model/IdrObjTreeHuge00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "d3b053556c803c9e2a16ee1e346607d60c85ff8014f6429bc925389208c3a3a6",
+      "output_sha256": "c2d7f681c674a9912205e5d5a2c1c17fea1e44824511582444958e4be67226e5",
+      "path": "Model/IdrObjTreeOak00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "df448726994ebd2b30688f6fc1599b6abfad6ca0295133f9b54796d75995f56d",
+      "output_sha256": "8fbcf806189a5c8928f8bd0891b5dea16227f101e908ba4ecb0496ac914b115f",
+      "path": "Model/IdrObjTreeOak01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "f7d4cb0fbbc363c860e73b28ac1dd2312cb07b9220595a196e7d3b3bbe2d909b",
+      "output_sha256": "d441bac25df68c1de12609a4a579829f274131035a50b7f162953a28517b7176",
+      "path": "Model/IdrObjTreeOak02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a34e63a958816a0d6fa15546a8c03a494c464f9bbe1e1461a1720620b5a7fb7b",
+      "output_sha256": "1003d34b37fca2e0ced57dc37d0eead3371ff3402c8920528c626249171cda8f",
+      "path": "Model/IdrObjTreeOakD00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "0aab59154814795b12744c2fce5c90777f37dad5baeb8e4d5f76dff343c34e10",
+      "output_sha256": "a57640b958d71abec4674b9a046753a4dd16fa615981fde44ae7314794f91d57",
+      "path": "Model/IdrObjTreeOakD01.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c19599bc328eb19260a1ac56ed75e0990fd3d7d9ff7b8066cd5a2b0e72fad698",
+      "output_sha256": "a5f61844a2ad3eabdb78d25175a1ecef7083afed1bc457ca66ebcfa7861352bf",
+      "path": "Model/IdrObjTreeOakD02.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "fccd9bc1a5e6efa4ac8465df08ad39dc9c020c95a52cda7829ba8e50c1ba5797",
+      "output_sha256": "d3d454aca8cd0aba39731b1afc5566e29eaf15c66c608c12f0efe3353dc3351a",
+      "path": "Model/IdrObjTreePalm00.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c2623d82a262b4e0a4b3e3bba272a89c814f7dc76a2c2261185a364745613023",
+      "output_sha256": "ea8987b292a57452772a4fae1a8fad0725812dc5262a57bdc9aba77c79f92e99",
+      "path": "Model/PltTreeBamboo.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "e1a15c77dec866f3ee538d8239b0f616dfe50975e263f083c918673d01834148",
+      "output_sha256": "a12a27e10adf4173f2fec0734e1bdb161c61c258c0617ddc6ada69f912a5f50d",
+      "path": "Model/PltTreeBambooSnow.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a8789ba085e03a8bc0c8f7df5f44969224d4ff4dca593eb7f3386736ad54326e",
+      "output_sha256": "417ca583149fc4596e86cc5e7054f0f32411716ed0ed7bbaa9ca28c1a2c84f36",
+      "path": "Model/PltTreeCedar.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "e061e3b13aa33141efabfa5f7238adcd06ea09ada644df8b9ff73fa1a5c770a2",
+      "output_sha256": "740355d000e08e2077b8e509de7d60a6aa3e9d31d56c3e06e39c3104dcb49e40",
+      "path": "Model/PltTreeCedarDeco.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "037f18e318bdefd9127ab4d8815af10f19d605b4b32689d750597c5e0577a8da",
+      "output_sha256": "f3d10e14f14a4f4d757499962eccaf3348aea47c03fde737aedda86f7cb13424",
+      "path": "Model/PltTreeCedarDecoSnow.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "a714f8a16caafe7e0b04877652925612f82f77cb1f93d270ee6a4bff06638b88",
+      "output_sha256": "445fc75fdfc645c1151e40431c221a2ffd8dffcebba68e8d824fec6b8d458970",
+      "path": "Model/PltTreeCedarSnow.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "2d5d2ab89070f15ab5c3960381bac2aeda473f9a6fe81ed2b83ef3c2552ca50c",
+      "output_sha256": "cc46e4aca2e5a8cead25f2ff52c9db9947409ed43bb22b958b31c047b244e5c0",
+      "path": "Model/PltTreeOak.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "d08ab28568e0849ceb6d3b27cf719d0e8b9d96fc8dff7fd07f4b185e71a46d13",
+      "output_sha256": "9420d75cc2a2c8c807fd7461f47ed42deb0e89364d3d70f7abb8da1ea685fdda",
+      "path": "Model/PltTreeOakSakura.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "3ffa26f706e97fe6386ba203d8bf68dce719b5a2e888e53583fb932e67b28c38",
+      "output_sha256": "67ef244ee922053a9b1638b94853b26e4b687bfa059a5a6aefb6a6fb4079092a",
+      "path": "Model/PltTreeOakSnow.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "c623ff4ea38788ad4c6a6ede76d9725f11c6354775644a387556c992aa4f0bd2",
+      "output_sha256": "005f384582545dcb55545f590b19afab9d6b849cb83850167280fd4891400c37",
+      "path": "Model/PltTreePalm.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "ebfb86c504794e4f41cb7e0857d55348cd4452bb3e4175318f06ff2e1a1d5335",
+      "output_sha256": "2c7db7f036a665864a345ed4709d0fa41bc4683143d48cc39888813ba2ef0205",
+      "path": "Model/PltTreePalmSnow.Nin_NX_NVN.zs"
+    },
+    {
+      "feature": "acnh.camera",
+      "input_sha256": "8b53c66ad030ce87662285d555083813ac5f3b4655071abe7de4e4cb8aa12402",
+      "output_sha256": "2deea82621fb2b34430c6cf0b0d5d54ff21abfde6cdba941d708a25bcd5261af",
+      "path": "System/Resource/ResourceSizeTable.srsizetable"
+    },
+    {
+      "feature": "acnh.tool-durability",
+      "input_sha256": "3b54df231cbb5d5fbee880e5d5eb372c5ddec112ae70af77c42bde710d461d33",
+      "output_sha256": "b388676cc4548a21546bc12d1d46f0f4b752e586e2193e5b7da4923a20ad27a5",
+      "path": "Bcsv/ItemOutfitInfo.bcsv"
+    }
+  ]
+}

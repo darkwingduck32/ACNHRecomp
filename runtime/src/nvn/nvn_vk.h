@@ -284,6 +284,7 @@ VkCommandBuffer frame_cb(VkCommandBuffer cb);
 // Chunks (nvn_frames.cpp, NX_SUBMIT_CHUNK_DRAWS): for replay_list before each command, with the draws done so far;
 // returns the command buffer to go on with (a new part once enough draws were recorded).
 VkCommandBuffer frame_chunk(VkCommandBuffer cb, uint64_t draws, bool pass_open);
+bool frame_chunking();  // stable throughout one submit's replay
 VkCommandBuffer frame_pass_part(VkCommandBuffer cb);  // NX_SUBMIT_CHUNK_DRAWS=-1: a new part before a pass begins
 // Host time inside vkQueueSubmit (with vkEndCommandBuffer: Metal encoding) and inside vkWaitForFences, running
 // totals in every mode (the synchronous path adds its own).

@@ -34,7 +34,7 @@ void calls_grow() {
     old.swap(g_calls);
     for (const CallSlot& s : old)
         if (s.generation == g_call_gen) {
-            size_t k = (s.handle >> 4) * 0x9E3779B97F4A7C15ull >> 40;
+            size_t k = s.handle * 0x9E3779B97F4A7C15ull >> 40;
             while (g_calls[k & (g_calls.size() - 1)].generation == g_call_gen) k++;
             g_calls[k & (g_calls.size() - 1)] = s;
         }
@@ -56,7 +56,9 @@ CmdList* submit_command_list(uint64_t handle) {
         return l.get();
     }
     const size_t mask = g_calls.size() - 1;
-    size_t k = (handle >> 4) * 0x9E3779B97F4A7C15ull >> 40;
+    // Handles are consecutive IDs (nvn_cmd.cpp), not aligned pointers. Dropping
+    // their low bits made each group of 16 lists collide in this hot cache.
+    size_t k = handle * 0x9E3779B97F4A7C15ull >> 40;
     for (;; k++) {
         CallSlot& s = g_calls[k & mask];
         if (s.generation != g_call_gen) break;
@@ -138,13 +140,17 @@ void replay_list(VkCommandBuffer cb, Targets& st, const CmdList& list, int depth
     if (skin_lists_on()) skin_list_replayed(list, depth);
     static int live_n = 0;
     if (depth == 0 && live_n <= 0) live_n = live_trace_cmds();
+    const bool chunking = frame_chunking();
     for (const Cmd& c : list.cmds) {
-        cb = frame_chunk(frame_cb(cb), (*replay::g_stats).done, pass_open());  // part of the submit queued early (PLAN.md R1)
+        // Only chunked replay can change command buffers here. Dispatches update
+        // cb in replay_cmd and called lists update it below. Avoid three calls
+        // per state/binding command when early chunks are disabled (desktop).
+        if (chunking) cb = frame_chunk(frame_cb(cb), (*replay::g_stats).done, pass_open());
         // NX_TRACE_CMDS=<first draw>: the ops replayed from that draw on (20000), with n, mask and a[0].
         static const char* tc = std::getenv("NX_TRACE_CMDS");
         static const uint64_t tc_from = tc ? std::strtoull(tc, nullptr, 10) : 0;
         static int tc_n = 0;
-        if ((tc && (*replay::g_stats).done >= tc_from && tc_n++ < 20000) || live_n-- > 0)
+        if ((tc && (*replay::g_stats).done >= tc_from && tc_n++ < 20000) || (live_n > 0 && live_n-- > 0))
             log("cmd after draw %llu: op %u n %u mask %x a0 %llx a1 %llx i %d %d %d %d f %g %g %g %g depth %d",
                 (unsigned long long)(*replay::g_stats).done, unsigned(c.op), c.n, c.mask, (unsigned long long)c.a[0],
                 (unsigned long long)c.a[1], c.i[0], c.i[1], c.i[2], c.i[3], c.f[0], c.f[1], c.f[2], c.f[3], depth);

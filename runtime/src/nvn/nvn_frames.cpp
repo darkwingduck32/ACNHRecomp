@@ -635,6 +635,8 @@ VkCommandBuffer frame_chunk(VkCommandBuffer cb, uint64_t draws, bool pass_open) 
     return next_part(*s);
 }
 
+bool frame_chunking() { return g_chunking; }
+
 // ---- the parallel replay's command buffers (nvn_parallel.cpp) ----------------------------------------------------
 
 void* frame_current_slot() { return g_current; }

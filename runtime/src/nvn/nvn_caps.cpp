@@ -6,6 +6,8 @@
 #include <cstring>
 #include <string>
 
+#include <nx/game.h>
+
 #include "nvn_vk.h"
 
 namespace nx::nvn {
@@ -90,11 +92,21 @@ bool ubwc_flags() {
 
 // The upload ring takes ~11 MB of CPU writes per course frame (copies and zero padding). Host-visible coherent memory
 // is write-combined (uncached) on Adreno; NX_RING_CACHED=1 asks for a host-cached coherent type first, where the GPU
-// snoops the CPU's caches (PLAN.md R5).
+// snoops the CPU's caches (PLAN.md R5). ACNH's temporal object history also
+// reads index buffers on the CPU: uncached uploads make both initial mesh
+// scans and every-frame index probes expensive on discrete NVIDIA hardware.
 uint32_t upload_memory_type(uint32_t bits) {
     const VkMemoryPropertyFlags plain = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     const char* e = std::getenv("NX_RING_CACHED");
-    if (e && e[0] == '1') {
+    bool cached = e && e[0] == '1';
+#if defined(_WIN32)
+    if (!e && std::strcmp(game::kInfo.id, "acnh") == 0) {
+        VkPhysicalDeviceProperties props{};
+        p_vkGetPhysicalDeviceProperties(vk_physical(), &props);
+        cached = props.vendorID == 0x10de && props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+    }
+#endif
+    if (cached) {
         VkPhysicalDeviceMemoryProperties mp{};
         p_vkGetPhysicalDeviceMemoryProperties(vk_physical(), &mp);
         for (uint32_t k = 0; k < mp.memoryTypeCount; k++)

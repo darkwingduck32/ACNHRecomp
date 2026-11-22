@@ -9,6 +9,7 @@ void configure();
 void module_loaded(const ModuleInfo &, FuncEntry *);
 void input(plat::PadState &);
 void game_ui_input();
+void ui_observation(const narrative::UiObservation&);
 void camera_update(uint64_t object, uint64_t caller);
 bool world_projection(float near_plane, float far_plane, float fov);
 bool background_depth(std::string_view shader);
